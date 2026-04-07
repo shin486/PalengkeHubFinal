@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Alert } from 'react-native';
 import * as Linking from 'expo-linking';
+import { CommonActions } from '@react-navigation/native';
 
 const AuthContext = createContext({});
 
@@ -11,7 +12,19 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isGuest, setIsGuest] = useState(false); // 👈 ADD THIS
+  const [isGuest, setIsGuestState] = useState(false);
+
+  // Wrapper for setIsGuest with logging
+  const setIsGuest = (value) => {
+    console.log('🔵 setIsGuest called with:', value, 'previous:', isGuest);
+    setIsGuestState(value);
+  };
+
+  // ========== RESET GUEST MODE ON APP START ==========
+  useEffect(() => {
+    console.log('🔄 App started - resetting isGuest to false');
+    setIsGuest(false);
+  }, []);
 
   // ========== CHECK USER ON MOUNT ==========
   useEffect(() => {
@@ -24,9 +37,7 @@ export const AuthProvider = ({ children }) => {
       const { url } = event;
       console.log('🔗 Deep link received:', url);
       
-      // Check if this is an auth callback
       if (url.includes('auth/callback') || url.includes('access_token')) {
-        // Let Supabase handle the session
         const { data, error } = await supabase.auth.getSession();
         
         if (data?.session) {
@@ -42,10 +53,7 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    // Listen for deep links
     const subscription = Linking.addEventListener('url', handleDeepLink);
-
-    // Handle initial URL if app was opened from link
     Linking.getInitialURL().then((url) => {
       if (url) {
         handleDeepLink({ url });
@@ -84,17 +92,23 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('🔐 Attempting login for:', email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
       
+      if (error) {
+        console.log('❌ Login error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Login successful:', data.user?.email);
       await checkUser();
-      setIsGuest(false); // 👈 Turn off guest mode on login
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error details:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -106,10 +120,8 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      // Use your app scheme for redirect
       const redirectUrl = 'palengkehub://auth/callback';
       console.log('📧 Signup attempt for:', email);
-      console.log('📧 Redirect URL:', redirectUrl);
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -123,14 +135,8 @@ export const AuthProvider = ({ children }) => {
         }
       });
       
-      console.log('📧 Signup response:', data);
+      if (error) throw error;
       
-      if (error) {
-        console.error('📧 Signup error:', error);
-        throw error;
-      }
-      
-      // Check if user already exists
       if (data?.user?.identities?.length === 0) {
         return { 
           success: false, 
@@ -140,7 +146,7 @@ export const AuthProvider = ({ children }) => {
       
       return { 
         success: true, 
-        message: 'Verification email sent! Please check your inbox (and spam folder) and click the link.' 
+        message: 'Verification email sent! Please check your inbox.' 
       };
     } catch (error) {
       console.error('Signup error:', error);
@@ -156,11 +162,27 @@ export const AuthProvider = ({ children }) => {
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
-      setIsGuest(false); // 👈 Turn off guest mode on logout
+      setIsGuest(false);
       return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
       return { success: false, error: error.message };
+    }
+  };
+
+  // ========== RESET TO LOGIN ==========
+  const resetToLogin = () => {
+    console.log('🔄 resetToLogin called from AuthContext');
+    if (global.navigationRef) {
+      global.navigationRef.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        })
+      );
+      console.log('✅ Reset to Login executed');
+    } else {
+      console.log('❌ navigationRef not found');
     }
   };
 
@@ -170,11 +192,12 @@ export const AuthProvider = ({ children }) => {
     profile,
     loading,
     isGuest,
-    setIsGuest, // 👈 ADD THIS
+    setIsGuest,
     login,
     signUp,
     logout,
     checkUser,
+    resetToLogin,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

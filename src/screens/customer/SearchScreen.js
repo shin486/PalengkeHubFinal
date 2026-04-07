@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;

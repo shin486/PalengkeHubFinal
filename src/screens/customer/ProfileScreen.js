@@ -1,0 +1,602 @@
+// src/screens/customer/ProfileScreen.js
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { useAuth } from '../../contexts/AuthContext';
+import { Header } from '../../components/Header';
+
+export default function ProfileScreen({ navigation }) {
+  const { user, profile, logout, setIsGuest, isGuest } = useAuth();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await logout();
+            if (result.success) {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } else {
+              Alert.alert('Error', result.error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSwitchToGuest = () => {
+    Alert.alert(
+      'Switch to Guest Mode',
+      'You will be logged out and continue as guest. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            if (setIsGuest) {
+              setIsGuest(true);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSignIn = () => {
+    if (setIsGuest) {
+      setIsGuest(false);
+    }
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
+
+  const handleSignUp = () => {
+    if (setIsGuest) {
+      setIsGuest(false);
+    }
+    navigation.navigate('SignUp');
+  };
+
+  // ========== GUEST MODE ==========
+  if (isGuest) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" backgroundColor="#DC2626" />
+        
+        {/* Only ONE Header */}
+        <Header 
+          title="My Profile"
+          subtitle="Guest Mode"
+        />
+
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Guest Avatar Section */}
+          <View style={styles.avatarSection}>
+            <LinearGradient
+              colors={['#DC2626', '#EF4444', '#F87171']}
+              style={styles.avatarGradient}
+            >
+              <Text style={styles.avatarEmoji}>👤</Text>
+            </LinearGradient>
+            <Text style={styles.guestName}>Guest User</Text>
+            <Text style={styles.guestEmail}>browsing without account</Text>
+            <View style={styles.guestBadge}>
+              <Text style={styles.guestBadgeText}>👋 Guest Mode</Text>
+            </View>
+          </View>
+
+          {/* Benefits Section */}
+          <View style={styles.benefitsCard}>
+            <Text style={styles.benefitsTitle}>✨ Sign in to unlock</Text>
+            
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIconContainer}>
+                <Text style={styles.benefitIcon}>🛒</Text>
+              </View>
+              <View style={styles.benefitContent}>
+                <Text style={styles.benefitText}>Save your cart items</Text>
+                <Text style={styles.benefitSubtext}>Items stay even after closing the app</Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIconContainer}>
+                <Text style={styles.benefitIcon}>📦</Text>
+              </View>
+              <View style={styles.benefitContent}>
+                <Text style={styles.benefitText}>Place orders</Text>
+                <Text style={styles.benefitSubtext}>Order from any stall in the market</Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIconContainer}>
+                <Text style={styles.benefitIcon}>📋</Text>
+              </View>
+              <View style={styles.benefitContent}>
+                <Text style={styles.benefitText}>View order history</Text>
+                <Text style={styles.benefitSubtext}>Track all your past purchases</Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIconContainer}>
+                <Text style={styles.benefitIcon}>⭐</Text>
+              </View>
+              <View style={styles.benefitContent}>
+                <Text style={styles.benefitText}>Rate stalls</Text>
+                <Text style={styles.benefitSubtext}>Share your experience with others</Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIconContainer}>
+                <Text style={styles.benefitIcon}>❤️</Text>
+              </View>
+              <View style={styles.benefitContent}>
+                <Text style={styles.benefitText}>Save favorite stalls</Text>
+                <Text style={styles.benefitSubtext}>Quick access to your preferred vendors</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionSection}>
+            <TouchableOpacity 
+              style={styles.signInButton}
+              onPress={handleSignIn}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#DC2626', '#EF4444']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.signInGradient}
+              >
+                <Text style={styles.signInButtonText}>Sign In</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.signUpButton}
+              onPress={handleSignUp}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.signUpButtonText}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ========== LOGGED IN USER ==========
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" backgroundColor="#DC2626" />
+      
+      {/* Only ONE Header */}
+      <Header 
+        title="My Profile"
+        subtitle={profile?.full_name || user?.email?.split('@')[0] || 'User'}
+      />
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* User Avatar Section */}
+        <View style={styles.avatarSection}>
+          <LinearGradient
+            colors={['#DC2626', '#EF4444', '#F87171']}
+            style={styles.avatarGradient}
+          >
+            <Text style={styles.avatarEmoji}>👤</Text>
+          </LinearGradient>
+          <Text style={styles.userName}>{profile?.full_name || user?.email?.split('@')[0]}</Text>
+          <Text style={styles.userEmail}>{user?.email}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>
+              {profile?.role === 'vendor' ? '🛍️ Vendor' : '🛒 Shopper'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Stats Section */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>0</Text>
+            <Text style={styles.statLabel}>Orders</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>0</Text>
+            <Text style={styles.statLabel}>Ratings</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>0</Text>
+            <Text style={styles.statLabel}>Favorites</Text>
+          </View>
+        </View>
+
+        {/* Account Information */}
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>Account Information</Text>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Email</Text>
+            <Text style={styles.infoValue}>{user?.email}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Full Name</Text>
+            <Text style={styles.infoValue}>{profile?.full_name || 'Not set'}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Phone</Text>
+            <Text style={styles.infoValue}>{profile?.phone || 'Not set'}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Member Since</Text>
+            <Text style={styles.infoValue}>
+              {profile?.created_at 
+                ? new Date(profile.created_at).toLocaleDateString() 
+                : 'Recently'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Vendor Dashboard Button (only for vendors) */}
+        {profile?.role === 'vendor' && (
+          <TouchableOpacity 
+            style={styles.vendorButton}
+            onPress={() => navigation.navigate('VendorDashboard')}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.vendorGradient}
+            >
+              <Text style={styles.vendorButtonText}>Open Vendor Dashboard →</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Actions */}
+        <TouchableOpacity style={styles.switchGuestButton} onPress={handleSwitchToGuest}>
+          <Text style={styles.switchGuestText}>Switch to Guest Mode</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <LinearGradient
+            colors={['#DC2626', '#EF4444']}
+            style={styles.logoutGradient}
+          >
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 30,
+  },
+  // Avatar Section (shared between guest and logged in)
+  avatarSection: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  avatarGradient: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  avatarEmoji: {
+    fontSize: 48,
+  },
+  // Guest Mode Styles
+  guestName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  guestEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  guestBadge: {
+    backgroundColor: '#FEF3F2',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  guestBadgeText: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  // Logged In Styles
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  roleBadge: {
+    backgroundColor: '#FEF3F2',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  roleText: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  // Benefits Card (Guest Mode)
+  benefitsCard: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  benefitsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  benefitIconContainer: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FEF3F2',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  benefitIcon: {
+    fontSize: 22,
+  },
+  benefitContent: {
+    flex: 1,
+  },
+  benefitText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  benefitSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  // Action Buttons (Guest Mode)
+  actionSection: {
+    marginHorizontal: 16,
+    marginBottom: 30,
+  },
+  signInButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  signInGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  signInButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  signUpButton: {
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    backgroundColor: 'white',
+  },
+  signUpButtonText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Stats Card (Logged In)
+  statsCard: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#DC2626',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 8,
+  },
+  // Info Card (Logged In)
+  infoCard: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  // Vendor Button
+  vendorButton: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  vendorGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  vendorButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Switch Guest Button
+  switchGuestButton: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    backgroundColor: 'white',
+  },
+  switchGuestText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Logout Button
+  logoutButton: {
+    marginHorizontal: 16,
+    marginBottom: 30,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoutGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

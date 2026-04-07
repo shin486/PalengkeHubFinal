@@ -6,10 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useCart } from '../hooks/useCart';
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../hooks/useCart';
 
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
@@ -18,17 +19,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   
-  // Get auth context
-  const auth = useAuth();
-  const user = auth?.user;
-  const isGuest = auth?.isGuest || false;
-  const setIsGuest = auth?.setIsGuest;
-  
-  // Get cart functions
-  const { addToCart: addToCartHook } = useCart();
+  const { user, isGuest, setIsGuest } = useAuth();
+  const { addToCart } = useCart();
 
   useEffect(() => {
-    fetchProductDetails();
+    if (productId) {
+      fetchProductDetails();
+    }
   }, [productId]);
 
   const fetchProductDetails = async () => {
@@ -66,9 +63,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
   };
 
   const handleAddToCart = () => {
-    console.log('🔍 Adding to cart - user:', user, 'isGuest:', isGuest);
-    
-    // ✅ FIX: Guests cannot add to cart
     if (!user) {
       Alert.alert(
         'Login Required',
@@ -78,26 +72,29 @@ export default function ProductDetailsScreen({ route, navigation }) {
           { 
             text: 'Login', 
             onPress: () => {
-              if (setIsGuest) {
-                setIsGuest(false); // Exit guest mode
-              } else {
-                navigation.popToTop();
-              }
+              if (setIsGuest) setIsGuest(false);
+              else navigation.popToTop();
             }
           }
         ]
       );
-      return; // ✅ Don't proceed with adding to cart
+      return;
     }
     
-    // Only logged in users reach this point
-    if (product) {
-      addToCartHook(product);
+    if (product && stall) {
+      addToCart(product, stall.id, stall, quantity);
+      Alert.alert(
+        'Added to Cart',
+        `${quantity}x ${product.name} added to your cart`,
+        [
+          { text: 'Continue Shopping', style: 'cancel' },
+          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
+        ]
+      );
     }
   };
 
   const handleBuyNow = () => {
-    // ✅ FIX: Guests cannot buy now
     if (!user) {
       Alert.alert(
         'Login Required',
@@ -107,21 +104,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
           { 
             text: 'Login', 
             onPress: () => {
-              if (setIsGuest) {
-                setIsGuest(false);
-              } else {
-                navigation.popToTop();
-              }
+              if (setIsGuest) setIsGuest(false);
+              else navigation.popToTop();
             }
           }
         ]
       );
-      return; // ✅ Don't proceed
+      return;
     }
     
-    // Only logged in users reach this point
-    if (product) {
-      addToCartHook(product);
+    if (product && stall) {
+      addToCart(product, stall.id, stall, quantity);
       navigation.navigate('Cart');
     }
   };
@@ -129,7 +122,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Loading product details...</Text>
+        <ActivityIndicator size="large" color="#FF6B6B" />
+        <Text style={styles.loadingText}>Loading product details...</Text>
       </View>
     );
   }
@@ -137,14 +131,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
   if (!product) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Product not found</Text>
+        <Text style={styles.errorText}>Product not found</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Product Image Placeholder */}
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Product Image */}
       <View style={styles.imageContainer}>
         <View style={styles.productImagePlaceholder}>
           <Text style={styles.productEmoji}>🛒</Text>
@@ -157,12 +154,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
         
         <View style={styles.priceRow}>
           <Text style={styles.productPrice}>₱{product.price}</Text>
-          <Text style={styles.productUnit}>per {product.unit}</Text>
+          <Text style={styles.productUnit}>/ {product.unit}</Text>
         </View>
 
-        {product.description && (
+        {product.description ? (
           <Text style={styles.productDescription}>{product.description}</Text>
-        )}
+        ) : null}
 
         <View style={styles.availabilityRow}>
           <Text style={styles.availabilityLabel}>Status:</Text>
@@ -170,7 +167,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
             styles.availabilityBadge,
             product.is_available ? styles.availableBadge : styles.unavailableBadge
           ]}>
-            <Text style={styles.availabilityText}>
+            <Text style={[
+              styles.availabilityText,
+              product.is_available ? styles.availableText : styles.unavailableText
+            ]}>
               {product.is_available ? 'In Stock' : 'Out of Stock'}
             </Text>
           </View>
@@ -200,45 +200,52 @@ export default function ProductDetailsScreen({ route, navigation }) {
       </View>
 
       {/* Stall Info */}
-      {stall && (
+      {stall ? (
         <TouchableOpacity 
           style={styles.stallSection}
           onPress={() => navigation.navigate('StallDetails', { stallId: stall.id })}
+          activeOpacity={0.7}
         >
           <Text style={styles.sectionTitle}>Sold by</Text>
           <View style={styles.stallCard}>
             <View style={styles.stallHeader}>
               <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
-              {stall.average_rating > 0 && (
+              {stall.average_rating > 0 ? (
                 <Text style={styles.stallRating}>⭐ {stall.average_rating.toFixed(1)}</Text>
-              )}
+              ) : null}
             </View>
             <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
-            <Text style={styles.stallSection}>{stall.section}</Text>
-            {stall.description && (
+            <Text style={styles.stallSectionText}>{stall.section}</Text>
+            {stall.description ? (
               <Text style={styles.stallDescription} numberOfLines={2}>
                 {stall.description}
               </Text>
-            )}
+            ) : null}
             <Text style={styles.viewStallLink}>View Stall Details →</Text>
           </View>
         </TouchableOpacity>
-      )}
+      ) : null}
 
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity 
           style={[styles.button, styles.addToCartButton]}
           onPress={handleAddToCart}
+          disabled={!product?.is_available}
         >
-          <Text style={styles.buttonText}>Add to Cart</Text>
+          <Text style={styles.buttonText}>
+            {product?.is_available ? `Add to Cart (${quantity})` : 'Out of Stock'}
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[styles.button, styles.buyNowButton]}
           onPress={handleBuyNow}
+          disabled={!product?.is_available}
         >
-          <Text style={styles.buttonText}>Buy Now</Text>
+          <Text style={styles.buttonText}>
+            {product?.is_available ? 'Buy Now' : 'Unavailable'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -254,6 +261,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    marginBottom: 20,
+  },
+  backButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   imageContainer: {
     backgroundColor: 'white',
@@ -326,7 +355,12 @@ const styles = StyleSheet.create({
   availabilityText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  availableText: {
     color: '#2E7D32',
+  },
+  unavailableText: {
+    color: '#EF4444',
   },
   section: {
     backgroundColor: 'white',
@@ -355,7 +389,7 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FF6B6B',
   },
   quantityText: {
     fontSize: 18,
@@ -363,6 +397,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     minWidth: 30,
     textAlign: 'center',
+    color: '#333',
   },
   stallSection: {
     marginTop: 10,
@@ -395,7 +430,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
   },
-  stallSection: {
+  stallSectionText: {
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
@@ -417,16 +452,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     marginTop: 10,
     marginBottom: 20,
+    gap: 12,
   },
   button: {
     flex: 1,
     paddingVertical: 15,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
   },
   addToCartButton: {
     backgroundColor: '#FF6B6B',
-    marginRight: 10,
   },
   buyNowButton: {
     backgroundColor: '#4CAF50',

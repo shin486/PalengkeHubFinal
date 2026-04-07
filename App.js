@@ -15,19 +15,24 @@ import { NavigationContainer, useNavigation, useRoute } from '@react-navigation/
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
-import { Header } from './src/components/Header';
+import { Header } from './src/components/Header'; 
 import { LoadingSpinner } from './src/components/LoadingSpinner';
-import { LoginScreen } from './src/screens/LoginScreen';
-import { SignUpScreen } from './src/screens/SignUpScreen';
-import ProductDetailsScreen from './src/screens/ProductDetailsScreen';
-import StallsDirectoryScreen from './src/screens/StallsDirectoryScreen';
-import StallDetailsScreen from './src/screens/StallDetailsScreen';
-import CartScreen from './src/screens/CartScreen';
-import SearchScreen from './src/screens/SearchScreen';
-import OrdersScreen from './src/screens/OrdersScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import CheckoutScreen from './src/screens/CheckoutScreen';
-import CategoryProductsScreen from './src/screens/CategoryProductsScreen';
+import { LoginScreen } from './src/screens/auth/LoginScreen';
+import { SignUpScreen } from './src/screens/auth/SignUpScreen';
+import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
+import AdminVendorApplicationsScreen from './src/screens/admin/AdminVendorApplicationsScreen';
+import AdminStallsManagementScreen from './src/screens/admin/AdminStallsManagementScreen';
+import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
+import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
+import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
+import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
+import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
+import CartScreen from './src/screens/customer/CartScreen';
+import SearchScreen from './src/screens/customer/SearchScreen';
+import OrdersScreen from './src/screens/customer/OrdersScreen';
+import ProfileScreen from './src/screens/customer/ProfileScreen';
+import CheckoutScreen from './src/screens/customer/CheckoutScreen';
+import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import { useCart } from './src/hooks/useCart';
 
 const { width } = Dimensions.get('window');
@@ -414,7 +419,10 @@ function AppStack({ isGuest }) {
     <View style={styles.container}>
       <Header title={title} subtitle={subtitle} />
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
-        <Stack.Screen name="Home">{props => <HomeScreen {...props} isGuest={isGuest} />}</Stack.Screen>
+        <Stack.Screen name="Home">
+          {props => <HomeScreen {...props} isGuest={isGuest} />}
+        </Stack.Screen>
+        <Stack.Screen name="VendorDashboard" component={VendorDashboardScreen} />
         <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
         <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
         <Stack.Screen name="Cart" component={CartScreen} />
@@ -459,56 +467,94 @@ function AppStack({ isGuest }) {
 // Global navigation ref
 let navigationContainerRef = null;
 
-// Root Navigator
-function RootNavigator() {
-  const { user, loading, isGuest, setIsGuest } = useAuth();
 
-  console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email);
-  console.log('🔄 RootNavigator - setIsGuest exists:', !!setIsGuest); // Add this
+// Root Navigator - UPDATED VERSION
+// Root Navigator - CORRECTED VERSION
+function RootNavigator() {
+  const { user, loading, isGuest, setIsGuest, profile } = useAuth();
+
+  console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
+
+  useEffect(() => {
+    if (isGuest && global.navigationRef) {
+      console.log('🎯 Guest mode activated - navigating to App');
+      global.navigationRef.reset({
+        index: 0,
+        routes: [{ name: 'App' }],
+      });
+    }
+  }, [isGuest]);
 
   if (loading) {
     return <LoadingSpinner />;
   }
 
+  // Determine initial route
+  let initialRoute = 'Login';
+  
+  if (isGuest) {
+    initialRoute = 'App';
+  } else if (user && profile?.role === 'vendor') {
+    initialRoute = 'VendorDashboard';
+  } else if (user && profile?.role === 'admin') {
+    initialRoute = 'AdminDashboard';
+  } else if (user && profile?.role === 'consumer') {
+    initialRoute = 'App';
+  }
+
   return (
     <NavigationContainer 
       ref={(ref) => {
+        global.navigationRef = ref;
         navigationContainerRef = ref;
+        console.log('✅ NavigationContainer ref set');
       }}
     >
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isGuest || user ? (
-          <Stack.Screen name="App">
-            {() => <AppStack isGuest={isGuest} />}
-          </Stack.Screen>
-        ) : (
-          <>
-            <Stack.Screen name="Login">
-              {() => {
-                console.log('📱 Rendering LoginScreen with setIsGuest:', !!setIsGuest);
-                return <LoginScreen setIsGuest={setIsGuest} />;
-              }}
-            </Stack.Screen>
-            <Stack.Screen name="SignUp">
-              {() => <SignUpScreen setIsGuest={setIsGuest} />}
-            </Stack.Screen>
-          </>
-        )}
+      <Stack.Navigator 
+        screenOptions={{ headerShown: false }} 
+        initialRouteName={initialRoute}
+      >
+        {/* Auth screens */}
+        <Stack.Screen name="Login">
+          {() => <LoginScreen setIsGuest={setIsGuest} />}
+        </Stack.Screen>
+        <Stack.Screen name="SignUp">
+          {() => <SignUpScreen setIsGuest={setIsGuest} />}
+        </Stack.Screen>
+        
+        {/* Vendor screens */}
+        <Stack.Screen name="VendorDashboard" component={VendorDashboardScreen} />
+        
+        {/* Admin screens */}
+        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+        <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />
+        <Stack.Screen name="AdminStallsManagement" component={AdminStallsManagementScreen} />
+        <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
+        
+        {/* Customer / Guest App - FIXED: using component prop instead of children */}
+        <Stack.Screen name="App">
+          {(props) => <AppStack {...props} isGuest={isGuest} />}
+        </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
 // Helper function to reset to login screen
+// Helper function to reset to login screen
 export const resetToLogin = () => {
+  console.log('🔄 resetToLogin called, ref exists:', !!navigationContainerRef);
+  
   if (navigationContainerRef) {
     navigationContainerRef.reset({
       index: 0,
-      routes: [{ name: 'Login' }], // ✅ Direct to Login, not Auth
+      routes: [{ name: 'Login' }],
     });
+    console.log('✅ Reset to Login executed');
+  } else {
+    console.log('❌ navigationContainerRef is null!');
   }
 };
-
 // Main App Export
 export default function App() {
   return (
@@ -519,6 +565,8 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   container: {

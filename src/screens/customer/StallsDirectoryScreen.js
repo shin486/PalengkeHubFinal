@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 export default function StallsDirectoryScreen({ navigation, isGuest }) {
   const [stalls, setStalls] = useState([]);

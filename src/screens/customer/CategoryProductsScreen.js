@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 
 export default function CategoryProductsScreen({ route, navigation }) {
   const { categoryName, categoryIcon, categoryColor } = route.params;

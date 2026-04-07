@@ -9,8 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '../../lib/supabase';
-import StallMap from '../components/StallMap'; // 👈 ADD THIS IMPORT
+import { supabase } from '../../../lib/supabase';
+import StallMap from '../../components/StallMap'; // 👈 ADD THIS IMPORT
 
 export default function StallDetailsScreen({ route, navigation }) {
   const { stallId } = route.params;
