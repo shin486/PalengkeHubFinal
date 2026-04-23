@@ -31,7 +31,6 @@ export const LoginScreen = ({ setIsGuest }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [emailValid, setEmailValid] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState(0);
   const [resetModalVisible, setResetModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
@@ -87,18 +86,6 @@ export const LoginScreen = ({ setIsGuest }) => {
     const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
     setEmailValid(isValid);
     return isValid;
-  };
-
-  // Password strength indicator
-  const checkPasswordStrength = (pass) => {
-    setPassword(pass);
-    let strength = 0;
-    if (pass.length >= 6) strength++;
-    if (pass.length >= 10) strength++;
-    if (/[A-Z]/.test(pass)) strength++;
-    if (/[0-9]/.test(pass)) strength++;
-    if (/[^A-Za-z0-9]/.test(pass)) strength++;
-    setPasswordStrength(strength);
   };
 
   const handleLogin = async () => {
@@ -179,18 +166,6 @@ export const LoginScreen = ({ setIsGuest }) => {
     } finally {
       setResetLoading(false);
     }
-  };
-
-  const getPasswordStrengthColor = () => {
-    if (passwordStrength <= 1) return '#EF4444';
-    if (passwordStrength <= 3) return '#F59E0B';
-    return '#10B981';
-  };
-
-  const getPasswordStrengthText = () => {
-    if (passwordStrength <= 1) return 'Weak';
-    if (passwordStrength <= 3) return 'Medium';
-    return 'Strong';
   };
 
   return (
@@ -276,7 +251,7 @@ export const LoginScreen = ({ setIsGuest }) => {
             )}
           </View>
 
-          {/* Password Input */}
+          {/* Password Input - WITHOUT strength indicator */}
           <View style={styles.inputGroup}>
             <Animated.View style={[styles.inputWrapper, { transform: [{ translateX: shakeAnim }] }]}>
               <Text style={styles.inputIcon}>🔒</Text>
@@ -285,7 +260,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 placeholder="Password"
                 placeholderTextColor="#9CA3AF"
                 value={password}
-                onChangeText={checkPasswordStrength}
+                onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 onFocus={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
               />
@@ -301,30 +276,6 @@ export const LoginScreen = ({ setIsGuest }) => {
                 </Text>
               </TouchableOpacity>
             </Animated.View>
-            
-            {password.length > 0 && (
-              <View style={styles.strengthContainer}>
-                <View style={styles.strengthBarContainer}>
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <View
-                      key={level}
-                      style={[
-                        styles.strengthBar,
-                        {
-                          backgroundColor: level <= passwordStrength 
-                            ? getPasswordStrengthColor() 
-                            : '#E5E7EB',
-                          width: `${100 / 5}%`,
-                        }
-                      ]}
-                    />
-                  ))}
-                </View>
-                <Text style={[styles.strengthText, { color: getPasswordStrengthColor() }]}>
-                  {getPasswordStrengthText()} Password
-                </Text>
-              </View>
-            )}
           </View>
 
           {/* Remember Me & Forgot Password */}
@@ -601,22 +552,6 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginTop: 6,
     marginLeft: 4,
-  },
-  strengthContainer: {
-    marginTop: 8,
-  },
-  strengthBarContainer: {
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: 4,
-  },
-  strengthBar: {
-    height: 3,
-    borderRadius: 2,
-  },
-  strengthText: {
-    fontSize: 11,
-    fontWeight: '500',
   },
   optionsRow: {
     flexDirection: 'row',

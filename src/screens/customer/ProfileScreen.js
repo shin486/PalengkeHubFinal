@@ -7,17 +7,31 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../contexts/AuthContext';
 import { Header } from '../../components/Header';
+import { supabase } from '../../../lib/supabase';
 
 export default function ProfileScreen({ navigation }) {
   const { user, profile, logout, setIsGuest, isGuest } = useAuth();
 
   const handleLogout = async () => {
+    // For web, use browser confirm
+    if (Platform.OS === 'web') {
+      const confirmLogout = window.confirm('Are you sure you want to logout?');
+      if (confirmLogout) {
+        console.log('🔴 Logging out...');
+        await supabase.auth.signOut();
+        window.location.href = '/';
+      }
+      return;
+    }
+    
+    // For mobile, use Alert
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -43,6 +57,16 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleSwitchToGuest = () => {
+    if (Platform.OS === 'web') {
+      const confirmSwitch = window.confirm('Switch to Guest Mode? You will be logged out.');
+      if (confirmSwitch) {
+        supabase.auth.signOut();
+        setIsGuest(true);
+        window.location.href = '/';
+      }
+      return;
+    }
+    
     Alert.alert(
       'Switch to Guest Mode',
       'You will be logged out and continue as guest. Continue?',
@@ -64,10 +88,14 @@ export default function ProfileScreen({ navigation }) {
     if (setIsGuest) {
       setIsGuest(false);
     }
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
+    if (Platform.OS === 'web') {
+      window.location.href = '/';
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    }
   };
 
   const handleSignUp = () => {
@@ -83,11 +111,7 @@ export default function ProfileScreen({ navigation }) {
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" backgroundColor="#DC2626" />
         
-        {/* Only ONE Header */}
-        <Header 
-          title="My Profile"
-          subtitle="Guest Mode"
-        />
+      
 
         <ScrollView 
           style={styles.scrollView}
@@ -197,14 +221,7 @@ export default function ProfileScreen({ navigation }) {
   // ========== LOGGED IN USER ==========
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" backgroundColor="#DC2626" />
-      
-      {/* Only ONE Header */}
-      <Header 
-        title="My Profile"
-        subtitle={profile?.full_name || user?.email?.split('@')[0] || 'User'}
-      />
-
+     
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -289,19 +306,57 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         )}
 
-        {/* Actions */}
+        {/* Switch to Guest Button */}
         <TouchableOpacity style={styles.switchGuestButton} onPress={handleSwitchToGuest}>
           <Text style={styles.switchGuestText}>Switch to Guest Mode</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LinearGradient
-            colors={['#DC2626', '#EF4444']}
-            style={styles.logoutGradient}
+        {/* LOGOUT BUTTON - Works on both web and mobile */}
+        {Platform.OS === 'web' ? (
+          <button
+            onClick={async () => {
+              console.log('🔴 Logout button clicked on web');
+              const confirmLogout = window.confirm('Are you sure you want to logout?');
+              if (confirmLogout) {
+                console.log('🔴 User confirmed, signing out...');
+                try {
+                  const { error } = await supabase.auth.signOut();
+                  if (error) console.error('SignOut error:', error);
+                  console.log('🔴 SignOut complete, redirecting to login...');
+                  window.location.href = '/';
+                } catch (err) {
+                  console.error('Error during logout:', err);
+                  window.location.href = '/';
+                }
+              }
+            }}
+            style={{
+              backgroundColor: '#DC2626',
+              color: 'white',
+              padding: '14px 20px',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              width: '100%',
+              fontSize: '16px',
+              fontWeight: '600',
+              marginTop: '16px',
+              marginBottom: '30px',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+            }}
           >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            Logout
+          </button>
+        ) : (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.logoutGradient}
+            >
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -318,7 +373,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 30,
   },
-  // Avatar Section (shared between guest and logged in)
   avatarSection: {
     alignItems: 'center',
     marginTop: 20,
@@ -340,7 +394,6 @@ const styles = StyleSheet.create({
   avatarEmoji: {
     fontSize: 48,
   },
-  // Guest Mode Styles
   guestName: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -363,7 +416,6 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '600',
   },
-  // Logged In Styles
   userName: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -386,7 +438,6 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '600',
   },
-  // Benefits Card (Guest Mode)
   benefitsCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
@@ -436,7 +487,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  // Action Buttons (Guest Mode)
   actionSection: {
     marginHorizontal: 16,
     marginBottom: 30,
@@ -473,7 +523,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Stats Card (Logged In)
   statsCard: {
     flexDirection: 'row',
     backgroundColor: 'white',
@@ -506,7 +555,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
     marginHorizontal: 8,
   },
-  // Info Card (Logged In)
   infoCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
@@ -541,7 +589,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '500',
   },
-  // Vendor Button
   vendorButton: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -562,7 +609,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Switch Guest Button
   switchGuestButton: {
     marginHorizontal: 16,
     marginBottom: 12,
@@ -578,7 +624,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Logout Button
   logoutButton: {
     marginHorizontal: 16,
     marginBottom: 30,

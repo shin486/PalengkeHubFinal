@@ -7,16 +7,32 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
+
+// Unit configurations (for display only)
+const UNIT_CONFIG = {
+  'kg': { label: 'Per Kilo (kg)', icon: '⚖️', suffix: 'kg' },
+  '500g': { label: 'Per 500g', icon: '📦', suffix: '500g' },
+  '250g': { label: 'Per 250g', icon: '📦', suffix: '250g' },
+  'piece': { label: 'Per Piece', icon: '🔢', suffix: 'pc' },
+  'bundle': { label: 'Per Bundle', icon: '🌿', suffix: 'bundle' },
+  'dozen': { label: 'Per Dozen (12 pcs)', icon: '🥚', suffix: 'dozen' },
+  'pack': { label: 'Per Pack', icon: '📦', suffix: 'pack' },
+};
 
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [availableUnits, setAvailableUnits] = useState([]);
+  const [currentPrice, setCurrentPrice] = useState(0);
   const [loading, setLoading] = useState(true);
   
   const { user, isGuest, setIsGuest } = useAuth();
@@ -54,12 +70,87 @@ export default function ProductDetailsScreen({ route, navigation }) {
       setProduct(productData);
       setStall(productData.stalls);
       
+      // Get available units from vendor's unit_options
+      let units = [];
+      
+      if (productData.unit_options && Array.isArray(productData.unit_options) && productData.unit_options.length > 0) {
+        units = productData.unit_options;
+      } else {
+        // Fallback based on category
+        if (productData.category === 'Meat' || productData.category === 'Fish') {
+          units = ['kg', '500g', '250g', 'piece'];
+        } else if (productData.category === 'Vegetables') {
+          units = ['kg', '500g', '250g', 'piece', 'bundle'];
+        } else {
+          units = ['kg', '500g', '250g'];
+        }
+      }
+      
+      setAvailableUnits(units);
+      setSelectedUnit(units[0]);
+      
+      // ✅ Get price from vendor's price_options
+      const priceOptions = productData.price_options || {};
+      
+      // Set initial price using vendor's price or fallback
+      let initialPrice;
+      if (priceOptions[units[0]]) {
+        initialPrice = priceOptions[units[0]];
+      } else {
+        initialPrice = productData.price;
+      }
+      
+      setCurrentPrice(initialPrice);
+      
+      console.log('Product loaded:', productData.name);
+      console.log('Vendor price options:', priceOptions);
+      console.log('Available units:', units);
+      
     } catch (error) {
       console.error('Error fetching product:', error);
       Alert.alert('Error', 'Failed to load product details');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUnitChange = (unit) => {
+    setSelectedUnit(unit);
+    
+    // ✅ Get price from vendor's price_options
+    const priceOptions = product?.price_options || {};
+    let newPrice;
+    
+    if (priceOptions[unit]) {
+      newPrice = priceOptions[unit];
+    } else {
+      // Fallback to base price if vendor didn't set custom price
+      newPrice = product?.price || 0;
+    }
+    
+    setCurrentPrice(newPrice);
+    setQuantity(1);
+  };
+
+  const getUnitDisplayText = (unit) => {
+    const unitInfo = UNIT_CONFIG[unit];
+    if (unitInfo) return unitInfo.label;
+    return `Per ${unit}`;
+  };
+
+  const getUnitSuffix = (unit) => {
+    const unitInfo = UNIT_CONFIG[unit];
+    return unitInfo?.suffix || unit;
+  };
+
+  // ✅ Get the price for a specific unit (from vendor's price_options)
+  const getUnitPrice = (unit) => {
+    const priceOptions = product?.price_options || {};
+    if (priceOptions[unit]) {
+      return priceOptions[unit];
+    }
+    // Fallback to base price if not set
+    return product?.price || 0;
   };
 
   const handleAddToCart = () => {
@@ -82,10 +173,27 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
     
     if (product && stall) {
-      addToCart(product, stall.id, stall, quantity);
+      const cartProduct = {
+        ...product,
+        price: currentPrice,
+        selected_unit: selectedUnit,
+        selected_unit_label: getUnitDisplayText(selectedUnit),
+        selected_unit_suffix: getUnitSuffix(selectedUnit),
+        original_unit: product.unit,
+        original_price: product.price,
+      };
+      
+      addToCart(cartProduct, stall.id, stall, quantity);
+      
+      let quantityText = '';
+      if (selectedUnit === 'kg') quantityText = `${quantity}kg`;
+      else if (selectedUnit === '500g') quantityText = `${quantity * 0.5}kg`;
+      else if (selectedUnit === '250g') quantityText = `${quantity * 0.25}kg`;
+      else quantityText = `${quantity} ${getUnitSuffix(selectedUnit)}`;
+      
       Alert.alert(
         'Added to Cart',
-        `${quantity}x ${product.name} added to your cart`,
+        `${quantityText} of ${product.name} added to your cart`,
         [
           { text: 'Continue Shopping', style: 'cancel' },
           { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
@@ -114,15 +222,53 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
     
     if (product && stall) {
-      addToCart(product, stall.id, stall, quantity);
+      const cartProduct = {
+        ...product,
+        price: currentPrice,
+        selected_unit: selectedUnit,
+        selected_unit_label: getUnitDisplayText(selectedUnit),
+        selected_unit_suffix: getUnitSuffix(selectedUnit),
+        original_unit: product.unit,
+        original_price: product.price,
+      };
+      
+      addToCart(cartProduct, stall.id, stall, quantity);
       navigation.navigate('Cart');
     }
   };
 
+  const handleReportProduct = () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please login to report an issue',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Login', 
+            onPress: () => {
+              if (setIsGuest) setIsGuest(false);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    navigation.navigate('ReportIssue', {
+      type: 'product',
+      targetId: product.id,
+      targetName: product.name,
+      targetType: 'product'
+    });
+  };
+
+  const totalPrice = currentPrice * quantity;
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
+        <ActivityIndicator size="large" color="#DC2626" />
         <Text style={styles.loadingText}>Loading product details...</Text>
       </View>
     );
@@ -143,9 +289,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Product Image */}
       <View style={styles.imageContainer}>
-        <View style={styles.productImagePlaceholder}>
-          <Text style={styles.productEmoji}>🛒</Text>
-        </View>
+        {product.image_url ? (
+          <Image 
+            source={{ uri: product.image_url }} 
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.productImagePlaceholder}>
+            <Text style={styles.productEmoji}>🛒</Text>
+          </View>
+        )}
       </View>
 
       {/* Product Info */}
@@ -153,8 +307,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <Text style={styles.productName}>{product.name}</Text>
         
         <View style={styles.priceRow}>
-          <Text style={styles.productPrice}>₱{product.price}</Text>
-          <Text style={styles.productUnit}>/ {product.unit}</Text>
+          <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
+          <Text style={styles.productUnit}>/ {getUnitDisplayText(selectedUnit)}</Text>
         </View>
 
         {product.description ? (
@@ -177,6 +331,39 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
+      {/* Unit Selection - Shows ONLY vendor's selected units with their custom prices */}
+      {availableUnits.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Select Unit</Text>
+          <View style={styles.unitsContainer}>
+            {availableUnits.map((unit) => (
+              <TouchableOpacity
+                key={unit}
+                style={[
+                  styles.unitChip,
+                  selectedUnit === unit && styles.unitChipActive
+                ]}
+                onPress={() => handleUnitChange(unit)}
+              >
+                <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || '📦'}</Text>
+                <Text style={[
+                  styles.unitChipText,
+                  selectedUnit === unit && styles.unitChipTextActive
+                ]}>
+                  {getUnitDisplayText(unit)}
+                </Text>
+                <Text style={[
+                  styles.unitChipPrice,
+                  selectedUnit === unit && styles.unitChipPriceActive
+                ]}>
+                  ₱{getUnitPrice(unit).toFixed(2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Quantity Selector */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quantity</Text>
@@ -197,6 +384,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Total Price */}
+      <View style={styles.totalSection}>
+        <Text style={styles.totalLabel}>Total Amount:</Text>
+        <Text style={styles.totalPrice}>₱{totalPrice.toFixed(2)}</Text>
       </View>
 
       {/* Stall Info */}
@@ -226,6 +419,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </TouchableOpacity>
       ) : null}
 
+      {/* Report Button */}
+      <View style={styles.reportSection}>
+        <TouchableOpacity 
+          style={styles.reportProductButton}
+          onPress={handleReportProduct}
+        >
+          <Text style={styles.reportIcon}>🚫</Text>
+          <Text style={styles.reportButtonText}>Report this Product</Text>
+        </TouchableOpacity>
+        <Text style={styles.reportNote}>
+          Found an issue with this product? Let us know so we can investigate.
+        </Text>
+      </View>
+
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity 
@@ -233,9 +440,14 @@ export default function ProductDetailsScreen({ route, navigation }) {
           onPress={handleAddToCart}
           disabled={!product?.is_available}
         >
-          <Text style={styles.buttonText}>
-            {product?.is_available ? `Add to Cart (${quantity})` : 'Out of Stock'}
-          </Text>
+          <LinearGradient
+            colors={['#DC2626', '#EF4444']}
+            style={styles.buttonGradient}
+          >
+            <Text style={styles.buttonText}>
+              {product?.is_available ? `Add to Cart (₱${totalPrice.toFixed(2)})` : 'Out of Stock'}
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -243,9 +455,14 @@ export default function ProductDetailsScreen({ route, navigation }) {
           onPress={handleBuyNow}
           disabled={!product?.is_available}
         >
-          <Text style={styles.buttonText}>
-            {product?.is_available ? 'Buy Now' : 'Unavailable'}
-          </Text>
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            style={styles.buttonGradient}
+          >
+            <Text style={styles.buttonText}>
+              {product?.is_available ? 'Buy Now' : 'Unavailable'}
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -255,7 +472,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F9FAFB',
   },
   centerContainer: {
     flex: 1,
@@ -266,7 +483,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
   },
   errorText: {
     fontSize: 16,
@@ -274,7 +491,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   backButton: {
-    backgroundColor: '#FF6B6B',
+    backgroundColor: '#DC2626',
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 8,
@@ -289,10 +506,15 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
   },
+  productImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 20,
+  },
   productImagePlaceholder: {
     width: 200,
     height: 200,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: '#F3F4F6',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -308,7 +530,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#111827',
     marginBottom: 10,
   },
   priceRow: {
@@ -319,16 +541,16 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: '#DC2626',
     marginRight: 8,
   },
   productUnit: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: '#6B7280',
   },
   productDescription: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: '#4B5563',
     lineHeight: 22,
     marginBottom: 15,
   },
@@ -337,8 +559,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   availabilityLabel: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: '#6B7280',
     marginRight: 10,
   },
   availabilityBadge: {
@@ -347,20 +569,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   availableBadge: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#D1FAE5',
   },
   unavailableBadge: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#FEE2E2',
   },
   availabilityText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   availableText: {
-    color: '#2E7D32',
+    color: '#059669',
   },
   unavailableText: {
-    color: '#EF4444',
+    color: '#DC2626',
   },
   section: {
     backgroundColor: 'white',
@@ -368,10 +590,47 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
     marginBottom: 15,
+  },
+  unitsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  unitChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 30,
+    gap: 8,
+  },
+  unitChipActive: {
+    backgroundColor: '#DC2626',
+  },
+  unitChipIcon: {
+    fontSize: 16,
+  },
+  unitChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  unitChipTextActive: {
+    color: 'white',
+  },
+  unitChipPrice: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginLeft: 4,
+  },
+  unitChipPriceActive: {
+    color: 'white',
   },
   quantityContainer: {
     flexDirection: 'row',
@@ -381,7 +640,7 @@ const styles = StyleSheet.create({
   quantityButton: {
     width: 44,
     height: 44,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: '#F3F4F6',
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
@@ -389,25 +648,44 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: '#DC2626',
   },
   quantityText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginHorizontal: 20,
-    minWidth: 30,
+    marginHorizontal: 24,
+    minWidth: 40,
     textAlign: 'center',
-    color: '#333',
+    color: '#111827',
+  },
+  totalSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    padding: 20,
+    marginTop: 10,
+    borderRadius: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  totalPrice: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#DC2626',
   },
   stallSection: {
     marginTop: 10,
   },
   stallCard: {
     backgroundColor: 'white',
-    padding: 15,
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: '#F3F4F6',
   },
   stallHeader: {
     flexDirection: 'row',
@@ -416,59 +694,87 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stallNumber: {
-    fontSize: 16,
-    color: '#FF6B6B',
+    fontSize: 14,
+    color: '#DC2626',
     fontWeight: '600',
   },
   stallRating: {
-    fontSize: 14,
-    color: '#FFB800',
+    fontSize: 12,
+    color: '#F59E0B',
   },
   stallName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#111827',
     marginBottom: 4,
   },
   stallSectionText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#6B7280',
     marginBottom: 4,
   },
   stallDescription: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#6B7280',
     marginTop: 8,
   },
   viewStallLink: {
-    fontSize: 14,
-    color: '#FF6B6B',
+    fontSize: 13,
+    color: '#DC2626',
     marginTop: 10,
     fontWeight: '500',
+  },
+  reportSection: {
+    backgroundColor: 'white',
+    padding: 20,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  reportProductButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    width: '100%',
+  },
+  reportIcon: {
+    fontSize: 18,
+  },
+  reportButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#DC2626',
+  },
+  reportNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
   actionButtons: {
     flexDirection: 'row',
     padding: 20,
-    backgroundColor: 'white',
-    marginTop: 10,
-    marginBottom: 20,
     gap: 12,
+    marginBottom: 20,
   },
   button: {
     flex: 1,
-    paddingVertical: 15,
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  buttonGradient: {
+    paddingVertical: 14,
     alignItems: 'center',
-  },
-  addToCartButton: {
-    backgroundColor: '#FF6B6B',
-  },
-  buyNowButton: {
-    backgroundColor: '#4CAF50',
   },
   buttonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
 });

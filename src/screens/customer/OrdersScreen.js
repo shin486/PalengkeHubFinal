@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  TextInput,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
@@ -16,17 +17,25 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrders } from '../../hooks/useOrders';
+import { useCart } from '../../hooks/useCart';
 import StallMap from '../../components/StallMap';
+import { supabase } from '../../../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
 export default function OrdersScreen({ navigation }) {
-  const { isGuest } = useAuth();
+  const { user, isGuest } = useAuth();
   const { orders, loading, newOrderAlert, refreshOrders } = useOrders();
+  const { addToCart } = useCart();
   const [activeTab, setActiveTab] = useState('active');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStall, setSelectedStall] = useState(null);
   const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   // Stall location mapping based on section
   const getStallCoordinates = (section, stallNumber) => {
@@ -81,6 +90,86 @@ export default function OrdersScreen({ navigation }) {
       Vibration.vibrate(200);
     }
   }, [newOrderAlert]);
+
+  // ✅ ORDER AGAIN FUNCTION
+  const handleOrderAgain = async (order) => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to add items to cart');
+      return;
+    }
+
+    try {
+      const stall = order.stall;
+      const items = order.items || [];
+
+      for (const item of items) {
+        const productData = {
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          unit: item.unit,
+        };
+        
+        await addToCart(productData, stall?.id, stall, item.quantity);
+      }
+
+      Alert.alert(
+        'Order Again',
+        `${items.length} item(s) have been added to your cart.`,
+        [
+          { text: 'Continue Shopping', style: 'cancel' },
+          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
+        ]
+      );
+    } catch (error) {
+      console.error('Error adding items to cart:', error);
+      Alert.alert('Error', 'Failed to add items to cart. Please try again.');
+    }
+  };
+
+  // ✅ RATE VENDOR FUNCTION
+  const handleRateVendor = (order) => {
+    setSelectedOrder(order);
+    setSelectedRating(0);
+    setRatingComment('');
+    setRatingModalVisible(true);
+  };
+
+  const submitRating = async () => {
+    if (selectedRating === 0) {
+      Alert.alert('Error', 'Please select a rating');
+      return;
+    }
+
+    setSubmittingRating(true);
+    try {
+      const stall = selectedOrder.stall;
+      
+      const { error } = await supabase
+        .from('ratings')
+        .insert({
+          consumer_id: user.id,
+          stall_id: stall?.id,
+          order_id: selectedOrder.id,
+          rating: selectedRating,
+          review: ratingComment || null,
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Thank You!', 'Your rating has been submitted successfully.');
+      setRatingModalVisible(false);
+      setSelectedOrder(null);
+      setSelectedRating(0);
+      setRatingComment('');
+      
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -164,7 +253,6 @@ export default function OrdersScreen({ navigation }) {
   }
 
   const renderOrderCard = (order) => {
-    // ✅ Safety check - provide fallback stall data
     const stall = order.stall || {
       stall_number: 'N/A',
       stall_name: 'Market Stall',
@@ -172,11 +260,13 @@ export default function OrdersScreen({ navigation }) {
       id: null
     };
     
-    // ✅ Only show map if stall has valid data
     const hasValidStall = stall && stall.stall_number !== 'N/A' && stall.id;
     const stallCoords = hasValidStall 
       ? getStallCoordinates(stall.section, stall.stall_number)
       : { latitude: 13.9417, longitude: 121.1642 };
+    
+    const isCompleted = order.status === 'completed';
+    const isCancelled = order.status === 'cancelled';
     
     return (
       <View key={order.id} style={styles.orderCard}>
@@ -227,6 +317,35 @@ export default function OrdersScreen({ navigation }) {
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
+        {/* ✅ ACTION BUTTONS FOR COMPLETED ORDERS (History Tab) */}
+        {isCompleted && (
+          <View style={styles.completedActionsRow}>
+            <TouchableOpacity 
+              style={styles.orderAgainButton}
+              onPress={() => handleOrderAgain(order)}
+            >
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                style={styles.actionButtonGradient}
+              >
+                <Text style={styles.actionButtonText}>🔄 Order Again</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.rateButton}
+              onPress={() => handleRateVendor(order)}
+            >
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                style={styles.actionButtonGradient}
+              >
+                <Text style={styles.actionButtonText}>⭐ Rate Vendor</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* 🗺️ MAP SECTION - Only show for active orders with valid stall data */}
         {!['completed', 'cancelled'].includes(order.status) && hasValidStall && (
           <>
@@ -256,7 +375,6 @@ export default function OrdersScreen({ navigation }) {
               </TouchableOpacity>
             </View>
             
-            {/* Map Preview */}
             <TouchableOpacity 
               style={styles.miniMapPreview}
               onPress={() => showStallMap(stall)}
@@ -296,6 +414,25 @@ export default function OrdersScreen({ navigation }) {
         )}
       </View>
     );
+  };
+
+  // Star rating component for modal
+  const renderStars = () => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <TouchableOpacity
+          key={i}
+          onPress={() => setSelectedRating(i)}
+          style={styles.starButton}
+        >
+          <Text style={[styles.starIcon, selectedRating >= i && styles.starIconSelected]}>
+            {selectedRating >= i ? '★' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return stars;
   };
 
   return (
@@ -411,6 +548,61 @@ export default function OrdersScreen({ navigation }) {
                 <Text style={styles.modalDirectionsText}>📍 Get Directions</Text>
               </LinearGradient>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ⭐ RATING MODAL */}
+      <Modal
+        visible={ratingModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setRatingModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.ratingModalContainer}>
+            <Text style={styles.ratingModalTitle}>Rate Your Experience</Text>
+            <Text style={styles.ratingModalSubtitle}>
+              {selectedOrder?.stall?.stall_name || 'Vendor'}
+            </Text>
+            
+            <View style={styles.starsContainer}>
+              {renderStars()}
+            </View>
+            
+            <TextInput
+              style={styles.ratingCommentInput}
+              placeholder="Share your experience (optional)"
+              placeholderTextColor="#9CA3AF"
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              multiline
+              numberOfLines={3}
+            />
+            
+            <View style={styles.ratingModalButtons}>
+              <TouchableOpacity 
+                style={styles.ratingModalCancel}
+                onPress={() => setRatingModalVisible(false)}
+              >
+                <Text style={styles.ratingModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.ratingModalSubmit}
+                onPress={submitRating}
+                disabled={submittingRating}
+              >
+                <LinearGradient
+                  colors={['#FF6B6B', '#FF8E8E']}
+                  style={styles.ratingModalSubmitGradient}
+                >
+                  <Text style={styles.ratingModalSubmitText}>
+                    {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -637,6 +829,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF6B6B',
   },
+  // ✅ New styles for completed order actions
+  completedActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  orderAgainButton: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  rateButton: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  actionButtonGradient: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   mapButtonsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -715,7 +933,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Modal styles
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -766,6 +983,89 @@ const styles = StyleSheet.create({
   modalDirectionsText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // ⭐ Rating Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ratingModalContainer: {
+    width: '85%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+  },
+  ratingModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  ratingModalSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  starButton: {
+    paddingHorizontal: 8,
+  },
+  starIcon: {
+    fontSize: 40,
+    color: '#D1D5DB',
+  },
+  starIconSelected: {
+    color: '#F59E0B',
+  },
+  ratingCommentInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+    textAlignVertical: 'top',
+    minHeight: 80,
+    marginBottom: 20,
+  },
+  ratingModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  ratingModalCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  ratingModalCancelText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  ratingModalSubmit: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  ratingModalSubmitGradient: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  ratingModalSubmitText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

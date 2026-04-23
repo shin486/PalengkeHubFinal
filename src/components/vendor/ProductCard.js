@@ -1,37 +1,55 @@
+// src/components/vendor/ProductCard.js
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 
 export const ProductCard = ({ product, onToggleAvailability, onEdit, onDelete }) => {
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Product',
+      `Are you sure you want to delete ${product.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete(product.id) }
+      ]
+    );
+  };
+
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.name}>{product.name}</Text>
-        <TouchableOpacity
-          style={[
-            styles.badge,
-            product.is_available ? styles.available : styles.unavailable
-          ]}
-          onPress={() => onToggleAvailability(product)}
-        >
-          <Text style={styles.badgeText}>
-            {product.is_available ? 'In Stock' : 'Out'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      
-      <Text style={styles.price}>₱{product.price} / {product.unit}</Text>
-      {product.description && (
-        <Text style={styles.description}>{product.description}</Text>
-      )}
-      <Text style={styles.category}>{product.category}</Text>
-      
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.editButton} onPress={() => onEdit(product)}>
-          <Text style={styles.editText}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(product.id)}>
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
+      <View style={styles.cardContent}>
+        {/* Product Image */}
+        {product.image_url ? (
+          <Image source={{ uri: product.image_url }} style={styles.productImage} />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Text style={styles.imageEmoji}>🛒</Text>
+          </View>
+        )}
+        
+        <View style={styles.productInfo}>
+          <Text style={styles.productName}>{product.name}</Text>
+          <Text style={styles.productPrice}>₱{product.price} / {product.unit}</Text>
+          <Text style={styles.productCategory}>{product.category}</Text>
+        </View>
+        
+        <View style={styles.actions}>
+          <TouchableOpacity 
+            style={[styles.statusButton, product.is_available && styles.activeStatus]}
+            onPress={() => onToggleAvailability(product.id)}
+          >
+            <Text style={styles.statusText}>
+              {product.is_available ? '✓ Available' : '✗ Unavailable'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.editButton} onPress={() => onEdit(product)}>
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+            <Text style={styles.deleteText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -41,79 +59,87 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    padding: 12,
     marginBottom: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  header: {
+  cardContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  name: {
+  productImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 12,
+  },
+  imagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEF3F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  imageEmoji: {
+    fontSize: 30,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-    flex: 1,
   },
-  badge: {
+  productPrice: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  productCategory: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  actions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  statusButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    backgroundColor: '#F3F4F6',
   },
-  available: {
-    backgroundColor: '#E8F5E9',
+  activeStatus: {
+    backgroundColor: '#10B981',
   },
-  unavailable: {
-    backgroundColor: '#FFEBEE',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2E7D32',
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  category: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 8,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 8,
+  statusText: {
+    fontSize: 11,
+    color: '#374151',
   },
   editButton: {
-    flex: 1,
-    paddingVertical: 6,
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
+    backgroundColor: '#3B82F6',
   },
   editText: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    fontWeight: '500',
+    fontSize: 11,
+    color: 'white',
   },
   deleteButton: {
-    flex: 1,
-    paddingVertical: 6,
-    alignItems: 'center',
-    backgroundColor: '#FEF3F2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
+    backgroundColor: '#EF4444',
   },
   deleteText: {
-    fontSize: 12,
-    color: '#EF4444',
-    fontWeight: '500',
+    fontSize: 11,
+    color: 'white',
   },
 });

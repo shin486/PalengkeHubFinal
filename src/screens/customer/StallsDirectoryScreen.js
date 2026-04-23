@@ -27,13 +27,13 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
       const { data, error } = await supabase
         .from('stalls')
         .select('*')
+        .eq('is_active', true)
         .order('stall_number');
 
       if (error) throw error;
 
       setStalls(data || []);
       
-      // Get unique sections
       const uniqueSections = ['All', ...new Set(data.map(s => s.section))];
       setSections(uniqueSections);
       
@@ -98,15 +98,6 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Stalls Directory</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
       {/* Section Filter */}
       <ScrollView 
         horizontal 
@@ -122,11 +113,15 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
               selectedSection === section && styles.filterChipActive
             ]}
             onPress={() => setSelectedSection(section)}
+            activeOpacity={1}  // ← Disable opacity animation
           >
-            <Text style={[
-              styles.filterChipText,
-              selectedSection === section && styles.filterChipTextActive
-            ]}>
+            <Text 
+              style={[
+                styles.filterChipText,
+                selectedSection === section && styles.filterChipTextActive
+              ]}
+              numberOfLines={1}
+            >
               {section}
             </Text>
           </TouchableOpacity>
@@ -149,7 +144,11 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No stalls found in this section</Text>
+            <Text style={styles.emptyText}>
+              {selectedSection === 'All' 
+                ? 'No active stalls available at the moment' 
+                : `No active stalls found in ${selectedSection}`}
+            </Text>
           </View>
         }
       />
@@ -171,39 +170,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#666',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FF6B6B',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  backButton: {
-    fontSize: 16,
-    color: 'white',
-    fontWeight: '600',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-  },
   filterScroll: {
     paddingVertical: 12,
   },
   filterContainer: {
     paddingHorizontal: 16,
+    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: 'white',
     borderRadius: 20,
-    marginRight: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
@@ -212,7 +190,7 @@ const styles = StyleSheet.create({
     borderColor: '#FF6B6B',
   },
   filterChipText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
   },
   filterChipTextActive: {
@@ -306,5 +284,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#9CA3AF',
+    textAlign: 'center',
   },
 });
