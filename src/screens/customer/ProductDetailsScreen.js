@@ -14,21 +14,32 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
 
-// Unit configurations (for display only)
+// Unit configurations
 const UNIT_CONFIG = {
-  'kg': { label: 'Per Kilo (kg)', icon: '⚖️', suffix: 'kg' },
-  '500g': { label: 'Per 500g', icon: '📦', suffix: '500g' },
-  '250g': { label: 'Per 250g', icon: '📦', suffix: '250g' },
-  'piece': { label: 'Per Piece', icon: '🔢', suffix: 'pc' },
-  'bundle': { label: 'Per Bundle', icon: '🌿', suffix: 'bundle' },
-  'dozen': { label: 'Per Dozen (12 pcs)', icon: '🥚', suffix: 'dozen' },
-  'pack': { label: 'Per Pack', icon: '📦', suffix: 'pack' },
+  'kg':    { label: 'Per Kilo (kg)',  icon: '⚖️', suffix: 'kg',    multiplier: 1.00 },
+  '500g':  { label: 'Per 500g',       icon: '📦', suffix: '500g',  multiplier: 0.50 },
+  '250g':  { label: 'Per 250g',       icon: '📦', suffix: '250g',  multiplier: 0.25 },
+  'piece': { label: 'Per Piece',      icon: '🔢', suffix: 'pc',    multiplier: 0.25 },
+  'bundle':{ label: 'Per Bundle',     icon: '🌿', suffix: 'bundle',multiplier: 0.35 },
+  'dozen': { label: 'Per Dozen (12pcs)', icon: '🥚', suffix: 'dozen', multiplier: 2.40 },
+  'pack':  { label: 'Per Pack',       icon: '📦', suffix: 'pack',  multiplier: 0.80 },
+};
+
+// Helper: apply promotion discount
+const getDiscountedPrice = (originalPrice, promotion) => {
+  if (!promotion) return originalPrice;
+  if (promotion.discount_type === 'percentage') {
+    return originalPrice * (1 - promotion.discount_value / 100);
+  } else {
+    return Math.max(0, originalPrice - promotion.discount_value);
+  }
 };
 
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
+  const [promotion, setPromotion] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [availableUnits, setAvailableUnits] = useState([]);
@@ -48,6 +59,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     try {
       setLoading(true);
       
+      // 1. Fetch product and stall
       const { data: productData, error } = await supabase
         .from('products')
         .select(`
@@ -70,13 +82,25 @@ export default function ProductDetailsScreen({ route, navigation }) {
       setProduct(productData);
       setStall(productData.stalls);
       
-      // Get available units from vendor's unit_options
-      let units = [];
+      // 2. Fetch active promotion for this product
+      const now = new Date().toISOString();
+      const { data: promoData } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('is_active', true)
+        .lte('start_date', now)
+        .gte('end_date', now)
+        .maybeSingle();
       
+      setPromotion(promoData);
+      console.log('Promotion:', promoData);
+      
+      // 3. Determine available units
+      let units = [];
       if (productData.unit_options && Array.isArray(productData.unit_options) && productData.unit_options.length > 0) {
         units = productData.unit_options;
       } else {
-        // Fallback based on category
         if (productData.category === 'Meat' || productData.category === 'Fish') {
           units = ['kg', '500g', '250g', 'piece'];
         } else if (productData.category === 'Vegetables') {
@@ -89,22 +113,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
       setAvailableUnits(units);
       setSelectedUnit(units[0]);
       
-      // ✅ Get price from vendor's price_options
+      // 4. Get price for the first unit (discounted if promotion exists)
       const priceOptions = productData.price_options || {};
-      
-      // Set initial price using vendor's price or fallback
-      let initialPrice;
+      let unitOriginalPrice;
       if (priceOptions[units[0]]) {
-        initialPrice = priceOptions[units[0]];
+        unitOriginalPrice = priceOptions[units[0]];
       } else {
-        initialPrice = productData.price;
+        const multiplier = UNIT_CONFIG[units[0]]?.multiplier || 1;
+        unitOriginalPrice = productData.price * multiplier;
       }
-      
-      setCurrentPrice(initialPrice);
-      
-      console.log('Product loaded:', productData.name);
-      console.log('Vendor price options:', priceOptions);
-      console.log('Available units:', units);
+      const discountedPrice = getDiscountedPrice(unitOriginalPrice, promoData);
+      setCurrentPrice(discountedPrice);
       
     } catch (error) {
       console.error('Error fetching product:', error);
@@ -114,43 +133,37 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   };
 
+  // Get the original (non‑discounted) price for a given unit (from vendor config)
+  const getUnitOriginalPrice = (unit) => {
+    const priceOptions = product?.price_options || {};
+    if (priceOptions[unit]) {
+      return priceOptions[unit];
+    }
+    const multiplier = UNIT_CONFIG[unit]?.multiplier || 1;
+    return (product?.price || 0) * multiplier;
+  };
+
+  // Get discounted price for a unit (if promotion exists)
+  const getUnitPrice = (unit) => {
+    const original = getUnitOriginalPrice(unit);
+    return getDiscountedPrice(original, promotion);
+  };
+
   const handleUnitChange = (unit) => {
     setSelectedUnit(unit);
-    
-    // ✅ Get price from vendor's price_options
-    const priceOptions = product?.price_options || {};
-    let newPrice;
-    
-    if (priceOptions[unit]) {
-      newPrice = priceOptions[unit];
-    } else {
-      // Fallback to base price if vendor didn't set custom price
-      newPrice = product?.price || 0;
-    }
-    
+    const newPrice = getUnitPrice(unit);
     setCurrentPrice(newPrice);
     setQuantity(1);
   };
 
   const getUnitDisplayText = (unit) => {
     const unitInfo = UNIT_CONFIG[unit];
-    if (unitInfo) return unitInfo.label;
-    return `Per ${unit}`;
+    return unitInfo ? unitInfo.label : `Per ${unit}`;
   };
 
   const getUnitSuffix = (unit) => {
     const unitInfo = UNIT_CONFIG[unit];
     return unitInfo?.suffix || unit;
-  };
-
-  // ✅ Get the price for a specific unit (from vendor's price_options)
-  const getUnitPrice = (unit) => {
-    const priceOptions = product?.price_options || {};
-    if (priceOptions[unit]) {
-      return priceOptions[unit];
-    }
-    // Fallback to base price if not set
-    return product?.price || 0;
   };
 
   const handleAddToCart = () => {
@@ -173,6 +186,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
     
     if (product && stall) {
+      // Create a copy with the discounted price
       const cartProduct = {
         ...product,
         price: currentPrice,
@@ -181,6 +195,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
         selected_unit_suffix: getUnitSuffix(selectedUnit),
         original_unit: product.unit,
         original_price: product.price,
+        promotion_applied: promotion ? true : false,
+        original_price_before_discount: getUnitOriginalPrice(selectedUnit),
+        discount_details: promotion ? {
+          type: promotion.discount_type,
+          value: promotion.discount_value
+        } : null
       };
       
       addToCart(cartProduct, stall.id, stall, quantity);
@@ -230,6 +250,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         selected_unit_suffix: getUnitSuffix(selectedUnit),
         original_unit: product.unit,
         original_price: product.price,
+        promotion_applied: promotion ? true : false,
       };
       
       addToCart(cartProduct, stall.id, stall, quantity);
@@ -254,7 +275,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
       );
       return;
     }
-
     navigation.navigate('ReportIssue', {
       type: 'product',
       targetId: product.id,
@@ -309,7 +329,25 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <View style={styles.priceRow}>
           <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
           <Text style={styles.productUnit}>/ {getUnitDisplayText(selectedUnit)}</Text>
+          {promotion && (
+            <View style={styles.promoBadge}>
+              <Text style={styles.promoBadgeText}>
+                {promotion.discount_type === 'percentage' 
+                  ? `${promotion.discount_value}% OFF` 
+                  : `₱${promotion.discount_value} OFF`}
+              </Text>
+            </View>
+          )}
         </View>
+
+        {promotion && (
+          <View style={styles.originalPriceRow}>
+            <Text style={styles.originalPriceLabel}>Original price:</Text>
+            <Text style={styles.originalPriceValue}>
+              ₱{getUnitOriginalPrice(selectedUnit).toFixed(2)}
+            </Text>
+          </View>
+        )}
 
         {product.description ? (
           <Text style={styles.productDescription}>{product.description}</Text>
@@ -331,35 +369,46 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* Unit Selection - Shows ONLY vendor's selected units with their custom prices */}
+      {/* Unit Selection - Shows discounted prices */}
       {availableUnits.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Unit</Text>
           <View style={styles.unitsContainer}>
-            {availableUnits.map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                style={[
-                  styles.unitChip,
-                  selectedUnit === unit && styles.unitChipActive
-                ]}
-                onPress={() => handleUnitChange(unit)}
-              >
-                <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || '📦'}</Text>
-                <Text style={[
-                  styles.unitChipText,
-                  selectedUnit === unit && styles.unitChipTextActive
-                ]}>
-                  {getUnitDisplayText(unit)}
-                </Text>
-                <Text style={[
-                  styles.unitChipPrice,
-                  selectedUnit === unit && styles.unitChipPriceActive
-                ]}>
-                  ₱{getUnitPrice(unit).toFixed(2)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {availableUnits.map((unit) => {
+              const originalPrice = getUnitOriginalPrice(unit);
+              const discounted = getUnitPrice(unit);
+              const hasDiscount = promotion && discounted < originalPrice;
+              return (
+                <TouchableOpacity
+                  key={unit}
+                  style={[
+                    styles.unitChip,
+                    selectedUnit === unit && styles.unitChipActive
+                  ]}
+                  onPress={() => handleUnitChange(unit)}
+                >
+                  <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || '📦'}</Text>
+                  <Text style={[
+                    styles.unitChipText,
+                    selectedUnit === unit && styles.unitChipTextActive
+                  ]}>
+                    {getUnitDisplayText(unit)}
+                  </Text>
+                  <View style={styles.unitPriceContainer}>
+                    {hasDiscount && (
+                      <Text style={styles.unitOriginalPrice}>₱{originalPrice.toFixed(2)}</Text>
+                    )}
+                    <Text style={[
+                      styles.unitChipPrice,
+                      selectedUnit === unit && styles.unitChipPriceActive,
+                      hasDiscount && styles.unitDiscountedPrice
+                    ]}>
+                      ₱{discounted.toFixed(2)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       )}
@@ -485,6 +534,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  
   errorText: {
     fontSize: 16,
     color: '#EF4444',
@@ -776,5 +826,46 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  promoBadge: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 12,
+  },
+  promoBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  originalPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  originalPriceLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginRight: 8,
+  },
+  originalPriceValue: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  unitPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  unitOriginalPrice: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  unitDiscountedPrice: {
+    color: '#10B981',
   },
 });

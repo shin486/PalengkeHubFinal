@@ -18,7 +18,8 @@ export const useCart = () => {
       setLoading(true);
       console.log('🔍 Fetching cart for user:', user.id);
       
-      const { data, error } = await supabase
+      // Get cart data - ensure we get only one row
+      let { data, error } = await supabase
         .from('carts')
         .select('*')
         .eq('user_id', user.id)
@@ -36,10 +37,32 @@ export const useCart = () => {
       if (data && data.length > 0) {
         cartData = data[0];
         
+        // Delete any duplicate cart rows (keep only the most recent)
         if (data.length > 1) {
           console.log('⚠️ Found duplicate carts, cleaning up...');
           const oldCartIds = data.slice(1).map(c => c.id);
           await supabase.from('carts').delete().in('id', oldCartIds);
+        }
+      }
+      
+      // If no cart exists, create one with empty items
+      if (!cartData) {
+        console.log('📝 No cart found, creating new empty cart');
+        const { data: newCart, error: insertError } = await supabase
+          .from('carts')
+          .insert({ 
+            user_id: user.id, 
+            items: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('❌ Error creating cart:', insertError);
+        } else {
+          cartData = newCart;
         }
       }
       
@@ -78,7 +101,10 @@ export const useCart = () => {
       stall_name: stallData?.stall_name,
       stall_number: stallData?.stall_number,
       section: stallData?.section,
-      quantity: quantity
+      quantity: quantity,
+      selected_unit: item.selected_unit || item.unit,
+      selected_unit_label: item.selected_unit_label,
+      original_price: item.original_price || item.price
     };
 
     const existingItemIndex = cart.findIndex(cartItem => cartItem.product_id === item.id);
@@ -97,6 +123,7 @@ export const useCart = () => {
     setCart(updatedCart);
     
     try {
+      // Get existing cart to ensure we update the correct row
       const { data: existingCart } = await supabase
         .from('carts')
         .select('id')
@@ -177,20 +204,37 @@ export const useCart = () => {
     
     if (!user) return;
     
+    // Clear local state first for immediate UI feedback
     setCart([]);
     
-    await supabase
-      .from('carts')
-      .update({ items: [], updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+    try {
+      // Update database with empty items array
+      const { error } = await supabase
+        .from('carts')
+        .update({ 
+          items: [], 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('❌ Error clearing cart in DB:', error);
+      } else {
+        console.log('✅ Cart cleared successfully in database');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing cart:', error);
+    }
   }, [user]);
 
   const refreshCart = useCallback(async () => {
+    console.log('🔄 Refreshing cart...');
     await fetchCart();
   }, [fetchCart]);
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
 
+  // Initial fetch
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);

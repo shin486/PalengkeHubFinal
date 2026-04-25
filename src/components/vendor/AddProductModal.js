@@ -1,4 +1,3 @@
-// src/components/vendor/AddProductModal.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -26,6 +25,16 @@ const UNIT_OPTIONS = [
   { id: 'bundle', label: 'Per Bundle', icon: '🌿', defaultPrice: 0 },
   { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: '🥚', defaultPrice: 0 },
   { id: 'pack', label: 'Per Pack', icon: '📦', defaultPrice: 0 },
+];
+
+// ✅ ADDED: Predefined categories for multiple‑choice selection
+const CATEGORY_OPTIONS = [
+  { id: 'vegetables', label: 'Vegetables', icon: '🥬' },      // icon still used for visual, but label has no emoji
+  { id: 'meat', label: 'Meat', icon: '🥩' },
+  { id: 'rice', label: 'Rice & Grains', icon: '🍚' },
+  { id: 'fruits', label: 'Fruits', icon: '🍎' },
+  { id: 'poultry', label: 'Poultry', icon: '🐔' },
+  { id: 'other', label: 'Other', icon: '🛠️' },
 ];
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
@@ -237,15 +246,30 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               numberOfLines={3}
             />
 
-            {/* Category */}
-            <Text style={styles.label}>Category</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.category}
-              onChangeText={(text) => setFormData({ ...formData, category: text })}
-              placeholder="e.g., Vegetables, Fruits, Meat"
-              placeholderTextColor="#9CA3AF"
-            />
+            {/* ✅ CATEGORY – Multiple choice chips (single select) */}
+            <Text style={styles.label}>Category *</Text>
+            <View style={styles.categoryContainer}>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
+                    styles.categoryChip,
+                    formData.category === cat.id && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setFormData({ ...formData, category: cat.id })}
+                >
+                  <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      formData.category === cat.id && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             {/* Stock Quantity */}
             <Text style={styles.label}>Stock Quantity</Text>
@@ -536,6 +560,35 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Category styles (new)
+  categoryContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: '#DC2626',
+  },
+  categoryChipIcon: {
+    fontSize: 14,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: '#374151',
+  },
+  categoryChipTextActive: {
+    color: 'white',
   },
   // Unit Selection Styles
   unitSelectorContainer: {

@@ -48,6 +48,10 @@ export const useVendorProducts = (stallId) => {
           unit: productData.unit,
           category: productData.category,
           is_available: productData.is_available ?? true,
+          stock_quantity: productData.stock_quantity || 0,
+          image_url: productData.image_url || null,
+          price_options: productData.price_options || null,   // ✅ added
+          unit_options: productData.unit_options || null,     // ✅ added
         }]);
 
       if (error) throw error;
@@ -73,6 +77,10 @@ export const useVendorProducts = (stallId) => {
           unit: updates.unit,
           category: updates.category,
           is_available: updates.is_available,
+          stock_quantity: updates.stock_quantity || 0,
+          image_url: updates.image_url || null,
+          price_options: updates.price_options || null,      // ✅ added
+          unit_options: updates.unit_options || null,        // ✅ added
           updated_at: new Date(),
         })
         .eq('id', productId);

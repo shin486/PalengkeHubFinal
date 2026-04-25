@@ -23,6 +23,15 @@ import { supabase } from '../../../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
+// Quick cancel reasons for the customer
+const CANCEL_REASONS = [
+  { id: 'changed_mind', label: 'Changed my mind' },
+  { id: 'found_cheaper', label: 'Found a better price elsewhere' },
+  { id: 'delivery_time', label: 'Pickup time doesn\'t work' },
+  { id: 'ordered_wrong', label: 'Ordered wrong item' },
+  { id: 'other', label: 'Other reason' },
+];
+
 export default function OrdersScreen({ navigation }) {
   const { user, isGuest } = useAuth();
   const { orders, loading, newOrderAlert, refreshOrders } = useOrders();
@@ -37,7 +46,14 @@ export default function OrdersScreen({ navigation }) {
   const [ratingComment, setRatingComment] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
 
-  // Stall location mapping based on section
+  // Customer cancellation states
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState(null);
+  const [cancelReasonId, setCancelReasonId] = useState(null);
+  const [cancelCustomMessage, setCancelCustomMessage] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  // Stall location mapping (unchanged)
   const getStallCoordinates = (section, stallNumber) => {
     const baseLat = 13.9417;
     const baseLng = 121.1642;
@@ -84,14 +100,13 @@ export default function OrdersScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // Show notification for new orders
   React.useEffect(() => {
     if (newOrderAlert) {
       Vibration.vibrate(200);
     }
   }, [newOrderAlert]);
 
-  // ✅ ORDER AGAIN FUNCTION
+  // ORDER AGAIN (unchanged)
   const handleOrderAgain = async (order) => {
     if (!user) {
       Alert.alert('Login Required', 'Please login to add items to cart');
@@ -127,7 +142,7 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // ✅ RATE VENDOR FUNCTION
+  // RATE VENDOR (unchanged)
   const handleRateVendor = (order) => {
     setSelectedOrder(order);
     setSelectedRating(0);
@@ -171,6 +186,151 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
+  // DELETE SINGLE ORDER FROM HISTORY (unchanged)
+  const deleteOrderFromHistory = async (orderId) => {
+    Alert.alert(
+      'Remove Order',
+      'Do you want to permanently remove this order from your history?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('orders')
+                .delete()
+                .eq('id', orderId)
+                .eq('consumer_id', user.id);
+
+              if (error) throw error;
+              await refreshOrders();
+              Alert.alert('Removed', 'Order has been removed from your history');
+            } catch (error) {
+              console.error('Delete error:', error);
+              Alert.alert('Error', 'Could not remove order');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // CLEAR ALL HISTORY (unchanged)
+  const clearAllHistory = async () => {
+    const completedOrders = orders.filter(o => ['completed', 'cancelled'].includes(o.status));
+    if (completedOrders.length === 0) return;
+    Alert.alert(
+      'Clear All History',
+      'Are you sure you want to remove ALL completed/cancelled orders? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const idsToDelete = completedOrders.map(o => o.id);
+              const { error } = await supabase
+                .from('orders')
+                .delete()
+                .in('id', idsToDelete)
+                .eq('consumer_id', user.id);
+
+              if (error) throw error;
+              await refreshOrders();
+              Alert.alert('Cleared', 'All history orders have been removed');
+            } catch (error) {
+              console.error('Clear all error:', error);
+              Alert.alert('Error', 'Could not clear history');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // ---------- CUSTOMER CANCELLATION (with chat notification) ----------
+  const handleCancelOrder = async () => {
+    if (!cancelReasonId) return;
+    const reasonObj = CANCEL_REASONS.find(r => r.id === cancelReasonId);
+    let finalMessage = reasonObj.label;
+    if (cancelReasonId === 'other' && cancelCustomMessage.trim()) {
+      finalMessage = cancelCustomMessage.trim();
+    }
+
+    setCancelling(true);
+    try {
+      // 1. Update order status to 'cancelled'
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'cancelled' })
+        .eq('id', orderToCancel.id)
+        .eq('consumer_id', user.id);
+      if (updateError) throw updateError;
+
+      // 2. Get or create conversation with the stall
+      let { data: conversation } = await supabase
+        .from('conversations')
+        .select('id, customer_unread_count')
+        .eq('customer_id', user.id)
+        .eq('stall_id', orderToCancel.stall_id)
+        .maybeSingle();
+
+      let conversationId;
+      if (conversation) {
+        conversationId = conversation.id;
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: `❌ Customer cancelled order: ${finalMessage}`,
+            last_message_time: new Date(),
+            customer_unread_count: (conversation.customer_unread_count || 0) + 1,
+          })
+          .eq('id', conversationId);
+      } else {
+        const { data: newConv, error: convError } = await supabase
+          .from('conversations')
+          .insert({
+            customer_id: user.id,
+            stall_id: orderToCancel.stall_id,
+            last_message: `❌ Customer cancelled order: ${finalMessage}`,
+            last_message_time: new Date(),
+            customer_unread_count: 1,
+          })
+          .select()
+          .single();
+        if (convError) throw convError;
+        conversationId = newConv.id;
+      }
+
+      // 3. Insert chat message (customer as sender)
+      const messageText = `❌ Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        sender_role: 'customer',
+        message: messageText,
+        is_read: false,
+      });
+
+      // 4. Refresh orders list
+      await refreshOrders();
+      Alert.alert('Order Cancelled', 'Your order has been cancelled. The vendor has been notified.');
+      setCancelModalVisible(false);
+      setOrderToCancel(null);
+      setCancelReasonId(null);
+      setCancelCustomMessage('');
+    } catch (error) {
+      console.error('Cancel error:', error);
+      Alert.alert('Error', 'Could not cancel order. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // UI helpers (unchanged)
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return '#F59E0B';
@@ -221,37 +381,7 @@ export default function OrdersScreen({ navigation }) {
   const completedOrders = orders.filter(o => ['completed', 'cancelled'].includes(o.status));
   const displayOrders = activeTab === 'active' ? activeOrders : completedOrders;
 
-  if (isGuest) {
-    return (
-      <View style={styles.guestContainer}>
-        <Text style={styles.guestIcon}>📋</Text>
-        <Text style={styles.guestTitle}>Sign in to view orders</Text>
-        <Text style={styles.guestText}>
-          Create an account to track your orders and order history
-        </Text>
-        <TouchableOpacity 
-          style={styles.signInButton}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <LinearGradient
-            colors={['#FF6B6B', '#FF8E8E']}
-            style={styles.signInGradient}
-          >
-            <Text style={styles.signInButtonText}>Sign In</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-      </View>
-    );
-  }
-
+  // Render order card – now with Cancel button for pending orders
   const renderOrderCard = (order) => {
     const stall = order.stall || {
       stall_number: 'N/A',
@@ -267,6 +397,7 @@ export default function OrdersScreen({ navigation }) {
     
     const isCompleted = order.status === 'completed';
     const isCancelled = order.status === 'cancelled';
+    const isPending = order.status === 'pending';
     
     return (
       <View key={order.id} style={styles.orderCard}>
@@ -277,8 +408,19 @@ export default function OrdersScreen({ navigation }) {
             </Text>
             <Text style={styles.orderDate}>{formatDate(order.created_at)}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-            <Text style={styles.statusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+              <Text style={styles.statusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
+            </View>
+            {/* X button only for completed orders */}
+            {isCompleted && (
+              <TouchableOpacity
+                onPress={() => deleteOrderFromHistory(order.id)}
+                style={styles.cardDeleteIcon}
+              >
+                <Text style={styles.cardDeleteIconText}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -317,7 +459,25 @@ export default function OrdersScreen({ navigation }) {
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
-        {/* ✅ ACTION BUTTONS FOR COMPLETED ORDERS (History Tab) */}
+        {/* Cancel button for pending orders */}
+        {isPending && (
+          <TouchableOpacity
+            style={styles.cancelOrderButton}
+            onPress={() => {
+              setOrderToCancel(order);
+              setCancelModalVisible(true);
+            }}
+          >
+            <LinearGradient
+              colors={['#EF4444', '#DC2626']}
+              style={styles.cancelGradient}
+            >
+              <Text style={styles.cancelButtonText}>Cancel Order</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Completed order actions – unchanged */}
         {isCompleted && (
           <View style={styles.completedActionsRow}>
             <TouchableOpacity 
@@ -346,7 +506,7 @@ export default function OrdersScreen({ navigation }) {
           </View>
         )}
 
-        {/* 🗺️ MAP SECTION - Only show for active orders with valid stall data */}
+        {/* Map & Directions (active but not cancelled) */}
         {!['completed', 'cancelled'].includes(order.status) && hasValidStall && (
           <>
             <View style={styles.mapButtonsRow}>
@@ -416,7 +576,7 @@ export default function OrdersScreen({ navigation }) {
     );
   };
 
-  // Star rating component for modal
+  // Star rating helper (unchanged)
   const renderStars = () => {
     const stars = [];
     for (let i = 1; i <= 5; i++) {
@@ -435,6 +595,37 @@ export default function OrdersScreen({ navigation }) {
     return stars;
   };
 
+  if (isGuest) {
+    return (
+      <View style={styles.guestContainer}>
+        <Text style={styles.guestIcon}>📋</Text>
+        <Text style={styles.guestTitle}>Sign in to view orders</Text>
+        <Text style={styles.guestText}>
+          Create an account to track your orders and order history
+        </Text>
+        <TouchableOpacity 
+          style={styles.signInButton}
+          onPress={() => navigation.navigate('Login')}
+        >
+          <LinearGradient
+            colors={['#FF6B6B', '#FF8E8E']}
+            style={styles.signInGradient}
+          >
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#FF6B6B" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {newOrderAlert && activeTab === 'active' && (
@@ -443,24 +634,34 @@ export default function OrdersScreen({ navigation }) {
         </View>
       )}
 
+      {/* Tab bar – unchanged */}
       <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'active' && styles.activeTab]}
-          onPress={() => setActiveTab('active')}
-        >
-          <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
-            Active ({activeOrders.length})
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.tabsRow}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'active' && styles.activeTab]}
+            onPress={() => setActiveTab('active')}
+          >
+            <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
+              Active ({activeOrders.length})
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+            onPress={() => setActiveTab('completed')}
+          >
+            <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
+              History ({completedOrders.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
         
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            History ({completedOrders.length})
-          </Text>
-        </TouchableOpacity>
+        {/* Clear All button (only on History) */}
+        {activeTab === 'completed' && completedOrders.length > 0 && (
+          <TouchableOpacity onPress={clearAllHistory} style={styles.clearAllButton}>
+            <Text style={styles.clearAllButtonText}>Clear All</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -498,7 +699,7 @@ export default function OrdersScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* 🗺️ FULL SCREEN MAP MODAL */}
+      {/* Map Modal – unchanged */}
       <Modal
         visible={mapModalVisible}
         animationType="slide"
@@ -552,7 +753,7 @@ export default function OrdersScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* ⭐ RATING MODAL */}
+      {/* Rating Modal – unchanged */}
       <Modal
         visible={ratingModalVisible}
         transparent={true}
@@ -606,466 +807,248 @@ export default function OrdersScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* CUSTOMER CANCELLATION MODAL (new) */}
+      <Modal
+        visible={cancelModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setCancelModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.ratingModalContainer}>
+            <Text style={styles.ratingModalTitle}>Cancel Order</Text>
+            <Text style={styles.ratingModalSubtitle}>
+              Why are you cancelling this order?
+            </Text>
+
+            <ScrollView style={{ maxHeight: 300, width: '100%' }}>
+              {CANCEL_REASONS.map((reason) => (
+                <TouchableOpacity
+                  key={reason.id}
+                  style={[
+                    styles.reasonOption,
+                    cancelReasonId === reason.id && styles.reasonOptionSelected,
+                  ]}
+                  onPress={() => setCancelReasonId(reason.id)}
+                >
+                  <Text style={[
+                    styles.reasonText,
+                    cancelReasonId === reason.id && styles.reasonTextSelected,
+                  ]}>
+                    {reason.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {cancelReasonId === 'other' && (
+                <TextInput
+                  style={styles.customInput}
+                  placeholder="Type your reason..."
+                  placeholderTextColor="#9CA3AF"
+                  value={cancelCustomMessage}
+                  onChangeText={setCancelCustomMessage}
+                  multiline
+                  numberOfLines={3}
+                />
+              )}
+            </ScrollView>
+
+            <View style={styles.ratingModalButtons}>
+              <TouchableOpacity
+                style={styles.ratingModalCancel}
+                onPress={() => {
+                  setCancelModalVisible(false);
+                  setOrderToCancel(null);
+                  setCancelReasonId(null);
+                  setCancelCustomMessage('');
+                }}
+              >
+                <Text style={styles.ratingModalCancelText}>Go Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.ratingModalSubmit, (!cancelReasonId || cancelling) && { opacity: 0.5 }]}
+                onPress={handleCancelOrder}
+                disabled={!cancelReasonId || cancelling}
+              >
+                <LinearGradient
+                  colors={['#EF4444', '#DC2626']}
+                  style={styles.ratingModalSubmitGradient}
+                >
+                  <Text style={styles.ratingModalSubmitText}>
+                    {cancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  guestContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  guestIcon: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  guestTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  guestText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  signInButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  signInGradient: {
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  signInButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  newOrderAlert: {
-    backgroundColor: '#FEF3F2',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FF6B6B',
-  },
-  newOrderAlertText: {
-    fontSize: 13,
-    color: '#FF6B6B',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  guestContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  guestIcon: { fontSize: 60, marginBottom: 20 },
+  guestTitle: { fontSize: 22, fontWeight: 'bold', color: '#111827', marginBottom: 12 },
+  guestText: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 30 },
+  signInButton: { borderRadius: 12, overflow: 'hidden' },
+  signInGradient: { paddingHorizontal: 40, paddingVertical: 14, borderRadius: 12 },
+  signInButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  newOrderAlert: { backgroundColor: '#FEF3F2', padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FF6B6B' },
+  newOrderAlertText: { fontSize: 13, color: '#FF6B6B', textAlign: 'center', fontWeight: '500' },
+  
+  // Tab bar
   tabContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: 'white',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: '#FEF3F2',
-  },
-  tabText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  activeTabText: {
-    color: '#FF6B6B',
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 30,
-  },
-  orderCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  orderNumber: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  orderDate: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'white',
-  },
-  stallInfo: {
-    backgroundColor: '#F9FAFB',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  stallName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  stallSection: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  itemsContainer: {
-    marginBottom: 12,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  itemName: {
-    fontSize: 13,
-    color: '#374151',
-    flex: 2,
-  },
-  itemPrice: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#FF6B6B',
-  },
-  pickupContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  pickupLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  pickupTime: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF6B6B',
-  },
-  instructionsContainer: {
-    backgroundColor: '#FEF3F2',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  instructionsLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FF6B6B',
-    marginBottom: 4,
-  },
-  instructionsText: {
-    fontSize: 12,
-    color: '#374151',
-  },
-  orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    marginBottom: 12,
-  },
-  totalLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-  },
-  // ✅ New styles for completed order actions
-  completedActionsRow: {
-    flexDirection: 'row',
-    gap: 12,
+  tabsRow: { flexDirection: 'row', gap: 16 },
+  tab: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8 },
+  activeTab: { backgroundColor: '#FEF3F2' },
+  tabText: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  activeTabText: { color: '#FF6B6B', fontWeight: '600' },
+  clearAllButton: { backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  clearAllButtonText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 30 },
+  orderCard: { backgroundColor: 'white', borderRadius: 16, marginBottom: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  orderNumber: { fontSize: 15, fontWeight: 'bold', color: '#111827' },
+  orderDate: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusText: { fontSize: 10, fontWeight: '600', color: 'white' },
+  cardDeleteIcon: { marginLeft: 4, padding: 4 },
+  cardDeleteIconText: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
+  stallInfo: { backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, marginBottom: 12 },
+  stallName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  stallSection: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  itemsContainer: { marginBottom: 12 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  itemName: { fontSize: 13, color: '#374151', flex: 2 },
+  itemPrice: { fontSize: 13, fontWeight: '500', color: '#FF6B6B' },
+  pickupContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  pickupLabel: { fontSize: 12, color: '#6B7280' },
+  pickupTime: { fontSize: 14, fontWeight: '600', color: '#FF6B6B' },
+  instructionsContainer: { backgroundColor: '#FEF3F2', padding: 10, borderRadius: 10, marginBottom: 12 },
+  instructionsLabel: { fontSize: 11, fontWeight: '600', color: '#FF6B6B', marginBottom: 4 },
+  instructionsText: { fontSize: 12, color: '#374151' },
+  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB', marginBottom: 12 },
+  totalLabel: { fontSize: 14, color: '#6B7280' },
+  totalAmount: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
+
+  // Cancel order button (new)
+  cancelOrderButton: {
     marginTop: 8,
-    marginBottom: 12,
-  },
-  orderAgainButton: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  rateButton: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  actionButtonGradient: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  mapButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  mapButton: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  directionsButton: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  mapGradient: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  mapButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'white',
-  },
-  miniMapPreview: {
-    marginBottom: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  pickupButton: {
-    marginTop: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  pickupGradient: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  pickupButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyIcon: {
-    fontSize: 60,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  shopButton: {
-    borderRadius: 12,
+    borderRadius: 8,
     overflow: 'hidden',
   },
-  shopGradient: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 12,
+  cancelGradient: {
+    paddingVertical: 10,
+    alignItems: 'center',
   },
-  shopButtonText: {
+  cancelButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#FF6B6B',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 50,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+
+  // Completed order actions (unchanged)
+  completedActionsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
+  orderAgainButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
+  rateButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
+  actionButtonGradient: { paddingVertical: 10, alignItems: 'center' },
+  actionButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
+
+  // Map buttons
+  mapButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
+  mapButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
+  directionsButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
+  mapGradient: { paddingVertical: 10, alignItems: 'center' },
+  mapButtonText: { fontSize: 13, fontWeight: '600', color: 'white' },
+  miniMapPreview: { marginBottom: 12, borderRadius: 12, overflow: 'hidden' },
+  pickupButton: { marginTop: 8, borderRadius: 8, overflow: 'hidden' },
+  pickupGradient: { paddingVertical: 12, alignItems: 'center' },
+  pickupButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
+
+  emptyContainer: { alignItems: 'center', paddingTop: 60 },
+  emptyIcon: { fontSize: 60, marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
+  emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 24 },
+  shopButton: { borderRadius: 12, overflow: 'hidden' },
+  shopGradient: { paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 },
+  shopButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+
+  // Map Modal
+  modalContainer: { flex: 1, backgroundColor: '#fff' },
+  modalHeader: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#FF6B6B' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
+  modalSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
+  modalCloseButton: { position: 'absolute', top: 50, right: 16, backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  modalCloseText: { color: 'white', fontSize: 14, fontWeight: '600' },
+  modalFooter: { padding: 20, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  modalDirectionsButton: { borderRadius: 12, overflow: 'hidden' },
+  modalDirectionsGradient: { paddingVertical: 14, alignItems: 'center' },
+  modalDirectionsText: { color: 'white', fontSize: 16, fontWeight: '600' },
+
+  // Rating Modal (reused for cancellation)
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  ratingModalContainer: { width: '85%', backgroundColor: 'white', borderRadius: 20, padding: 20, alignItems: 'center' },
+  ratingModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
+  ratingModalSubtitle: { fontSize: 14, color: '#6B7280', marginBottom: 20 },
+  starsContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20 },
+  starButton: { paddingHorizontal: 8 },
+  starIcon: { fontSize: 40, color: '#D1D5DB' },
+  starIconSelected: { color: '#F59E0B' },
+  ratingCommentInput: { width: '100%', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 14, color: '#111827', textAlignVertical: 'top', minHeight: 80, marginBottom: 20 },
+  ratingModalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  ratingModalCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  ratingModalCancelText: { color: '#6B7280', fontSize: 14, fontWeight: '500' },
+  ratingModalSubmit: { flex: 1, borderRadius: 10, overflow: 'hidden' },
+  ratingModalSubmitGradient: { paddingVertical: 12, alignItems: 'center' },
+  ratingModalSubmitText: { color: 'white', fontSize: 14, fontWeight: '600' },
+
+  // Styles for cancel reason options (new)
+  reasonOption: {
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  modalCloseText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  modalDirectionsButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  modalDirectionsGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modalDirectionsText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // ⭐ Rating Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  ratingModalContainer: {
-    width: '85%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  ratingModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
+    borderRadius: 10,
     marginBottom: 8,
+    backgroundColor: '#F3F4F6',
   },
-  ratingModalSubtitle: {
+  reasonOptionSelected: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  reasonText: {
     fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 20,
+    color: '#374151',
   },
-  starsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 20,
+  reasonTextSelected: {
+    color: '#DC2626',
+    fontWeight: '500',
   },
-  starButton: {
-    paddingHorizontal: 8,
-  },
-  starIcon: {
-    fontSize: 40,
-    color: '#D1D5DB',
-  },
-  starIconSelected: {
-    color: '#F59E0B',
-  },
-  ratingCommentInput: {
-    width: '100%',
+  customInput: {
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 12,
     fontSize: 14,
     color: '#111827',
     textAlignVertical: 'top',
-    minHeight: 80,
-    marginBottom: 20,
-  },
-  ratingModalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  ratingModalCancel: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-  },
-  ratingModalCancelText: {
-    color: '#6B7280',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  ratingModalSubmit: {
-    flex: 1,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  ratingModalSubmitGradient: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  ratingModalSubmitText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 12,
   },
 });

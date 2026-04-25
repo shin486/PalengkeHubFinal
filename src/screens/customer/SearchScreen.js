@@ -12,22 +12,31 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../lib/supabase';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
 
+// Helper function to calculate discounted price
+const getDiscountedPrice = (originalPrice, promotion) => {
+  if (!promotion) return originalPrice;
+  if (promotion.discount_type === 'percentage') {
+    return originalPrice * (1 - promotion.discount_value / 100);
+  } else {
+    return Math.max(0, originalPrice - promotion.discount_value);
+  }
+};
+
 export default function SearchScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState([]);
+  const [productsData, setProductsData] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchType, setSearchType] = useState('products');
   const [recentSearches, setRecentSearches] = useState([]);
   const [showRecent, setShowRecent] = useState(true);
-  
+
   const debounceTimer = useRef(null);
 
   useEffect(() => {
@@ -45,16 +54,16 @@ export default function SearchScreen({ navigation }) {
       }, 300);
     } else {
       setShowRecent(true);
-      setProducts([]);
+      setProductsData([]);
       setStalls([]);
     }
-    
+
     return () => {
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [searchQuery]);
+  }, [searchQuery, searchType]);
 
   const loadRecentSearches = async () => {
     try {
@@ -69,7 +78,7 @@ export default function SearchScreen({ navigation }) {
 
   const saveRecentSearch = async (query) => {
     if (!query.trim()) return;
-    
+
     try {
       const updated = [query, ...recentSearches.filter(s => s !== query)];
       const trimmed = updated.slice(0, MAX_RECENT_SEARCHES);
@@ -108,28 +117,88 @@ export default function SearchScreen({ navigation }) {
     if (!searchQuery.trim()) return;
 
     setLoading(true);
-    
+
     try {
       if (searchType === 'products') {
+        // Fetch products with stall info
         const { data, error } = await supabase
           .from('products')
           .select(`
-            *,
-            stalls (
+            id,
+            name,
+            price,
+            unit,
+            stall_id,
+            stalls!inner (
+              id,
               stall_number,
               stall_name,
-              section
+              section,
+              average_rating
             )
           `)
           .ilike('name', `%${searchQuery}%`)
-          .eq('is_available', true)
-          .order('name')
-          .limit(50);
+          .eq('is_available', true);
 
         if (error) throw error;
-        setProducts(data || []);
-        setStalls([]);
-      } else {
+
+        if (data && data.length > 0) {
+          // Fetch promotions for all products in one query
+          const productIds = data.map(p => p.id);
+          const now = new Date().toISOString();
+          const { data: promotions } = await supabase
+            .from('promotions')
+            .select('*')
+            .in('product_id', productIds)
+            .eq('is_active', true)
+            .lte('start_date', now)
+            .gte('end_date', now);
+
+          // Create a map of product_id -> promotion
+          const promoMap = new Map();
+          if (promotions) {
+            promotions.forEach(promo => {
+              promoMap.set(promo.product_id, promo);
+            });
+          }
+
+          // Add promotion and discounted price to each product
+          const productsWithPromo = data.map(product => {
+            const promotion = promoMap.get(product.id);
+            const discountedPrice = getDiscountedPrice(product.price, promotion);
+            return {
+              ...product,
+              promotion,
+              originalPrice: product.price,
+              price: discountedPrice,
+              hasPromotion: !!promotion,
+            };
+          });
+
+          // Group by product name
+          const grouped = {};
+          productsWithPromo.forEach(product => {
+            if (!grouped[product.name]) {
+              grouped[product.name] = [];
+            }
+            grouped[product.name].push(product);
+          });
+
+          // Build flat list with headers and products, sorted by discounted price
+          const results = [];
+          for (const [productName, variants] of Object.entries(grouped)) {
+            variants.sort((a, b) => a.price - b.price);
+            results.push({ type: 'header', name: productName });
+            variants.forEach(variant => {
+              results.push({ type: 'product', data: variant });
+            });
+          }
+          setProductsData(results);
+        } else {
+          setProductsData([]);
+        }
+      } 
+      else if (searchType === 'stalls') {
         const { data, error } = await supabase
           .from('stalls')
           .select('*')
@@ -139,7 +208,6 @@ export default function SearchScreen({ navigation }) {
 
         if (error) throw error;
         setStalls(data || []);
-        setProducts([]);
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -162,27 +230,82 @@ export default function SearchScreen({ navigation }) {
     setTimeout(() => performSearch(), 100);
   };
 
-  const renderProductCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.resultCard}
-      onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.cardContent}>
-        <View style={styles.productIcon}>
-          <Text style={styles.productEmoji}>🛒</Text>
+  const addToCartFromComparison = async (product, stall) => {
+    Alert.alert(
+      'Add to Cart',
+      `Add ${product.name} to cart from ${stall?.stall_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'View Product',
+          onPress: () => navigation.navigate('ProductDetails', { productId: product.id })
+        }
+      ]
+    );
+  };
+
+  const renderProductComparisonItem = ({ item }) => {
+    if (item.type === 'header') {
+      return (
+        <View style={styles.comparisonHeader}>
+          <Text style={styles.comparisonHeaderText}>{item.name}</Text>
+          <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
         </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.resultName}>{item.name}</Text>
-          <Text style={styles.resultPrice}>₱{item.price} / {item.unit}</Text>
-          <View style={styles.cardMeta}>
-            <Text style={styles.resultStall}>Stall {item.stalls?.stall_number}</Text>
-            <Text style={styles.resultCategory}>{item.category}</Text>
+      );
+    }
+
+    const product = item.data;
+    const stall = product.stalls;
+    const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
+    const isCheapest = groupItems.length > 0 && product.price === Math.min(...groupItems.map(i => i.data.price));
+
+    return (
+      <TouchableOpacity
+        style={styles.comparisonCard}
+        onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+        activeOpacity={0.7}
+      >
+        {isCheapest && (
+          <View style={styles.bestDealBadge}>
+            <Text style={styles.bestDealText}>Best Deal</Text>
           </View>
+        )}
+        <View style={styles.comparisonContent}>
+          <View style={styles.comparisonStallInfo}>
+            <Text style={styles.comparisonStallName}>{stall.stall_name || 'Market Stall'}</Text>
+            <Text style={styles.comparisonStallNumber}>Stall #{stall.stall_number}</Text>
+            <Text style={styles.comparisonSection}>{stall.section}</Text>
+            {stall.average_rating > 0 && (
+              <Text style={styles.comparisonRating}>⭐ {stall.average_rating.toFixed(1)}</Text>
+            )}
+          </View>
+          <View style={styles.comparisonPriceSection}>
+            {/* Show original price with strikethrough if promotion exists */}
+            {product.hasPromotion && (
+              <Text style={styles.originalPrice}>₱{product.originalPrice.toFixed(2)}</Text>
+            )}
+            <Text style={styles.comparisonPrice}>₱{product.price.toFixed(2)}</Text>
+            <Text style={styles.comparisonUnit}>per {product.unit}</Text>
+            {product.hasPromotion && (
+              <View style={styles.promoMiniBadge}>
+                <Text style={styles.promoMiniText}>
+                  {product.promotion?.discount_type === 'percentage'
+                    ? `${product.promotion.discount_value}% OFF`
+                    : `₱${product.promotion.discount_value} OFF`}
+                </Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.addToCartButton}
+            onPress={() => addToCartFromComparison(product, stall)}
+          >
+            <Text style={styles.addToCartButtonText}>Add</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderStallCard = ({ item }) => (
     <TouchableOpacity
@@ -250,17 +373,14 @@ export default function SearchScreen({ navigation }) {
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🔍</Text>
       <Text style={styles.emptyTitle}>No results found</Text>
-      <Text style={styles.emptyText}>
-        Try searching with a different keyword
-      </Text>
+      <Text style={styles.emptyText}>Try searching with a different keyword</Text>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
-      
-      {/* Search Input - Simple and clean */}
+
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -282,7 +402,6 @@ export default function SearchScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Search Type Toggle */}
       <View style={styles.typeToggle}>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'products' && styles.toggleButtonActive]}
@@ -308,10 +427,9 @@ export default function SearchScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Results Area */}
       {showRecent && !searchQuery ? (
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           style={styles.scrollContent}
           contentContainerStyle={styles.scrollContentContainer}
         >
@@ -322,11 +440,20 @@ export default function SearchScreen({ navigation }) {
           <ActivityIndicator size="large" color="#FF6B6B" />
           <Text style={styles.loadingText}>Searching...</Text>
         </View>
+      ) : searchType === 'products' ? (
+        <FlatList
+          data={productsData}
+          keyExtractor={(item, index) => `${item.type}-${index}`}
+          renderItem={renderProductComparisonItem}
+          contentContainerStyle={styles.resultsList}
+          ListEmptyComponent={searchQuery ? renderEmptyState : null}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
         <FlatList
-          data={searchType === 'products' ? products : stalls}
+          data={stalls}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={searchType === 'products' ? renderProductCard : renderStallCard}
+          renderItem={renderStallCard}
           contentContainerStyle={styles.resultsList}
           ListEmptyComponent={searchQuery ? renderEmptyState : null}
           showsVerticalScrollIndicator={false}
@@ -497,20 +624,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  productIcon: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#FEF3F2',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
   stallIcon: {
     width: 50,
     height: 50,
@@ -520,11 +633,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  productEmoji: {
-    fontSize: 24,
-  },
   stallEmoji: {
     fontSize: 24,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
   },
   cardInfo: {
     flex: 1,
@@ -535,28 +650,15 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 2,
   },
-  resultPrice: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
   resultStallName: {
     fontSize: 14,
     color: '#6B7280',
     marginBottom: 4,
   },
-  resultStall: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  resultCategory: {
-    fontSize: 12,
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    color: '#6B7280',
+  cardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   resultSection: {
     fontSize: 12,
@@ -569,11 +671,6 @@ const styles = StyleSheet.create({
   resultRating: {
     fontSize: 12,
     color: '#F59E0B',
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -593,5 +690,125 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  comparisonHeader: {
+    backgroundColor: '#FEF3F2',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    marginTop: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+  },
+  comparisonHeaderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  comparisonHeaderSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  comparisonCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  bestDealBadge: {
+    position: 'absolute',
+    top: -8,
+    right: 12,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  bestDealText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  comparisonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  comparisonStallInfo: {
+    flex: 2,
+  },
+  comparisonStallName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  comparisonStallNumber: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  comparisonSection: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  comparisonRating: {
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 2,
+  },
+  comparisonPriceSection: {
+    flex: 1,
+    alignItems: 'flex-end',
+    paddingHorizontal: 8,
+  },
+  originalPrice: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
+  comparisonPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF6B6B',
+  },
+  comparisonUnit: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  promoMiniBadge: {
+    marginTop: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  promoMiniText: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: '#DC2626',
+  },
+  addToCartButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  addToCartButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
