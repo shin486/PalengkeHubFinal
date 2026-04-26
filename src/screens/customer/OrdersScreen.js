@@ -53,7 +53,7 @@ export default function OrdersScreen({ navigation }) {
   const [cancelCustomMessage, setCancelCustomMessage] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
-  // Stall location mapping (unchanged)
+  // Stall location mapping
   const getStallCoordinates = (section, stallNumber) => {
     const baseLat = 13.9417;
     const baseLng = 121.1642;
@@ -106,7 +106,7 @@ export default function OrdersScreen({ navigation }) {
     }
   }, [newOrderAlert]);
 
-  // ORDER AGAIN (unchanged)
+  // ORDER AGAIN
   const handleOrderAgain = async (order) => {
     if (!user) {
       Alert.alert('Login Required', 'Please login to add items to cart');
@@ -142,7 +142,7 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // RATE VENDOR (unchanged)
+  // RATE VENDOR
   const handleRateVendor = (order) => {
     setSelectedOrder(order);
     setSelectedRating(0);
@@ -186,7 +186,7 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // DELETE SINGLE ORDER FROM HISTORY (unchanged)
+  // DELETE SINGLE ORDER FROM HISTORY
   const deleteOrderFromHistory = async (orderId) => {
     Alert.alert(
       'Remove Order',
@@ -217,7 +217,7 @@ export default function OrdersScreen({ navigation }) {
     );
   };
 
-  // CLEAR ALL HISTORY (unchanged)
+  // CLEAR ALL HISTORY
   const clearAllHistory = async () => {
     const completedOrders = orders.filter(o => ['completed', 'cancelled'].includes(o.status));
     if (completedOrders.length === 0) return;
@@ -262,7 +262,6 @@ export default function OrdersScreen({ navigation }) {
 
     setCancelling(true);
     try {
-      // 1. Update order status to 'cancelled'
       const { error: updateError } = await supabase
         .from('orders')
         .update({ status: 'cancelled' })
@@ -270,7 +269,6 @@ export default function OrdersScreen({ navigation }) {
         .eq('consumer_id', user.id);
       if (updateError) throw updateError;
 
-      // 2. Get or create conversation with the stall
       let { data: conversation } = await supabase
         .from('conversations')
         .select('id, customer_unread_count')
@@ -305,7 +303,6 @@ export default function OrdersScreen({ navigation }) {
         conversationId = newConv.id;
       }
 
-      // 3. Insert chat message (customer as sender)
       const messageText = `❌ Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
       await supabase.from('messages').insert({
         conversation_id: conversationId,
@@ -315,7 +312,6 @@ export default function OrdersScreen({ navigation }) {
         is_read: false,
       });
 
-      // 4. Refresh orders list
       await refreshOrders();
       Alert.alert('Order Cancelled', 'Your order has been cancelled. The vendor has been notified.');
       setCancelModalVisible(false);
@@ -330,7 +326,10 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // UI helpers (unchanged)
+  // ---------- PAY VIA GCASH (NEW) ----------
+ 
+
+  // UI helpers
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return '#F59E0B';
@@ -381,7 +380,7 @@ export default function OrdersScreen({ navigation }) {
   const completedOrders = orders.filter(o => ['completed', 'cancelled'].includes(o.status));
   const displayOrders = activeTab === 'active' ? activeOrders : completedOrders;
 
-  // Render order card – now with Cancel button for pending orders
+  // Render order card
   const renderOrderCard = (order) => {
     const stall = order.stall || {
       stall_number: 'N/A',
@@ -398,6 +397,7 @@ export default function OrdersScreen({ navigation }) {
     const isCompleted = order.status === 'completed';
     const isCancelled = order.status === 'cancelled';
     const isPending = order.status === 'pending';
+    const isConfirmed = order.status === 'confirmed';
     
     return (
       <View key={order.id} style={styles.orderCard}>
@@ -412,7 +412,6 @@ export default function OrdersScreen({ navigation }) {
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
               <Text style={styles.statusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
             </View>
-            {/* X button only for completed orders */}
             {isCompleted && (
               <TouchableOpacity
                 onPress={() => deleteOrderFromHistory(order.id)}
@@ -423,6 +422,8 @@ export default function OrdersScreen({ navigation }) {
             )}
           </View>
         </View>
+
+       
 
         <View style={styles.stallInfo}>
           <Text style={styles.stallName}>
@@ -459,7 +460,6 @@ export default function OrdersScreen({ navigation }) {
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
-        {/* Cancel button for pending orders */}
         {isPending && (
           <TouchableOpacity
             style={styles.cancelOrderButton}
@@ -477,7 +477,6 @@ export default function OrdersScreen({ navigation }) {
           </TouchableOpacity>
         )}
 
-        {/* Completed order actions – unchanged */}
         {isCompleted && (
           <View style={styles.completedActionsRow}>
             <TouchableOpacity 
@@ -506,7 +505,6 @@ export default function OrdersScreen({ navigation }) {
           </View>
         )}
 
-        {/* Map & Directions (active but not cancelled) */}
         {!['completed', 'cancelled'].includes(order.status) && hasValidStall && (
           <>
             <View style={styles.mapButtonsRow}>
@@ -576,7 +574,7 @@ export default function OrdersScreen({ navigation }) {
     );
   };
 
-  // Star rating helper (unchanged)
+  // Star rating helper
   const renderStars = () => {
     const stars = [];
     for (let i = 1; i <= 5; i++) {
@@ -634,7 +632,6 @@ export default function OrdersScreen({ navigation }) {
         </View>
       )}
 
-      {/* Tab bar – unchanged */}
       <View style={styles.tabContainer}>
         <View style={styles.tabsRow}>
           <TouchableOpacity 
@@ -656,7 +653,6 @@ export default function OrdersScreen({ navigation }) {
           </TouchableOpacity>
         </View>
         
-        {/* Clear All button (only on History) */}
         {activeTab === 'completed' && completedOrders.length > 0 && (
           <TouchableOpacity onPress={clearAllHistory} style={styles.clearAllButton}>
             <Text style={styles.clearAllButtonText}>Clear All</Text>
@@ -699,7 +695,7 @@ export default function OrdersScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Map Modal – unchanged */}
+      {/* Map Modal */}
       <Modal
         visible={mapModalVisible}
         animationType="slide"
@@ -753,7 +749,7 @@ export default function OrdersScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Rating Modal – unchanged */}
+      {/* Rating Modal */}
       <Modal
         visible={ratingModalVisible}
         transparent={true}
@@ -808,7 +804,7 @@ export default function OrdersScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* CUSTOMER CANCELLATION MODAL (new) */}
+      {/* Customer Cancellation Modal */}
       <Modal
         visible={cancelModalVisible}
         transparent={true}
@@ -901,7 +897,6 @@ const styles = StyleSheet.create({
   newOrderAlert: { backgroundColor: '#FEF3F2', padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FF6B6B' },
   newOrderAlertText: { fontSize: 13, color: '#FF6B6B', textAlign: 'center', fontWeight: '500' },
   
-  // Tab bar
   tabContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -930,6 +925,26 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontWeight: '600', color: 'white' },
   cardDeleteIcon: { marginLeft: 4, padding: 4 },
   cardDeleteIconText: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
+  
+  // Pay via GCash button
+  payNowButton: {
+    marginBottom: 12,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  payNowGradient: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  payNowButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  
   stallInfo: { backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, marginBottom: 12 },
   stallName: { fontSize: 14, fontWeight: '600', color: '#111827' },
   stallSection: { fontSize: 12, color: '#6B7280', marginTop: 2 },
@@ -947,31 +962,16 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 14, color: '#6B7280' },
   totalAmount: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
 
-  // Cancel order button (new)
-  cancelOrderButton: {
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  cancelGradient: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  cancelOrderButton: { marginTop: 8, marginBottom: 8, borderRadius: 8, overflow: 'hidden' },
+  cancelGradient: { paddingVertical: 10, alignItems: 'center' },
+  cancelButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
 
-  // Completed order actions (unchanged)
   completedActionsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
   orderAgainButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
   rateButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
   actionButtonGradient: { paddingVertical: 10, alignItems: 'center' },
   actionButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
 
-  // Map buttons
   mapButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
   mapButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
   directionsButton: { flex: 1, borderRadius: 8, overflow: 'hidden' },
@@ -990,7 +990,6 @@ const styles = StyleSheet.create({
   shopGradient: { paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 },
   shopButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 
-  // Map Modal
   modalContainer: { flex: 1, backgroundColor: '#fff' },
   modalHeader: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#FF6B6B' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
@@ -1002,7 +1001,6 @@ const styles = StyleSheet.create({
   modalDirectionsGradient: { paddingVertical: 14, alignItems: 'center' },
   modalDirectionsText: { color: 'white', fontSize: 16, fontWeight: '600' },
 
-  // Rating Modal (reused for cancellation)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   ratingModalContainer: { width: '85%', backgroundColor: 'white', borderRadius: 20, padding: 20, alignItems: 'center' },
   ratingModalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
@@ -1019,36 +1017,9 @@ const styles = StyleSheet.create({
   ratingModalSubmitGradient: { paddingVertical: 12, alignItems: 'center' },
   ratingModalSubmitText: { color: 'white', fontSize: 14, fontWeight: '600' },
 
-  // Styles for cancel reason options (new)
-  reasonOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  reasonOptionSelected: {
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#EF4444',
-  },
-  reasonText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  reasonTextSelected: {
-    color: '#DC2626',
-    fontWeight: '500',
-  },
-  customInput: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    color: '#111827',
-    textAlignVertical: 'top',
-    marginTop: 8,
-    marginBottom: 12,
-  },
+  reasonOption: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, marginBottom: 8, backgroundColor: '#F3F4F6' },
+  reasonOptionSelected: { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#EF4444' },
+  reasonText: { fontSize: 14, color: '#374151' },
+  reasonTextSelected: { color: '#DC2626', fontWeight: '500' },
+  customInput: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, fontSize: 14, color: '#111827', textAlignVertical: 'top', marginTop: 8, marginBottom: 12 },
 });

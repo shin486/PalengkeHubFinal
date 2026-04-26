@@ -17,9 +17,11 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
-import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVendorProducts } from '../../hooks/useVendorProducts';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
@@ -61,7 +63,10 @@ export default function VendorDashboardScreen({ navigation }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [salesData, setSalesData] = useState([]);
-  const [lowStockItems, setLowStockItems] = useState([]);
+    // --- Feature 1: Notifications ---
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [chats, setChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -75,7 +80,9 @@ export default function VendorDashboardScreen({ navigation }) {
     ordersMonth: 0
   });
   const [reportStats, setReportStats] = useState({ pending: 0, total: 0 });
-
+// --- Feature 7: Customer History (Suki) ---
+const [frequentCustomers, setFrequentCustomers] = useState([]);
+const [loadingCustomers, setLoadingCustomers] = useState(false);
   // --- Promotions state ---
   const [promotions, setPromotions] = useState([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
@@ -86,12 +93,90 @@ export default function VendorDashboardScreen({ navigation }) {
     discount_value: '',
     end_date: '',
   });
+  // --- Feature 2: Sales Analytics ---
+  const [bestSellingProducts, setBestSellingProducts] = useState([]);
+  const [peakHours, setPeakHours] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // --- Feature 6: Reports ---
+  const [reportPeriod, setReportPeriod] = useState('week'); // 'day', 'week', 'month'
+  const [reportData, setReportData] = useState([]);
+  const [exporting, setExporting] = useState(false);
+
+  // --- Feature 8: Pause Orders ---
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausing, setPausing] = useState(false);
   // Fetch stall
   useEffect(() => {
     if (user) fetchStall();
   }, [user]);
 
+
+  // --- Rating Insights Stats ---
+const [ratingStats, setRatingStats] = useState({
+  averageRating: 0,
+  totalReviews: 0,
+  positivePercentage: 0,
+  ratedProducts: 0
+});
+    // --- Feature 1: Fetch Notifications ---
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setLoadingNotifications(true);
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      setNotifications(data || []);
+      
+      const unreadCount = data?.filter(n => !n.is_read).length || 0;
+      setNotificationUnreadCount(unreadCount);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [user]);
+
+  // Mark notification as read
+  const markNotificationRead = async (notificationId) => {
+    try {
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId);
+      
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+      );
+      setNotificationUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification read:', error);
+    }
+  };
+
+  // Mark all as read
+  const markAllNotificationsRead = async () => {
+    try {
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setNotificationUnreadCount(0);
+      Alert.alert('Success', 'All notifications marked as read');
+    } catch (error) {
+      console.error('Error marking all read:', error);
+      Alert.alert('Error', 'Failed to mark all as read');
+    }
+  };
   const fetchStall = async () => {
     try {
       setLoadingStall(true);
@@ -124,6 +209,67 @@ export default function VendorDashboardScreen({ navigation }) {
     }
   }, [user]);
 
+   const handleRequestPayment = async (order) => {
+  try {
+    // 1. Get or create conversation (vendor is the sender)
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('customer_id', order.consumer_id)  // ← Fixed: use order.consumer_id, not user.id
+      .eq('stall_id', order.stall_id)
+      .maybeSingle();
+
+    let conversationId;
+    if (conversation) {
+      conversationId = conversation.id;
+    } else {
+      const { data: newConv, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          customer_id: order.consumer_id,  // ← Fixed: customer is the order consumer
+          stall_id: order.stall_id,
+          last_message: `💰 Payment request for Order #${order.order_number?.slice(-8)}`,
+          last_message_time: new Date(),
+          vendor_unread_count: 1,
+        })
+        .select()
+        .single();
+      if (convError) throw convError;
+      conversationId = newConv.id;
+    }
+
+    // 2. Send payment request message (VENDOR sends to CUSTOMER)
+    if (conversationId) {
+      const paymentMessage = `💳 **PAYMENT REQUEST**\n\nOrder #${order.order_number?.slice(-8)}\nTotal Amount: ₱${order.total_amount}\n\nPlease send payment to GCash: **09XX-XXX-XXXX**\n\nAfter payment, send screenshot here.`;
+      
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,  // Vendor's ID
+        sender_role: 'vendor',  // ← Fixed: changed from 'customer' to 'vendor'
+        message: paymentMessage,
+        is_read: false,
+      });
+
+      // Update conversation last message
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: paymentMessage,
+          last_message_time: new Date(),
+          customer_unread_count: 1,  // ← Fixed: increment customer's unread count
+        })
+        .eq('id', conversationId);
+    }
+
+    // 3. Optionally update order status to 'awaiting_payment'
+    await originalUpdateOrderStatus(order.id, 'awaiting_payment');
+
+    Alert.alert('Success', 'Payment request sent to customer');
+  } catch (error) {
+    console.error('Request payment error:', error);
+    Alert.alert('Error', 'Failed to send payment request');
+  }
+};
   const fetchChats = useCallback(async () => {
     if (!stall?.id) return;
     try {
@@ -227,29 +373,6 @@ export default function VendorDashboardScreen({ navigation }) {
     }
   }, [stall]);
 
-  const checkLowStock = useCallback(async () => {
-    if (!stall?.id) return;
-    try {
-      const { data: products } = await supabase
-        .from('products')
-        .select('*')
-        .eq('stall_id', stall.id)
-        .not('stock_quantity', 'is', null);
-      const lowStock = products.filter(p => p.stock_quantity <= 5 && p.stock_quantity > 0);
-      const outOfStock = products.filter(p => p.stock_quantity === 0);
-      setLowStockItems([...lowStock, ...outOfStock]);
-      if (lowStock.length > 0 || outOfStock.length > 0) {
-        if (outOfStock.length > 0) {
-          Alert.alert('⚠️ Out of Stock Alert', `${outOfStock.length} product(s) are out of stock.`, [{ text: 'OK' }]);
-        } else if (lowStock.length > 0) {
-          Alert.alert('⚠️ Low Stock Alert', `${lowStock.length} product(s) are running low.`, [{ text: 'OK' }]);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking stock:', error);
-    }
-  }, [stall]);
-
   const {
     products,
     loading: productsLoading,
@@ -272,70 +395,121 @@ export default function VendorDashboardScreen({ navigation }) {
   const handleUpdateOrderStatus = async (order, newStatus) => {
     await originalUpdateOrderStatus(order, newStatus);
     await fetchSalesData();
-    await checkLowStock();
     await refreshOrders();
   };
 
   // --- Reject order (with chat) ---
   const handleRejectOrder = async (orderId, reasonId, finalMessage) => {
-    try {
-      await originalUpdateOrderStatus(orderId, 'cancelled');
-      const order = orders.find(o => o.id === orderId);
-      if (!order) throw new Error('Order not found');
+  try {
+    await originalUpdateOrderStatus(orderId, 'cancelled');
+    const order = orders.find(o => o.id === orderId);
+    if (!order) throw new Error('Order not found');
 
-      let { data: conversation } = await supabase
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('id, vendor_unread_count')
+      .eq('customer_id', order.consumer_id)
+      .eq('stall_id', order.stall_id)
+      .maybeSingle();
+
+    let conversationId;
+    if (conversation) {
+      conversationId = conversation.id;
+      await supabase
         .from('conversations')
-        .select('id, vendor_unread_count')
-        .eq('customer_id', order.consumer_id)
-        .eq('stall_id', order.stall_id)
-        .maybeSingle();
-
-      let conversationId;
-      if (conversation) {
-        conversationId = conversation.id;
-        await supabase
-          .from('conversations')
-          .update({
-            last_message: `❌ Order cancelled: ${finalMessage}`,
-            last_message_time: new Date(),
-            vendor_unread_count: (conversation.vendor_unread_count || 0) + 1,
-          })
-          .eq('id', conversationId);
-      } else {
-        const { data: newConv, error: convError } = await supabase
-          .from('conversations')
-          .insert({
-            customer_id: order.consumer_id,
-            stall_id: order.stall_id,
-            last_message: `❌ Order cancelled: ${finalMessage}`,
-            last_message_time: new Date(),
-            vendor_unread_count: 1,
-          })
-          .select()
-          .single();
-        if (convError) throw convError;
-        conversationId = newConv.id;
-      }
-
-      const messageText = `❌ Order #${order.order_number?.slice(-8)} cancelled: ${finalMessage}`;
-      await supabase.from('messages').insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        sender_role: 'vendor',
-        message: messageText,
-        is_read: false,
-      });
-
-      await refreshOrders();
-      await fetchSalesData();
-      await fetchChats();
-      Alert.alert('Order Rejected', 'The order has been cancelled and the customer has been notified via chat.');
-    } catch (error) {
-      console.error('Rejection error:', error);
-      Alert.alert('Error', error.message || 'Failed to reject order');
-      throw error;
+        .update({
+          last_message: `❌ Order cancelled: ${finalMessage}`,
+          last_message_time: new Date(),
+          vendor_unread_count: (conversation.vendor_unread_count || 0) + 1,
+        })
+        .eq('id', conversationId);
+    } else {
+      const { data: newConv, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          customer_id: order.consumer_id,
+          stall_id: order.stall_id,
+          last_message: `❌ Order cancelled: ${finalMessage}`,
+          last_message_time: new Date(),
+          vendor_unread_count: 1,
+        })
+        .select()
+        .single();
+      if (convError) throw convError;
+      conversationId = newConv.id;
     }
-  };
+
+    const messageText = `❌ Order #${order.order_number?.slice(-8)} cancelled: ${finalMessage}`;
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      sender_role: 'vendor',
+      message: messageText,
+      is_read: false,
+    });
+
+    // ✅ ADD THIS: Create notification for the customer
+    await supabase.from('notifications').insert({
+      user_id: order.consumer_id,
+      title: 'Order Cancelled ❌',
+      message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`,
+      type: 'order',
+      data: { order_id: order.id, type: 'cancellation' },
+      is_read: false,
+      created_at: new Date().toISOString(),
+    });
+
+    await refreshOrders();
+    await fetchSalesData();
+    await fetchChats();
+    Alert.alert('Order Rejected', 'The order has been cancelled and the customer has been notified via chat and notification.');
+  } catch (error) {
+    console.error('Rejection error:', error);
+    Alert.alert('Error', error.message || 'Failed to reject order');
+    throw error;
+  }
+};// --- Fetch Rating Stats for Preview ---
+const fetchRatingStats = useCallback(async () => {
+  if (!stall?.id) return;
+  try {
+    const { data: ratings, error } = await supabase
+      .from('ratings')
+      .select('rating, product_id')
+      .eq('stall_id', stall.id);
+
+    if (error) throw error;
+    if (!ratings || ratings.length === 0) {
+      setRatingStats({
+        averageRating: 0,
+        totalReviews: 0,
+        positivePercentage: 0,
+        ratedProducts: 0
+      });
+      return;
+    }
+
+    const totalReviews = ratings.length;
+    const sumRatings = ratings.reduce((acc, r) => acc + r.rating, 0);
+    const averageRating = sumRatings / totalReviews;
+    
+    // Positive ratings are 4 or 5 stars
+    const positiveCount = ratings.filter(r => r.rating >= 4).length;
+    const positivePercentage = (positiveCount / totalReviews) * 100;
+    
+    // Count unique products with ratings
+    const uniqueProducts = new Set(ratings.map(r => r.product_id).filter(id => id));
+    const ratedProducts = uniqueProducts.size;
+
+    setRatingStats({
+      averageRating: averageRating.toFixed(1),
+      totalReviews,
+      positivePercentage: Math.round(positivePercentage),
+      ratedProducts
+    });
+  } catch (error) {
+    console.error('Error fetching rating stats:', error);
+  }
+}, [stall]);
 
   // --- Promotions functions ---
   const fetchProductsForPromo = useCallback(async () => {
@@ -359,68 +533,273 @@ export default function VendorDashboardScreen({ navigation }) {
     setPromotions(data || []);
   }, [stall]);
 
-const handleCreatePromotion = async () => {
-  console.log('Creating promotion with data:', newPromo);
-  
-  if (!newPromo.product_id) {
-    Alert.alert('Error', 'Please select a product');
-    return;
-  }
-  if (!newPromo.discount_value || parseFloat(newPromo.discount_value) <= 0) {
-    Alert.alert('Error', 'Please enter a valid discount value');
-    return;
-  }
-  if (!newPromo.end_date) {
-    Alert.alert('Error', 'Please enter an expiry date (YYYY-MM-DD)');
-    return;
-  }
-
-  const selectedProduct = productsList.find(p => p.id === newPromo.product_id);
-  if (!selectedProduct) {
-    Alert.alert('Error', 'Selected product not found');
-    return;
-  }
-
-  const discountValue = parseFloat(newPromo.discount_value);
-  const discountType = newPromo.discount_type;
-  const originalPrice = selectedProduct.price;
-
-  // Validate date format (YYYY-MM-DD) and ensure it's in the future
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-  if (!datePattern.test(newPromo.end_date)) {
-    Alert.alert('Error', 'Please use YYYY-MM-DD format (e.g., 2025-12-31)');
-    return;
-  }
-  const endDateObj = new Date(newPromo.end_date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (endDateObj <= today) {
-    Alert.alert('Error', 'End date must be in the future');
-    return;
-  }
-
+    // --- Feature 2: Sales Analytics Functions ---
+ const fetchBestSellingProducts = useCallback(async () => {
+  if (!stall?.id) return;
   try {
-    const { error } = await supabase.from('promotions').insert({
-      stall_id: stall.id,
-      product_id: newPromo.product_id,
-      discount_type: discountType,
-      discount_value: discountValue,
-      original_price: originalPrice,
-      end_date: endDateObj.toISOString(),
-      is_active: true,
-      start_date: new Date().toISOString(),
+    setAnalyticsLoading(true);
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('items')
+      .eq('stall_id', stall.id)
+      .eq('status', 'completed');
+    
+    if (!orders || orders.length === 0) return;
+    
+    const productSales = {};
+    orders.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          if (productSales[item.id]) {
+            productSales[item.id].quantity += item.quantity;
+            productSales[item.id].revenue += item.price * item.quantity;
+          } else {
+            productSales[item.id] = {
+              id: item.id,
+              name: item.name,
+              quantity: item.quantity,
+              revenue: item.price * item.quantity
+            };
+          }
+        });
+      }
     });
-    if (error) throw error;
-
-    Alert.alert('Success', 'Promotion created successfully');
-    setShowPromoModal(false);
-    setNewPromo({ product_id: '', discount_type: 'percentage', discount_value: '', end_date: '' });
-    await fetchPromotions(); // refresh list
+    
+    const sorted = Object.values(productSales).sort((a, b) => b.quantity - a.quantity);
+    setBestSellingProducts(sorted.slice(0, 5));
+    
+    // Calculate peak hours
+    const { data: hourlyOrders } = await supabase
+      .from('orders')
+      .select('created_at')
+      .eq('stall_id', stall.id)
+      .eq('status', 'completed');
+    
+    if (hourlyOrders && hourlyOrders.length > 0) {
+      const hourCounts = Array(24).fill(0);
+      hourlyOrders.forEach(order => {
+        const hour = new Date(order.created_at).getHours();
+        hourCounts[hour]++;
+      });
+      const peakHourData = hourCounts.map((count, hour) => ({ hour, count }));
+      setPeakHours(peakHourData);
+    }
   } catch (error) {
-    console.error('Create promotion error:', error);
-    Alert.alert('Error', error.message || 'Failed to create promotion');
+    console.error('Error fetching best sellers:', error);
+  } finally {
+    setAnalyticsLoading(false);
   }
-};
+}, [stall]);
+
+// --- Feature 7: Fetch Frequent Customers (Suki) ---
+const fetchFrequentCustomers = useCallback(async () => {
+  if (!stall?.id) return;
+  try {
+    setLoadingCustomers(true);
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('consumer_id, profiles(full_name, email)')
+      .eq('stall_id', stall.id)
+      .eq('status', 'completed');
+
+    if (error) throw error;
+    if (!orders || orders.length === 0) return;
+
+    // Count orders per customer
+    const customerCounts = {};
+    orders.forEach(order => {
+      const customerId = order.consumer_id;
+      if (customerCounts[customerId]) {
+        customerCounts[customerId].count++;
+      } else {
+        customerCounts[customerId] = {
+          id: customerId,
+          name: order.profiles?.full_name || 'Customer',
+          email: order.profiles?.email,
+          count: 1
+        };
+      }
+    });
+
+    // Sort by order count (highest first) and take top 5
+    const sorted = Object.values(customerCounts).sort((a, b) => b.count - a.count);
+    setFrequentCustomers(sorted.slice(0, 5));
+  } catch (error) {
+    console.error('Error fetching frequent customers:', error);
+  } finally {
+    setLoadingCustomers(false);
+  }
+}, [stall]);
+
+  // --- Feature 6: Reports Functions ---
+  const fetchReportData = useCallback(async () => {
+    if (!stall?.id) return;
+    try {
+      const now = new Date();
+      let startDate;
+      
+      if (reportPeriod === 'day') {
+        startDate = new Date(now);
+        startDate.setHours(0, 0, 0, 0);
+      } else if (reportPeriod === 'week') {
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 7);
+      } else {
+        startDate = new Date(now);
+        startDate.setMonth(startDate.getMonth() - 1);
+      }
+      
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('stall_id', stall.id)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false });
+      
+      setReportData(orders || []);
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+    }
+  }, [stall, reportPeriod]);
+
+  const exportToCSV = async () => {
+    if (reportData.length === 0) {
+      Alert.alert('No Data', 'No orders to export');
+      return;
+    }
+    
+    setExporting(true);
+    try {
+      const csvRows = [
+        ['Order #', 'Date', 'Status', 'Total Amount', 'Items']
+      ];
+      
+      reportData.forEach(order => {
+        const items = order.items?.map(i => `${i.name} (${i.quantity})`).join(', ') || '';
+        csvRows.push([
+          order.order_number || order.id,
+          new Date(order.created_at).toLocaleDateString(),
+          order.status,
+          order.total_amount,
+          items
+        ]);
+      });
+      
+      const csvContent = csvRows.map(row => row.join(',')).join('\n');
+      const fileUri = FileSystem.documentDirectory + `sales_report_${reportPeriod}_${Date.now()}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent);
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert('Export Ready', 'File saved locally');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export report');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // --- Feature 8: Pause Orders Toggle ---
+  const togglePauseOrders = async () => {
+    setPausing(true);
+    try {
+      const newStatus = !isPaused;
+      const { error } = await supabase
+        .from('stalls')
+        .update({ is_temporarily_closed: newStatus })
+        .eq('id', stall.id);
+      
+      if (error) throw error;
+      
+      setIsPaused(newStatus);
+      Alert.alert(
+        newStatus ? 'Store Paused' : 'Store Open',
+        newStatus 
+          ? 'Customers cannot place orders. Tap "Open" to resume.'
+          : 'Your store is now open for orders.'
+      );
+    } catch (error) {
+      console.error('Error toggling pause:', error);
+      Alert.alert('Error', 'Failed to update store status');
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  // --- Feature 7: Customer History Helper ---
+  const getCustomerOrderCount = useCallback(async (customerId) => {
+    const { count } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('consumer_id', customerId)
+      .eq('stall_id', stall.id)
+      .eq('status', 'completed');
+    return count || 0;
+  }, [stall]);
+  const handleCreatePromotion = async () => {
+    console.log('Creating promotion with data:', newPromo);
+    
+    if (!newPromo.product_id) {
+      Alert.alert('Error', 'Please select a product');
+      return;
+    }
+    if (!newPromo.discount_value || parseFloat(newPromo.discount_value) <= 0) {
+      Alert.alert('Error', 'Please enter a valid discount value');
+      return;
+    }
+    if (!newPromo.end_date) {
+      Alert.alert('Error', 'Please enter an expiry date (YYYY-MM-DD)');
+      return;
+    }
+
+    const selectedProduct = productsList.find(p => p.id === newPromo.product_id);
+    if (!selectedProduct) {
+      Alert.alert('Error', 'Selected product not found');
+      return;
+    }
+
+    const discountValue = parseFloat(newPromo.discount_value);
+    const discountType = newPromo.discount_type;
+    const originalPrice = selectedProduct.price;
+
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!datePattern.test(newPromo.end_date)) {
+      Alert.alert('Error', 'Please use YYYY-MM-DD format (e.g., 2025-12-31)');
+      return;
+    }
+    const endDateObj = new Date(newPromo.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (endDateObj <= today) {
+      Alert.alert('Error', 'End date must be in the future');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('promotions').insert({
+        stall_id: stall.id,
+        product_id: newPromo.product_id,
+        discount_type: discountType,
+        discount_value: discountValue,
+        original_price: originalPrice,
+        end_date: endDateObj.toISOString(),
+        is_active: true,
+        start_date: new Date(Date.now() - 60 * 1000).toISOString(),
+      });
+      if (error) throw error;
+
+      Alert.alert('Success', 'Promotion created successfully');
+      setShowPromoModal(false);
+      setNewPromo({ product_id: '', discount_type: 'percentage', discount_value: '', end_date: '' });
+      await fetchPromotions();
+    } catch (error) {
+      console.error('Create promotion error:', error);
+      Alert.alert('Error', error.message || 'Failed to create promotion');
+    }
+  };
 
   const handleDeletePromotion = async (promoId) => {
     Alert.alert('Delete Promotion', 'Are you sure?', [
@@ -441,30 +820,35 @@ const handleCreatePromotion = async () => {
     useCallback(() => {
       if (stall?.id) {
         fetchSalesData();
-        checkLowStock();
         fetchChats();
         fetchReportStats();
         fetchPromotions();
+        fetchNotifications();
         fetchProductsForPromo();
+        fetchBestSellingProducts();
+        fetchFrequentCustomers();
+        fetchRatingStats();  
       }
-    }, [stall, fetchSalesData, checkLowStock, fetchChats, fetchReportStats, fetchPromotions, fetchProductsForPromo])
+    }, [stall, fetchSalesData, fetchChats, fetchReportStats, fetchPromotions, fetchNotifications, fetchProductsForPromo, fetchBestSellingProducts, fetchFrequentCustomers, fetchRatingStats])
   );
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([
-      refreshProducts(),
-      refreshOrders(),
-      fetchStall(),
-      fetchSalesData(),
-      checkLowStock(),
-      fetchChats(),
-      fetchReportStats(),
-      fetchPromotions(),
-      fetchProductsForPromo(),
-    ]);
-    setRefreshing(false);
-  };
+const onRefresh = async () => {
+  setRefreshing(true);
+  await Promise.all([
+    refreshProducts(),
+    refreshOrders(),
+    fetchStall(),
+    fetchSalesData(),
+    fetchChats(),
+    fetchReportStats(),
+    fetchPromotions(),
+    fetchProductsForPromo(),
+    fetchBestSellingProducts(),
+    fetchFrequentCustomers(),
+    fetchRatingStats() // Add this line // Add this line,  // ← ADD THIS
+  ]);
+  setRefreshing(false);
+};
 
   const handleAddProduct = async (productData) => {
     const success = await addProduct(productData);
@@ -539,18 +923,82 @@ const handleCreatePromotion = async () => {
   }
 
   // ----- Helper Components -----
-  const WelcomeHeader = () => (
+const WelcomeHeader = () => {
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  const timeGreeting = getTimeGreeting();
+  const vendorName = profile?.full_name || 'Vendor';
+  const firstLetter = vendorName.charAt(0).toUpperCase();
+
+  return (
     <View style={styles.welcomeHeader}>
-      <View>
-        <Text style={styles.welcomeGreeting}>Good day,</Text>
-        <Text style={styles.welcomeName}>{profile?.full_name || 'Vendor'}!</Text>
-        <Text style={styles.welcomeSubtext}>Here's your store performance</Text>
+      {/* Top row: Profile + Greeting + Stall Badge */}
+      <View style={styles.welcomeTopRow}>
+        <View style={styles.profileImageContainer}>
+          {profile?.avatar_url ? (
+            <Image 
+              source={{ uri: profile.avatar_url }} 
+              style={styles.profileImage}
+            />
+          ) : (
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.profileAvatarFallback}
+            >
+              <Text style={styles.profileAvatarText}>{firstLetter}</Text>
+            </LinearGradient>
+          )}
+        </View>
+        
+        <View style={styles.greetingContainer}>
+          <Text style={styles.welcomeGreeting}>{timeGreeting},</Text>
+          <Text style={styles.welcomeName}>{vendorName}!</Text>
+          <Text style={styles.welcomeSubtext}>Here's your store performance</Text>
+        </View>
+        
+     <View style={styles.welcomeBadge}>
+  <Text style={styles.welcomeBadgeText}>Stall #{stall.stall_number}</Text>
+</View>
       </View>
-      <View style={styles.welcomeBadge}>
-        <Text style={styles.welcomeBadgeText}>Stall #{stall.stall_number}</Text>
+
+      {/* Bottom row: Store Status Toggle */}
+      <View style={styles.statusRow}>
+        <View style={styles.statusIndicator}>
+          <View style={[styles.statusDot, { backgroundColor: isPaused ? '#EF4444' : '#10B981' }]} />
+          <Text style={[styles.statusText, { color: isPaused ? '#EF4444' : '#10B981' }]}>
+            {isPaused ? 'Store Closed' : 'Store Open'}
+          </Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.pauseToggle}
+          onPress={togglePauseOrders}
+          disabled={pausing}
+        >
+          <LinearGradient
+            colors={isPaused ? ['#10B981', '#059669'] : ['#DC2626', '#EF4444']}
+            style={styles.pauseToggleGradient}
+          >
+            <Text style={styles.pauseToggleText}>
+              {pausing ? '...' : (isPaused ? 'Open Store' : 'Close Store')}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
+      
+      {isPaused && (
+        <Text style={styles.closedWarningMessage}>
+          ⚠️ Your store is closed. Customers cannot place orders.
+        </Text>
+      )}
     </View>
   );
+};
 
   const StatCard = ({ title, value, icon, gradientColors, trend, trendValue, isCurrency = false }) => {
     let displayValue = value;
@@ -573,12 +1021,11 @@ const handleCreatePromotion = async () => {
     );
   };
 
-  // ----- Overview Tab -----
+  // ----- Overview Tab (Low Stock section removed) -----
   const renderOverview = () => {
     const urgentOrder = [...orderStats.active].sort((a,b) => new Date(a.created_at) - new Date(b.created_at))[0];
     const salesTrend = 12.5;
     const pendingTrend = -8.3;
-    const lowStockTrend = lowStockItems.length > 0 ? 20 : -100;
 
     return (
       <ScrollView
@@ -591,7 +1038,6 @@ const handleCreatePromotion = async () => {
           <StatCard title="Today's Sales" value={salesSummary.today} icon="💰" gradientColors={['#DC2626', '#EF4444']} trend={true} trendValue={salesTrend} isCurrency={true} />
           <StatCard title="Pending Orders" value={orderStats.pending.length} icon="📋" gradientColors={['#F59E0B', '#FBBF24']} trend={true} trendValue={pendingTrend} />
           <StatCard title="Total Products" value={products.length} icon="📦" gradientColors={['#10B981', '#34D399']} trend={false} />
-          <StatCard title="Low Stock" value={lowStockItems.length} icon="⚠️" gradientColors={['#EF4444', '#F87171']} trend={true} trendValue={lowStockTrend} />
         </View>
 
         <View style={styles.section}>
@@ -620,6 +1066,115 @@ const handleCreatePromotion = async () => {
             </TouchableOpacity>
           </View>
         </View>
+        {/* Feature 2 & 7: Sales Analytics & Customer Insights */}
+        <View style={styles.section}>
+  <Text style={styles.sectionTitle}>📊 Sales Insights</Text>
+  {analyticsLoading ? (
+    <ActivityIndicator size="small" color="#DC2626" />
+  ) : (
+    <>
+      {/* Best Selling Products */}
+      {bestSellingProducts.length > 0 && (
+        <View style={styles.analyticsCard}>
+          <Text style={styles.analyticsSubtitle}>🔥 Best Selling Products</Text>
+          {bestSellingProducts.map((product, idx) => (
+            <View key={product.id} style={styles.bestSellerRow}>
+              <Text style={styles.bestSellerRank}>#{idx + 1}</Text>
+              <Text style={styles.bestSellerName}>{product.name}</Text>
+              <Text style={styles.bestSellerQty}>{product.quantity} sold</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      
+      {/* Peak Hours */}
+      {peakHours.length > 0 && (
+        <View style={styles.analyticsCard}>
+          <Text style={styles.analyticsSubtitle}>⏰ Peak Hours</Text>
+          <View style={styles.peakHoursContainer}>
+            {peakHours.filter(h => h.count > 0).slice(0, 5).map(hour => (
+              <View key={hour.hour} style={styles.peakHourBadge}>
+                <Text style={styles.peakHourText}>{hour.hour}:00</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Frequent Customers (Suki) */}
+      <View style={styles.analyticsCard}>
+        <Text style={styles.analyticsSubtitle}>⭐ Your Suki (Regulars)</Text>
+        {loadingCustomers ? (
+          <ActivityIndicator size="small" color="#DC2626" />
+        ) : frequentCustomers.length === 0 ? (
+          <Text style={styles.noCustomersText}>No regular customers yet</Text>
+        ) : (
+          frequentCustomers.map((customer, idx) => (
+            <View key={customer.id} style={styles.customerRow}>
+              <View style={styles.customerRank}>
+                <Text style={styles.customerRankText}>#{idx + 1}</Text>
+              </View>
+              <View style={styles.customerInfo}>
+                <Text style={styles.customerName}>{customer.name}</Text>
+                <Text style={styles.customerOrders}>{customer.count} orders</Text>
+              </View>
+              <View style={styles.sukiBadge}>
+                <Text style={styles.sukiBadgeText}>🏆 Suki</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    </>
+  )}
+</View>
+
+            
+{/* Feature 11: Rating Insights with Real Data */}
+<View style={styles.section}>
+  <View style={styles.ratingHeader}>
+    <Text style={styles.sectionTitle}>⭐ Rating Insights</Text>
+    <View style={styles.ratingBadge}>
+      <Text style={styles.ratingBadgeText}>{ratingStats.averageRating} ★</Text>
+    </View>
+  </View>
+  
+  {/* Preview Stats with Real Data */}
+  <View style={styles.ratingPreviewRow}>
+    <View style={styles.ratingPreviewItem}>
+      <Text style={styles.ratingPreviewValue}>{ratingStats.totalReviews}</Text>
+      <Text style={styles.ratingPreviewLabel}>Reviews</Text>
+    </View>
+    <View style={styles.ratingDivider} />
+    <View style={styles.ratingPreviewItem}>
+      <Text style={styles.ratingPreviewValue}>{ratingStats.positivePercentage}%</Text>
+      <Text style={styles.ratingPreviewLabel}>Positive</Text>
+    </View>
+    <View style={styles.ratingDivider} />
+    <View style={styles.ratingPreviewItem}>
+      <Text style={styles.ratingPreviewValue}>{ratingStats.ratedProducts}</Text>
+      <Text style={styles.ratingPreviewLabel}>Products</Text>
+    </View>
+  </View>
+  
+  {/* Prominent Button */}
+  <TouchableOpacity 
+    style={styles.viewRatingsButton}
+    onPress={() => navigation.navigate('VendorRatings')}
+    activeOpacity={0.85}
+  >
+    <LinearGradient
+      colors={['#DC2626', '#EF4444']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.viewRatingsGradient}
+    >
+      <Text style={styles.viewRatingsIcon}>📊</Text>
+      <Text style={styles.viewRatingsText}>View Detailed Ratings</Text>
+      <Text style={styles.viewRatingsArrow}>→</Text>
+    </LinearGradient>
+  </TouchableOpacity>
+</View>
 
         {/* Reports Quick Section */}
         <View style={styles.section}>
@@ -657,25 +1212,12 @@ const handleCreatePromotion = async () => {
             </View>
           )}
           {orderStats.active.slice(0, 3).map(order => (
-            <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} />
+            <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} onRequestPayment={handleRequestPayment} />
           ))}
           {orderStats.active.length === 0 && (
             <View style={styles.emptyStateCard}><Text style={styles.emptyStateEmoji}>📦</Text><Text style={styles.emptyStateTitle}>No orders yet</Text><Text style={styles.emptyStateText}>When customers place orders, they'll appear here</Text></View>
           )}
         </View>
-
-        {lowStockItems.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚠️ Low Stock Alert</Text>
-            {lowStockItems.slice(0, 3).map(item => (
-              <View key={item.id} style={styles.lowStockItem}>
-                <Text style={styles.lowStockItemName}>{item.name}</Text>
-                <Text style={styles.lowStockItemQty}>{item.stock_quantity === 0 ? 'Out of Stock' : `${item.stock_quantity} left`}</Text>
-                <TouchableOpacity style={styles.restockBtn} onPress={() => { setEditingProduct(item); setShowAddModal(true); }}><Text style={styles.restockBtnText}>Restock</Text></TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
       </ScrollView>
     );
   };
@@ -697,19 +1239,20 @@ const handleCreatePromotion = async () => {
     </ScrollView>
   );
 
+
   // ----- Orders Tab -----
-  const renderOrders = () => (
-    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Active Orders ({orderStats.active.length})</Text>
-        {ordersLoading ? <ActivityIndicator size="small" color="#DC2626" /> : orderStats.active.length === 0 ? (
-          <View style={styles.emptyStateCard}><Text style={styles.emptyStateEmoji}>📭</Text><Text style={styles.emptyStateTitle}>No active orders</Text><Text style={styles.emptyStateText}>New orders will appear here</Text></View>
-        ) : (
-          orderStats.active.map(order => <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} />)
-        )}
-      </View>
-    </ScrollView>
-  );
+const renderOrders = () => (
+  <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Active Orders ({orderStats.active.length})</Text>
+      {ordersLoading ? <ActivityIndicator size="small" color="#DC2626" /> : orderStats.active.length === 0 ? (
+        <View style={styles.emptyStateCard}><Text style={styles.emptyStateEmoji}>📭</Text><Text style={styles.emptyStateTitle}>No active orders</Text><Text style={styles.emptyStateText}>New orders will appear here</Text></View>
+      ) : (
+        orderStats.active.map(order => <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} onRequestPayment={handleRequestPayment} />)
+      )}
+    </View>
+  </ScrollView>
+);
 
   // ----- Chats Tab -----
   const renderChats = () => (
@@ -735,67 +1278,66 @@ const handleCreatePromotion = async () => {
   );
 
   // ----- Promotions Tab -----
-const renderPromotions = () => {
-  const renderPromoItem = ({ item: promo }) => {
-    const product = promo.product;
-    const isPercentage = promo.discount_type === 'percentage';
-    const discountText = isPercentage ? `${promo.discount_value}% OFF` : `₱${promo.discount_value} OFF`;
-    const endDate = new Date(promo.end_date).toLocaleDateString();
-    return (
-      <View style={styles.promoCard}>
-        <View style={styles.promoCardContent}>
-          <View style={styles.promoInfo}>
-            <Text style={styles.promoProductName}>{product?.name}</Text>
-            <Text style={styles.promoDiscount}>{discountText}</Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.originalPrice}>₱{promo.original_price}</Text>
-              <Text style={styles.discountedPrice}>₱{promo.discounted_price}</Text>
+  const renderPromotions = () => {
+    const renderPromoItem = ({ item: promo }) => {
+      const product = promo.product;
+      const isPercentage = promo.discount_type === 'percentage';
+      const discountText = isPercentage ? `${promo.discount_value}% OFF` : `₱${promo.discount_value} OFF`;
+      const endDate = new Date(promo.end_date).toLocaleDateString();
+      return (
+        <View style={styles.promoCard}>
+          <View style={styles.promoCardContent}>
+            <View style={styles.promoInfo}>
+              <Text style={styles.promoProductName}>{product?.name}</Text>
+              <Text style={styles.promoDiscount}>{discountText}</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.originalPrice}>₱{promo.original_price}</Text>
+                <Text style={styles.discountedPrice}>₱{promo.discounted_price}</Text>
+              </View>
+              <Text style={styles.promoExpiry}>Expires: {endDate}</Text>
             </View>
-            <Text style={styles.promoExpiry}>Expires: {endDate}</Text>
+            <TouchableOpacity onPress={() => handleDeletePromotion(promo.id)} style={styles.deletePromoBtn}>
+              <Text style={styles.deletePromoBtnText}>🗑️</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => handleDeletePromotion(promo.id)} style={styles.deletePromoBtn}>
-            <Text style={styles.deletePromoBtnText}>🗑️</Text>
-          </TouchableOpacity>
         </View>
+      );
+    };
+
+    const renderEmptyState = () => (
+      <View style={styles.emptyStateCard}>
+        <Text style={styles.emptyStateEmoji}>🏷️</Text>
+        <Text style={styles.emptyStateTitle}>No active promotions</Text>
+        <Text style={styles.emptyStateText}>Tap "New Promo" to offer discounts</Text>
+      </View>
+    );
+
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>🏷️ Active Promotions</Text>
+            <TouchableOpacity onPress={() => setShowPromoModal(true)}>
+              <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.addPromoButton}>
+                <Text style={styles.addPromoButtonText}>+ New Promo</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <FlatList
+          data={promotions}
+          renderItem={renderPromoItem}
+          keyExtractor={item => item.id.toString()}
+          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={styles.promosListContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     );
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyStateCard}>
-      <Text style={styles.emptyStateEmoji}>🏷️</Text>
-      <Text style={styles.emptyStateTitle}>No active promotions</Text>
-      <Text style={styles.emptyStateText}>Tap "New Promo" to offer discounts</Text>
-    </View>
-  );
-
-  return (
-    <View style={{ flex: 1 }}>
-      {/* Header with button – always visible */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>🏷️ Active Promotions</Text>
-          <TouchableOpacity onPress={() => setShowPromoModal(true)}>
-            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.addPromoButton}>
-              <Text style={styles.addPromoButtonText}>+ New Promo</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* List of promotions */}
-      <FlatList
-        data={promotions}
-        renderItem={renderPromoItem}
-        keyExtractor={item => item.id.toString()}
-        ListEmptyComponent={renderEmptyState}
-        contentContainerStyle={styles.promosListContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
-  );
-};
   // ----- Profile Tab -----
   const renderProfile = () => (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
@@ -820,8 +1362,149 @@ const renderPromotions = () => {
         )}
       </View>
     </ScrollView>
+  );  // ----- Notifications Tab -----
+  const renderNotifications = () => (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
+      <View style={styles.section}>
+        <View style={styles.notificationsHeader}>
+          <Text style={styles.sectionTitle}>🔔 Notifications</Text>
+          {notificationUnreadCount > 0 && (
+            <TouchableOpacity onPress={markAllNotificationsRead}>
+              <Text style={styles.markAllReadText}>Mark all read</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {loadingNotifications ? (
+          <ActivityIndicator size="large" color="#DC2626" style={styles.notificationsLoader} />
+        ) : notifications.length === 0 ? (
+          <View style={styles.emptyStateCard}>
+            <Text style={styles.emptyStateEmoji}>🔔</Text>
+            <Text style={styles.emptyStateTitle}>No notifications</Text>
+            <Text style={styles.emptyStateText}>You're all caught up!</Text>
+          </View>
+        ) : (
+          notifications.map(notification => (
+            <TouchableOpacity
+              key={notification.id}
+              style={[styles.notificationCard, !notification.is_read && styles.notificationUnread]}
+              onPress={() => markNotificationRead(notification.id)}
+            >
+              <View style={styles.notificationIcon}>
+                <Text style={styles.notificationIconText}>
+                  {notification.type === 'order' ? '📦' : 
+                   notification.type === 'price_drop' ? '📉' :
+                   notification.type === 'chat' ? '💬' : '📢'}
+                </Text>
+              </View>
+              <View style={styles.notificationContent}>
+                <Text style={styles.notificationTitle}>{notification.title}</Text>
+                <Text style={styles.notificationMessage}>{notification.message}</Text>
+                <Text style={styles.notificationTime}>
+                  {new Date(notification.created_at).toLocaleString()}
+                </Text>
+              </View>
+              {!notification.is_read && <View style={styles.unreadDot} />}
+            </TouchableOpacity>
+          ))
+        )}
+      </View>
+    </ScrollView>
   );
+  // ----- Feature 6: Reports Tab -----
+  const renderReports = () => {
+    useEffect(() => {
+      fetchReportData();
+    }, [reportPeriod]);
 
+    const getTotalSales = () => {
+      return reportData.reduce((sum, order) => sum + order.total_amount, 0);
+    };
+
+    const getAverageOrder = () => {
+      if (reportData.length === 0) return 0;
+      return getTotalSales() / reportData.length;
+    };
+
+    return (
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📈 Sales Reports</Text>
+          
+          <View style={styles.reportPeriodSelector}>
+            <TouchableOpacity
+              style={[styles.periodButton, reportPeriod === 'day' && styles.periodButtonActive]}
+              onPress={() => setReportPeriod('day')}
+            >
+              <Text style={[styles.periodButtonText, reportPeriod === 'day' && styles.periodButtonTextActive]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.periodButton, reportPeriod === 'week' && styles.periodButtonActive]}
+              onPress={() => setReportPeriod('week')}
+            >
+              <Text style={[styles.periodButtonText, reportPeriod === 'week' && styles.periodButtonTextActive]}>Week</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.periodButton, reportPeriod === 'month' && styles.periodButtonActive]}
+              onPress={() => setReportPeriod('month')}
+            >
+              <Text style={[styles.periodButtonText, reportPeriod === 'month' && styles.periodButtonTextActive]}>Month</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.reportStatsRow}>
+            <View style={styles.reportStatCard}>
+              <Text style={styles.reportStatValue}>{reportData.length}</Text>
+              <Text style={styles.reportStatLabel}>Orders</Text>
+            </View>
+            <View style={styles.reportStatCard}>
+              <Text style={styles.reportStatValue}>₱{getTotalSales().toFixed(2)}</Text>
+              <Text style={styles.reportStatLabel}>Sales</Text>
+            </View>
+            <View style={styles.reportStatCard}>
+              <Text style={styles.reportStatValue}>₱{getAverageOrder().toFixed(2)}</Text>
+              <Text style={styles.reportStatLabel}>Avg Order</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.exportButton}
+            onPress={exportToCSV}
+            disabled={exporting}
+          >
+            <LinearGradient colors={['#10B981', '#059669']} style={styles.exportGradient}>
+              <Text style={styles.exportButtonText}>
+                {exporting ? 'Exporting...' : '📥 Export to CSV'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📋 Order Details</Text>
+          {reportData.length === 0 ? (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateEmoji}>📭</Text>
+              <Text style={styles.emptyStateTitle}>No orders this period</Text>
+            </View>
+          ) : (
+            reportData.map(order => (
+              <View key={order.id} style={styles.reportOrderItem}>
+                <View style={styles.reportOrderHeader}>
+                  <Text style={styles.reportOrderNumber}>#{order.order_number?.slice(-8)}</Text>
+                  <Text style={[styles.reportOrderStatus, { color: getStatusColor(order.status) }]}>
+                    {order.status}
+                  </Text>
+                </View>
+                <Text style={styles.reportOrderDate}>{new Date(order.created_at).toLocaleDateString()}</Text>
+                <Text style={styles.reportOrderTotal}>₱{order.total_amount}</Text>
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return renderOverview();
@@ -829,127 +1512,186 @@ const renderPromotions = () => {
       case 'orders': return renderOrders();
       case 'chats': return renderChats();
       case 'promotions': return renderPromotions();
+      case 'notifications': return renderNotifications();  // ← ADD THIS
       case 'profile': return renderProfile();
       default: return renderOverview();
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
+         return (
+    <View style={styles.container}>
       <Header title="PalengkeHub" subtitle={stall.stall_name || 'Manage your stall'} />
-      <View style={styles.contentArea}>{renderContent()}</View>
+      
+      {/* Content area - each tab has its own ScrollView */}
+      <View style={styles.contentArea}>
+        {renderContent()}
+      </View>
 
+      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
-        {['overview', 'products', 'orders', 'promotions', 'chats', 'profile'].map(tab => (
-          <TouchableOpacity key={tab} style={[styles.navItem, activeTab === tab && styles.navItemActive]} onPress={() => setActiveTab(tab)}>
-            <Text style={[styles.navIcon, activeTab === tab && styles.navIconActive]}>
-              {tab === 'overview' && '📊'}
-              {tab === 'products' && '📦'}
-              {tab === 'orders' && '📋'}
-              {tab === 'promotions' && '🏷️'}
-              {tab === 'chats' && '💬'}
-              {tab === 'profile' && '👤'}
-            </Text>
-            <Text style={[styles.navText, activeTab === tab && styles.navTextActive]}>
-              {tab === 'overview' && 'Overview'}
-              {tab === 'products' && 'Products'}
-              {tab === 'orders' && 'Orders'}
-              {tab === 'promotions' && 'Promos'}
-              {tab === 'chats' && 'Chats'}
-              {tab === 'profile' && 'Profile'}
-            </Text>
-            {tab === 'orders' && orderStats.pending.length > 0 && <View style={styles.navBadge}><Text style={styles.navBadgeText}>{orderStats.pending.length}</Text></View>}
-            {tab === 'chats' && unreadCount > 0 && <View style={styles.navBadge}><Text style={styles.navBadgeText}>{unreadCount}</Text></View>}
-            {activeTab === tab && <View style={styles.navActiveIndicator} />}
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'overview' && styles.navItemActive]} 
+          onPress={() => setActiveTab('overview')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'overview' && styles.navIconActive]}>📊</Text>
+          <Text style={[styles.navText, activeTab === 'overview' && styles.navTextActive]}>Overview</Text>
+          {activeTab === 'overview' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'products' && styles.navItemActive]} 
+          onPress={() => setActiveTab('products')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'products' && styles.navIconActive]}>📦</Text>
+          <Text style={[styles.navText, activeTab === 'products' && styles.navTextActive]}>Products</Text>
+          {activeTab === 'products' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'orders' && styles.navItemActive]} 
+          onPress={() => setActiveTab('orders')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'orders' && styles.navIconActive]}>📋</Text>
+          <Text style={[styles.navText, activeTab === 'orders' && styles.navTextActive]}>Orders</Text>
+          {orderStats.pending.length > 0 && (
+            <View style={styles.navBadge}>
+              <Text style={styles.navBadgeText}>{orderStats.pending.length}</Text>
+            </View>
+          )}
+          {activeTab === 'orders' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'promotions' && styles.navItemActive]} 
+          onPress={() => setActiveTab('promotions')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'promotions' && styles.navIconActive]}>🏷️</Text>
+          <Text style={[styles.navText, activeTab === 'promotions' && styles.navTextActive]}>Promos</Text>
+          {activeTab === 'promotions' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'chats' && styles.navItemActive]} 
+          onPress={() => setActiveTab('chats')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'chats' && styles.navIconActive]}>💬</Text>
+          <Text style={[styles.navText, activeTab === 'chats' && styles.navTextActive]}>Chats</Text>
+          {unreadCount > 0 && (
+            <View style={styles.navBadge}>
+              <Text style={styles.navBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
+          {activeTab === 'chats' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+                <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'notifications' && styles.navItemActive]} 
+          onPress={() => setActiveTab('notifications')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'notifications' && styles.navIconActive]}>🔔</Text>
+          <Text style={[styles.navText, activeTab === 'notifications' && styles.navTextActive]}>Alerts</Text>
+          {notificationUnreadCount > 0 && (
+            <View style={styles.navBadge}>
+              <Text style={styles.navBadgeText}>{notificationUnreadCount > 9 ? '9+' : notificationUnreadCount}</Text>
+            </View>
+          )}
+          {activeTab === 'notifications' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]} 
+          onPress={() => setActiveTab('profile')}
+        >
+          <Text style={[styles.navIcon, activeTab === 'profile' && styles.navIconActive]}>👤</Text>
+          <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>Profile</Text>
+          {activeTab === 'profile' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
       </View>
 
       <AddProductModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSubmit={handleAddProduct} />
       <AddProductModal visible={!!editingProduct} onClose={() => setEditingProduct(null)} onSubmit={handleUpdateProduct} editingProduct={editingProduct} />
-        {/* Promotion Modal */}
-{showPromoModal && (
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContent}>
-      <Text style={styles.modalTitle}>Create Promotion</Text>
-      <Text style={styles.modalSubtitle}>Select product and discount</Text>
+      
+      {/* Promotion Modal */}
+      {showPromoModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Create Promotion</Text>
+            <Text style={styles.modalSubtitle}>Select product and discount</Text>
 
-      <Text style={styles.label}>Product</Text>
-      {productsList.length === 0 ? (
-        <Text style={styles.noProductsText}>No products available. Add products first.</Text>
-      ) : (
-        <FlatList
-          data={productsList}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item: p }) => (
-            <TouchableOpacity
-              style={[styles.pickerOption, newPromo.product_id === p.id && styles.pickerOptionSelected]}
-              onPress={() => setNewPromo({...newPromo, product_id: p.id})}
-            >
-              <Text style={[styles.pickerOptionText, newPromo.product_id === p.id && styles.pickerOptionTextSelected]}>
-                {p.name} (₱{p.price})
-              </Text>
-            </TouchableOpacity>
-          )}
-          style={styles.pickerFlatList}
-          showsVerticalScrollIndicator
-          nestedScrollEnabled
-        />
+            <Text style={styles.label}>Product</Text>
+            {productsList.length === 0 ? (
+              <Text style={styles.noProductsText}>No products available. Add products first.</Text>
+            ) : (
+              <FlatList
+                data={productsList}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item: p }) => (
+                  <TouchableOpacity
+                    style={[styles.pickerOption, newPromo.product_id === p.id && styles.pickerOptionSelected]}
+                    onPress={() => setNewPromo({...newPromo, product_id: p.id})}
+                  >
+                    <Text style={[styles.pickerOptionText, newPromo.product_id === p.id && styles.pickerOptionTextSelected]}>
+                      {p.name} (₱{p.price})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                style={styles.pickerFlatList}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+              />
+            )}
+
+            <Text style={styles.label}>Discount Type</Text>
+            <View style={styles.rowButtons}>
+              <TouchableOpacity
+                style={[styles.typeButton, newPromo.discount_type === 'percentage' && styles.typeButtonActive]}
+                onPress={() => setNewPromo({...newPromo, discount_type: 'percentage'})}
+              >
+                <Text style={[styles.typeButtonText, newPromo.discount_type === 'percentage' && styles.typeButtonTextActive]}>Percentage (%)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeButton, newPromo.discount_type === 'fixed' && styles.typeButtonActive]}
+                onPress={() => setNewPromo({...newPromo, discount_type: 'fixed'})}
+              >
+                <Text style={[styles.typeButtonText, newPromo.discount_type === 'fixed' && styles.typeButtonTextActive]}>Fixed (₱)</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>{newPromo.discount_type === 'percentage' ? 'Discount %' : 'Discount Amount (₱)'}</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              placeholder="e.g., 20"
+              value={newPromo.discount_value}
+              onChangeText={(text) => setNewPromo({...newPromo, discount_value: text})}
+            />
+
+            <Text style={styles.label}>Expiry Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="2025-12-31"
+              value={newPromo.end_date}
+              onChangeText={(text) => setNewPromo({...newPromo, end_date: text})}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelModalButton} onPress={() => setShowPromoModal(false)}>
+                <Text style={styles.cancelModalText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitModalButton} onPress={handleCreatePromotion}>
+                <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.submitGradient}>
+                  <Text style={styles.submitButtonText}>Create Promo</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       )}
-
-      <Text style={styles.label}>Discount Type</Text>
-      <View style={styles.rowButtons}>
-        <TouchableOpacity
-          style={[styles.typeButton, newPromo.discount_type === 'percentage' && styles.typeButtonActive]}
-          onPress={() => setNewPromo({...newPromo, discount_type: 'percentage'})}
-        >
-          <Text style={[styles.typeButtonText, newPromo.discount_type === 'percentage' && styles.typeButtonTextActive]}>Percentage (%)</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.typeButton, newPromo.discount_type === 'fixed' && styles.typeButtonActive]}
-          onPress={() => setNewPromo({...newPromo, discount_type: 'fixed'})}
-        >
-          <Text style={[styles.typeButtonText, newPromo.discount_type === 'fixed' && styles.typeButtonTextActive]}>Fixed (₱)</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.label}>{newPromo.discount_type === 'percentage' ? 'Discount %' : 'Discount Amount (₱)'}</Text>
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        placeholder="e.g., 20"
-        value={newPromo.discount_value}
-        onChangeText={(text) => setNewPromo({...newPromo, discount_value: text})}
-      />
-
-      <Text style={styles.label}>Expiry Date (YYYY-MM-DD)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="2025-12-31"
-        value={newPromo.end_date}
-        onChangeText={(text) => setNewPromo({...newPromo, end_date: text})}
-      />
-
-      <View style={styles.modalButtons}>
-        <TouchableOpacity style={styles.cancelModalButton} onPress={() => setShowPromoModal(false)}>
-          <Text style={styles.cancelModalText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.submitModalButton} onPress={handleCreatePromotion}>
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.submitGradient}>
-            <Text style={styles.submitButtonText}>Create Promo</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
     </View>
-  </View>
-)}
-    </SafeAreaView>
   );
 }
 
-// ---- Styles (keep existing and add new promo-related styles) ----
+// ---- Styles ----
 const styles = StyleSheet.create({
+
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   contentArea: { flex: 1 },
@@ -959,27 +1701,130 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', color: '#9CA3AF', padding: 20 },
   backButton: { marginTop: 20, backgroundColor: '#DC2626', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25 },
   backButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  promosListContainer: { paddingHorizontal: 16, paddingBottom: 20 },
 
-  promosListContainer: {
-  paddingHorizontal: 16,
-  paddingBottom: 20,
-},
+  // Welcome Header - Clean layout
   welcomeHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  welcomeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  profileImageContainer: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    marginRight: 12,
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  profileAvatarFallback: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileAvatarText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  greetingContainer: {
+    flex: 1,
+  },
+  welcomeGreeting: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  welcomeName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 2,
+  },
+  welcomeSubtext: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  welcomeBadge: {
+    backgroundColor: '#FEF3F2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  welcomeBadgeText: {
+    color: '#DC2626',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  welcomeBadgeSubtext: {
+    fontSize: 10,
+    color: '#10B981',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+
+  // Status Row
+  statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
-  welcomeGreeting: { fontSize: 14, color: '#000000' },
-  welcomeName: { fontSize: 24, fontWeight: '700', color: '#000000', marginTop: 4 },
-  welcomeSubtext: { fontSize: 12, color: '#000000', marginTop: 4 },
-  welcomeBadge: { backgroundColor: '#F1F3F5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  welcomeBadgeText: { color: '#000000', fontWeight: '500', fontSize: 12 },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  pauseToggle: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  pauseToggleGradient: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  pauseToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'white',
+  },
+  closedWarningMessage: {
+    marginTop: 12,
+    fontSize: 11,
+    color: '#EF4444',
+    textAlign: 'center',
+    backgroundColor: '#FEF3F2',
+    padding: 8,
+    borderRadius: 8,
+  },
 
+  // Stats
   statsGridModern: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
   statCardModern: {
     flex: 1,
@@ -1000,6 +1845,7 @@ const styles = StyleSheet.create({
   trendPositive: { backgroundColor: 'rgba(16,185,129,0.3)' },
   trendNegative: { backgroundColor: 'rgba(239,68,68,0.3)' },
 
+  // Sections
   section: {
     backgroundColor: '#FFF',
     marginHorizontal: 16,
@@ -1015,6 +1861,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
 
+  // Quick Actions
   quickActionsRow: { flexDirection: 'row', gap: 12 },
   quickActionCard: {
     flex: 1,
@@ -1040,6 +1887,7 @@ const styles = StyleSheet.create({
   quickActionTitle: { fontSize: 14, fontWeight: '600', color: '#111827', marginTop: 4 },
   quickActionDesc: { fontSize: 10, color: '#6B7280', marginTop: 2, textAlign: 'center' },
 
+  // Reports
   reportsRow: { flexDirection: 'row', gap: 12 },
   reportBtn: {
     flex: 1,
@@ -1070,6 +1918,7 @@ const styles = StyleSheet.create({
   reportBadgeText: { fontSize: 10, fontWeight: 'bold', color: '#FFF' },
   pendingReportsText: { fontSize: 12, color: '#F59E0B', textAlign: 'center', marginTop: 8 },
 
+  // Urgent Order
   urgentOrderCard: {
     backgroundColor: '#FEF3C7',
     borderRadius: 16,
@@ -1086,23 +1935,12 @@ const styles = StyleSheet.create({
   updateStatusBtn: { backgroundColor: '#DC2626', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   updateStatusBtnText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
 
+  // Products
   addButton: { marginHorizontal: 16, marginBottom: 16, marginTop: 8, borderRadius: 12, overflow: 'hidden' },
   addGradient: { paddingVertical: 14, alignItems: 'center' },
   addButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
 
-  lowStockItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FEE2E2',
-  },
-  lowStockItemName: { fontSize: 13, color: '#374151', flex: 1 },
-  lowStockItemQty: { fontSize: 13, color: '#F59E0B', fontWeight: '500', marginRight: 8 },
-  restockBtn: { backgroundColor: '#3B82F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  restockBtnText: { fontSize: 11, color: '#FFF', fontWeight: '600' },
-
+  // Chats
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1138,11 +1976,13 @@ const styles = StyleSheet.create({
   chatBadgeText: { fontSize: 10, fontWeight: 'bold', color: '#FFF' },
   chatLoader: { padding: 20 },
 
+  // Empty States
   emptyStateCard: { alignItems: 'center', padding: 40 },
   emptyStateEmoji: { fontSize: 48, marginBottom: 12, opacity: 0.5 },
   emptyStateTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 4 },
   emptyStateText: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
 
+  // Profile
   profileHeader: { alignItems: 'center', marginBottom: 20 },
   profileAvatarGradient: {
     width: 80,
@@ -1157,7 +1997,6 @@ const styles = StyleSheet.create({
   profileEmail: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   roleBadge: { backgroundColor: '#FEF3F2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginTop: 8 },
   roleText: { fontSize: 12, color: '#DC2626', fontWeight: '600' },
-
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1167,11 +2006,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 14, color: '#6B7280' },
   infoValue: { fontSize: 14, color: '#111827', fontWeight: '500' },
-
   logoutButton: { marginTop: 20, borderRadius: 12, overflow: 'hidden' },
   logoutGradient: { paddingVertical: 12, alignItems: 'center' },
   logoutButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
 
+  // Bottom Navigation
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
@@ -1227,7 +2066,7 @@ const styles = StyleSheet.create({
   deletePromoBtn: { padding: 8 },
   deletePromoBtnText: { fontSize: 18 },
 
-  // Modal styles (web/mobile compatible)
+  // Modal styles
   modalOverlay: {
     position: 'absolute',
     top: 0,
@@ -1291,4 +2130,187 @@ const styles = StyleSheet.create({
   submitModalButton: { flex: 1, borderRadius: 10, overflow: 'hidden' },
   submitGradient: { paddingVertical: 12, alignItems: 'center' },
   submitButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+
+  // Analytics Styles
+  analyticsCard: { marginBottom: 16 },
+  analyticsSubtitle: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 12 },
+  bestSellerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  bestSellerRank: { width: 30, fontSize: 14, fontWeight: 'bold', color: '#DC2626' },
+  bestSellerName: { flex: 1, fontSize: 14, color: '#374151' },
+  bestSellerQty: { fontSize: 12, color: '#6B7280' },
+  peakHoursContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  peakHourBadge: { backgroundColor: '#FEF3F2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  peakHourText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
+
+  // Report Styles
+  reportPeriodSelector: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  periodButton: { flex: 1, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  periodButtonActive: { backgroundColor: '#DC2626' },
+  periodButtonText: { fontSize: 14, color: '#6B7280' },
+  periodButtonTextActive: { color: 'white' },
+  reportStatsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  reportStatCard: { flex: 1, backgroundColor: '#FEF3F2', borderRadius: 12, padding: 12, alignItems: 'center' },
+  reportStatValue: { fontSize: 20, fontWeight: 'bold', color: '#DC2626' },
+  reportStatLabel: { fontSize: 11, color: '#6B7280', marginTop: 4 },
+  exportButton: { borderRadius: 12, overflow: 'hidden' },
+  exportGradient: { paddingVertical: 12, alignItems: 'center' },
+  exportButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
+  reportOrderItem: { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 8 },
+  reportOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  reportOrderNumber: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  reportOrderStatus: { fontSize: 12, fontWeight: '500' },
+  reportOrderDate: { fontSize: 11, color: '#6B7280', marginBottom: 4 },
+  reportOrderTotal: { fontSize: 14, fontWeight: '700', color: '#DC2626' },
+
+  // Notifications Styles
+  notificationsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  markAllReadText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
+  notificationsLoader: { paddingVertical: 40 },
+  notificationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    position: 'relative',
+  },
+  notificationUnread: { backgroundColor: '#FEF3F2', borderColor: '#FEE2E2' },
+  notificationIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEF3F2', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  notificationIconText: { fontSize: 20 },
+  notificationContent: { flex: 1 },
+  notificationTitle: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  notificationMessage: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
+  notificationTime: { fontSize: 10, color: '#9CA3AF' },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626', position: 'absolute', top: 12, right: 12 },
+  // Customer History (Suki) Styles
+customerRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 10,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F3F4F6',
+},
+customerRank: {
+  width: 40,
+},
+customerRankText: {
+  fontSize: 14,
+  fontWeight: 'bold',
+  color: '#DC2626',
+},
+customerInfo: {
+  flex: 1,
+},
+customerName: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#111827',
+},
+customerOrders: {
+  fontSize: 11,
+  color: '#6B7280',
+  marginTop: 2,
+},
+sukiBadge: {
+  backgroundColor: '#FEF3C7',
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  borderRadius: 20,
+},
+sukiBadgeText: {
+  fontSize: 10,
+  fontWeight: '600',
+  color: '#D97706',
+},
+noCustomersText: {
+  fontSize: 13,
+  color: '#6B7280',
+  textAlign: 'center',
+  paddingVertical: 20,
+},
+// Rating Insights Styles
+ratingHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+ratingBadge: {
+  backgroundColor: '#FEF3C7',
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  borderRadius: 20,
+},
+ratingBadgeText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#D97706',
+},
+ratingPreviewRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-around',
+  backgroundColor: '#F9FAFB',
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 16,
+},
+ratingPreviewItem: {
+  alignItems: 'center',
+  flex: 1,
+},
+ratingPreviewValue: {
+  fontSize: 18,
+  fontWeight: 'bold',
+  color: '#111827',
+},
+ratingPreviewLabel: {
+  fontSize: 11,
+  color: '#6B7280',
+  marginTop: 2,
+},
+ratingDivider: {
+  width: 1,
+  height: 30,
+  backgroundColor: '#E5E7EB',
+},
+viewRatingsButton: {
+  borderRadius: 12,
+  overflow: 'hidden',
+  shadowColor: '#DC2626',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 3,
+},
+viewRatingsGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 14,
+  gap: 8,
+},
+viewRatingsIcon: {
+  fontSize: 18,
+  color: 'white',
+},
+viewRatingsText: {
+  fontSize: 15,
+  fontWeight: '600',
+  color: 'white',
+},
+viewRatingsArrow: {
+  fontSize: 16,
+  color: 'white',
+  marginLeft: 4,
+},
 });

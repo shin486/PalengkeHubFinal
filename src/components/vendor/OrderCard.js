@@ -20,7 +20,7 @@ const QUICK_REASONS = [
   { id: 'other', label: 'Other (custom reason)' },
 ];
 
-export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
+export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedReasonId, setSelectedReasonId] = useState(null);
   const [customMessage, setCustomMessage] = useState('');
@@ -63,6 +63,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
   const nextStep = getNextStatus(order.status);
   const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled';
   const canReject = order.status === 'pending';
+  const canRequestPayment = order.status === 'confirmed';
 
   const formatTime = (dateString) => {
     const date = new Date(dateString);
@@ -110,9 +111,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
 
         <View style={styles.customerInfo}>
           <Text style={styles.customerName}>👤 {order.profiles?.full_name || 'Customer'}</Text>
-          {order.profiles?.phone && (
-            <Text style={styles.customerPhone}>📞 {order.profiles.phone}</Text>
-          )}
+          {order.profiles?.phone && <Text style={styles.customerPhone}>📞 {order.profiles.phone}</Text>}
         </View>
 
         <View style={styles.itemsContainer}>
@@ -143,6 +142,15 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
           </View>
 
           <View style={styles.actionButtons}>
+            {/* Request Payment button - for confirmed orders */}
+            {canRequestPayment && onRequestPayment && (
+              <TouchableOpacity style={styles.requestPaymentButton} onPress={() => onRequestPayment(order)}>
+                <LinearGradient colors={['#3B82F6', '#2563EB']} style={styles.requestPaymentGradient}>
+                  <Text style={styles.requestPaymentText}>💰 Request Payment</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            
             {canReject && (
               <TouchableOpacity style={styles.rejectButton} onPress={() => setShowRejectModal(true)}>
                 <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.rejectGradient}>
@@ -150,6 +158,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
                 </LinearGradient>
               </TouchableOpacity>
             )}
+            
             {canUpdate && (
               <TouchableOpacity style={styles.updateButton} onPress={() => onUpdateStatus(order.id, nextStep.status)}>
                 <LinearGradient colors={['#10B981', '#059669']} style={styles.updateGradient}>
@@ -167,7 +176,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
         </View>
       </View>
 
-      {/* Reject Modal */}
+      {/* Reject Modal - unchanged */}
       <Modal visible={showRejectModal} transparent animationType="fade" onRequestClose={() => setShowRejectModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -200,28 +209,16 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
             </ScrollView>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelModalButton}
-                onPress={() => {
-                  setShowRejectModal(false);
-                  setSelectedReasonId(null);
-                  setCustomMessage('');
-                }}
-              >
+              <TouchableOpacity style={styles.cancelModalButton} onPress={() => setShowRejectModal(false)}>
                 <Text style={styles.cancelModalText}>Cancel</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.confirmModalButton, (!selectedReasonId || rejecting) && styles.confirmModalDisabled]}
                 onPress={handleRejectConfirm}
                 disabled={!selectedReasonId || rejecting}
               >
                 <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.confirmGradient}>
-                  {rejecting ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.confirmModalText}>Confirm Reject</Text>
-                  )}
+                  {rejecting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.confirmModalText}>Confirm Reject</Text>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -232,7 +229,6 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder }) => {
   );
 };
 
-// Styles (same as before – keep them)
 const styles = StyleSheet.create({
   card: {
     backgroundColor: 'white',
@@ -367,6 +363,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 12,
+    flexWrap: 'wrap',
+  },
+  requestPaymentButton: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  requestPaymentGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  requestPaymentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
   },
   rejectButton: {
     borderRadius: 8,

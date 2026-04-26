@@ -39,6 +39,7 @@ import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
 import VendorChatDetailScreen from './src/screens/vendor/VendorChatDetailScreen';
 import { useCart } from './src/hooks/useCart';
+import VendorRatingsScreen from './src/screens/vendor/VendorRatingsScreen';
 
 // ✅ NEW: Customer Report Screens
 import ReportIssueScreen from './src/screens/customer/ReportIssueScreen';
@@ -205,6 +206,7 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="Home">
           {props => <HomeScreen {...props} isGuest={isGuest} />}
         </Stack.Screen>
+        
         <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
         <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
         <Stack.Screen name="Cart" component={CartScreen} />
@@ -325,6 +327,7 @@ function RootNavigator() {
         {/* Vendor screens */}
         <Stack.Screen name="VendorDashboard" component={VendorDashboardScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
+        <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         
         {/* ✅ NEW: Vendor Report Screens */}
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />

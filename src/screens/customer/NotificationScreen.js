@@ -1,4 +1,3 @@
-// src/screens/customer/NotificationScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,11 +11,10 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { notificationService } from '../../services/notificationService';
-import { Header } from '../../components/Header';
 
 export default function NotificationScreen({ navigation }) {
   const { user } = useAuth();
@@ -45,7 +43,6 @@ export default function NotificationScreen({ navigation }) {
   useEffect(() => {
     loadNotifications();
     
-    // Set up real-time subscription for new notifications
     const subscription = supabase
       .channel('notifications')
       .on(
@@ -125,20 +122,27 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handleNotificationPress = (notification) => {
-    // Mark as read
     if (!notification.is_read) {
       handleMarkAsRead(notification.id);
     }
     
-    // Navigate based on notification type
     if (notification.type === 'order') {
       navigation.navigate('Orders');
     } else if (notification.type === 'chat') {
       navigation.navigate('ChatList');
+    } else if (notification.type === 'price_drop') {
+      navigation.navigate('Search');
+    } else {
+      navigation.navigate('Orders');
     }
   };
 
-  const getIconForType = (type) => {
+  const getIconForType = (type, title, message) => {
+    const isCancellation = title?.toLowerCase().includes('cancelled') || 
+                          message?.toLowerCase().includes('cancelled');
+    
+    if (isCancellation) return '❌';
+    
     switch (type) {
       case 'order':
         return '📦';
@@ -166,59 +170,100 @@ export default function NotificationScreen({ navigation }) {
     return 'Just now';
   };
 
-  const renderNotification = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.notificationCard, !item.is_read && styles.unreadCard]}
-      onPress={() => handleNotificationPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.notificationIcon}>
-        <Text style={styles.iconText}>{getIconForType(item.type)}</Text>
-      </View>
-      <View style={styles.notificationContent}>
-        <Text style={[styles.notificationTitle, !item.is_read && styles.unreadText]}>
-          {item.title}
-        </Text>
-        <Text style={styles.notificationMessage} numberOfLines={2}>
-          {item.message}
-        </Text>
-        <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
-      </View>
+  const renderNotification = ({ item }) => {
+    const isCancellation = item.title?.toLowerCase().includes('cancelled') || 
+                          item.message?.toLowerCase().includes('cancelled');
+    
+    return (
       <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleDelete(item.id)}
+        style={[styles.notificationCard, !item.is_read && styles.unreadCard]}
+        onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.7}
       >
-        <Text style={styles.deleteText}>🗑️</Text>
+        <View style={[styles.notificationIcon, isCancellation && styles.cancellationIcon]}>
+          <Text style={styles.iconText}>{getIconForType(item.type, item.title, item.message)}</Text>
+        </View>
+        <View style={styles.notificationContent}>
+          <Text style={[styles.notificationTitle, !item.is_read && styles.unreadText]}>
+            {item.title}
+          </Text>
+          <Text style={styles.notificationMessage} numberOfLines={2}>
+            {item.message}
+          </Text>
+          <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDelete(item.id)}
+        >
+          <Text style={styles.deleteText}>🗑️</Text>
+        </TouchableOpacity>
+        {!item.is_read && <View style={styles.unreadDot} />}
       </TouchableOpacity>
-      {!item.is_read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
+    );
+  };
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#DC2626" />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#DC2626" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
       
+      {/* Custom Header - Red Gradient */}
+      <LinearGradient
+        colors={['#DC2626', '#EF4444', '#F87171']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.placeholder} />
+        </View>
+      </LinearGradient>
       
       {notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🔔</Text>
-          <Text style={styles.emptyTitle}>No Notifications</Text>
-          <Text style={styles.emptyText}>
-            When you receive notifications, they will appear here
-          </Text>
+          <LinearGradient
+            colors={['#FEF3F2', '#FFFFFF']}
+            style={styles.emptyCard}
+          >
+            <Text style={styles.emptyIcon}>🔔</Text>
+            <Text style={styles.emptyTitle}>No Notifications</Text>
+            <Text style={styles.emptyText}>
+              When you receive notifications, they will appear here
+            </Text>
+          </LinearGradient>
         </View>
       ) : (
         <>
           {unreadCount > 0 && (
             <TouchableOpacity style={styles.markAllButton} onPress={handleMarkAllAsRead}>
-              <Text style={styles.markAllText}>Mark all as read</Text>
+              <LinearGradient
+                colors={['#DC2626', '#EF4444']}
+                style={styles.markAllGradient}
+              >
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </LinearGradient>
             </TouchableOpacity>
           )}
           
@@ -230,6 +275,7 @@ export default function NotificationScreen({ navigation }) {
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />
             }
+            showsVerticalScrollIndicator={false}
           />
         </>
       )}
@@ -246,6 +292,45 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  headerGradient: {
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  backText: {
+    fontSize: 24,
+    color: 'white',
+    fontWeight: '600',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  placeholder: {
+    width: 40,
   },
   listContent: {
     padding: 16,
@@ -256,6 +341,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  emptyCard: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
   emptyIcon: {
     fontSize: 60,
@@ -273,17 +366,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   markAllButton: {
-    alignSelf: 'flex-end',
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 20,
+    overflow: 'hidden',
+    alignSelf: 'flex-end',
+  },
+  markAllGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   markAllText: {
-    fontSize: 13,
-    color: '#DC2626',
-    fontWeight: '500',
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
   },
   notificationCard: {
     flexDirection: 'row',
@@ -297,9 +394,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   unreadCard: {
     backgroundColor: '#FEF3F2',
+    borderColor: '#FEE2E2',
   },
   notificationIcon: {
     width: 48,
@@ -309,6 +409,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  cancellationIcon: {
+    backgroundColor: '#FEE2E2',
   },
   iconText: {
     fontSize: 24,

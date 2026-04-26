@@ -10,29 +10,75 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 
 export default function CartScreen({ navigation }) {
   const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
   const [refreshing, setRefreshing] = useState(false);
+  const [hasClosedStall, setHasClosedStall] = useState(false);
+  const [closedStallNames, setClosedStallNames] = useState([]);
+  const [closedStallIds, setClosedStallIds] = useState([]);
 
-  // Refresh cart when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 CartScreen focused, refreshing cart...');
       refreshCart();
       return () => {};
     }, [refreshCart])
   );
 
-  // Refresh on mount
   useEffect(() => {
     refreshCart();
   }, []);
 
+  useEffect(() => {
+    checkStallStatus();
+  }, [cart]);
+
+  const checkStallStatus = async () => {
+    if (cart.length === 0) {
+      setHasClosedStall(false);
+      setClosedStallNames([]);
+      setClosedStallIds([]);
+      return;
+    }
+
+    const uniqueStallIds = [...new Set(cart.map(item => item.stall_id))];
+    const closedStalls = [];
+    const closedIds = [];
+
+    for (const stallId of uniqueStallIds) {
+      const { data: stall } = await supabase
+        .from('stalls')
+        .select('stall_name, is_temporarily_closed')
+        .eq('id', stallId)
+        .single();
+
+      if (stall?.is_temporarily_closed) {
+        closedStalls.push(stall.stall_name || `Stall #${stallId}`);
+        closedIds.push(stallId);
+      }
+    }
+
+    setHasClosedStall(closedStalls.length > 0);
+    setClosedStallNames(closedStalls);
+    setClosedStallIds(closedIds);
+  };
+
+  const removeItemsFromClosedStalls = async () => {
+    for (const item of cart) {
+      if (closedStallIds.includes(item.stall_id)) {
+        await removeItem(item.product_id);
+      }
+    }
+    Alert.alert('Cart Updated', 'Items from closed stalls have been removed.');
+    await checkStallStatus();
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshCart();
+    await checkStallStatus();
     setRefreshing(false);
   };
 
@@ -57,17 +103,9 @@ export default function CartScreen({ navigation }) {
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyIcon}>🛒</Text>
         <Text style={styles.emptyTitle}>Your cart is empty</Text>
-        <Text style={styles.emptyText}>
-          Add items from the market to get started
-        </Text>
-        <TouchableOpacity 
-          style={styles.shopButton}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <LinearGradient
-            colors={['#FF6B6B', '#FF8E8E']}
-            style={styles.shopGradient}
-          >
+        <Text style={styles.emptyText}>Add items from the market to get started</Text>
+        <TouchableOpacity style={styles.shopButton} onPress={() => navigation.navigate('Home')}>
+          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.shopGradient}>
             <Text style={styles.shopButtonText}>Start Shopping</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -86,7 +124,8 @@ export default function CartScreen({ navigation }) {
             stall_number: item.stall_number,
             section: item.section,
           },
-          items: []
+          items: [],
+          isClosed: closedStallIds.includes(stallId)
         };
       }
       grouped[stallId].items.push(item);
@@ -101,17 +140,31 @@ export default function CartScreen({ navigation }) {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF6B6B']} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
       >
-        {Object.entries(groupedCart).map(([stallId, data]) => (
-          <View key={stallId} style={styles.stallSection}>
-            <View style={styles.stallHeader}>
-              <Text style={styles.stallName}>
-                {data.stall?.stall_name || 'Market Stall'}
+        {hasClosedStall && (
+          <View style={styles.closedWarningBanner}>
+            <Text style={styles.closedWarningIcon}>⚠️</Text>
+            <View style={styles.closedWarningContent}>
+              <Text style={styles.closedWarningTitle}>Some stalls are closed</Text>
+              <Text style={styles.closedWarningText}>
+                {closedStallNames.join(', ')} {closedStallNames.length === 1 ? 'is' : 'are'} temporarily closed.
               </Text>
-              <Text style={styles.stallNumber}>Stall #{data.stall?.stall_number}</Text>
+            </View>
+          </View>
+        )}
+
+        {Object.entries(groupedCart).map(([stallId, data]) => (
+          <View key={stallId} style={[styles.stallSection, data.isClosed && styles.closedStallSection]}>
+            <View style={styles.stallHeader}>
+              <View style={styles.stallHeaderLeft}>
+                <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
+                {data.isClosed && (
+                  <View style={styles.closedBadge}>
+                    <Text style={styles.closedBadgeText}>Closed</Text>
+                  </View>
+                )}
+              </View>
             </View>
             
             {data.items.map((item) => (
@@ -121,88 +174,65 @@ export default function CartScreen({ navigation }) {
                   <Text style={styles.itemPrice}>₱{item.price} / {item.unit}</Text>
                 </View>
                 
-                <View style={styles.quantityControls}>
-                  <TouchableOpacity 
-                    style={styles.quantityButton}
-                    onPress={() => updateItemQuantity(item, -1)}
-                  >
-                    <Text style={styles.quantityButtonText}>-</Text>
-                  </TouchableOpacity>
-                  
-                  <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                  
-                  <TouchableOpacity 
-                    style={styles.quantityButton}
-                    onPress={() => updateItemQuantity(item, 1)}
-                  >
-                    <Text style={styles.quantityButtonText}>+</Text>
-                  </TouchableOpacity>
-                  
+                <View style={styles.itemRightSection}>
+                  {!data.isClosed ? (
+                    <View style={styles.quantityControls}>
+                      <TouchableOpacity 
+                        style={styles.quantityButton}
+                        onPress={() => updateItemQuantity(item, -1)}
+                      >
+                        <Text style={styles.quantityButtonText}>-</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                      <TouchableOpacity 
+                        style={styles.quantityButton}
+                        onPress={() => updateItemQuantity(item, 1)}
+                      >
+                        <Text style={styles.quantityButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text style={styles.closedItemLabel}>Closed</Text>
+                  )}
                   <Text style={styles.itemTotal}>
                     ₱{((item.quantity || 1) * item.price).toFixed(2)}
                   </Text>
                 </View>
               </View>
             ))}
-            
-            <View style={styles.stallTotal}>
-              <Text style={styles.stallTotalLabel}>Stall Total:</Text>
-              <Text style={styles.stallTotalAmount}>
-                ₱{data.items.reduce((sum, item) => sum + ((item.quantity || 1) * item.price), 0).toFixed(2)}
-              </Text>
-            </View>
           </View>
         ))}
-        
-        <View style={styles.totalSection}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalAmount}>₱{cartTotal.toFixed(2)}</Text>
-        </View>
-        
-        <TouchableOpacity 
-          style={styles.clearCartButton}
-          onPress={() => {
-            Alert.alert(
-              'Clear Cart',
-              'Are you sure you want to remove all items?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', onPress: clearCart, style: 'destructive' }
-              ]
-            );
-          }}
-        >
-          <Text style={styles.clearCartText}>Clear Cart</Text>
-        </TouchableOpacity>
       </ScrollView>
       
+      {/* Footer - Single location for totals and checkout */}
       <View style={styles.footer}>
-        <View style={styles.footerTotal}>
-          <Text style={styles.footerTotalLabel}>Total:</Text>
+        <View style={styles.footerRow}>
+          <Text style={styles.footerTotalLabel}>Total</Text>
           <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
         </View>
         
-        <TouchableOpacity 
-          style={styles.checkoutButton}
-          onPress={() => {
-            console.log('🚀 Navigating to Checkout with cart:', cart);
-            console.log('📦 Cart items count:', cart.length);
-            console.log('💰 Cart total:', cartTotal);
-            
-            // Pass cart data directly to Checkout
-            navigation.navigate('Checkout', { 
-              cart: cart, 
-              cartTotal: cartTotal 
-            });
-          }}
-        >
-          <LinearGradient
-            colors={['#FF6B6B', '#FF8E8E']}
-            style={styles.checkoutGradient}
+        {hasClosedStall ? (
+          <View style={styles.checkoutDisabledArea}>
+            <View style={styles.disabledCheckoutButton}>
+              <Text style={styles.disabledCheckoutText}>Checkout Unavailable</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.removeClosedButton}
+              onPress={removeItemsFromClosedStalls}
+            >
+              <Text style={styles.removeClosedButtonText}>Remove closed stall items</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.checkoutButton}
+            onPress={() => navigation.navigate('Checkout', { cart, cartTotal })}
           >
-            <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.checkoutGradient}>
+              <Text style={styles.checkoutButtonText}>Proceed to Checkout </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -256,32 +286,77 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
   },
+  closedWarningBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#FEF3F2',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  closedWarningIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  closedWarningContent: {
+    flex: 1,
+  },
+  closedWarningTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginBottom: 2,
+  },
+  closedWarningText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
   stallSection: {
     backgroundColor: 'white',
     borderRadius: 16,
     marginBottom: 16,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
+  closedStallSection: {
+    backgroundColor: '#FEF3F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
   stallHeader: {
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
+  },
+  stallHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   stallName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#111827',
   },
-  stallNumber: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    marginTop: 2,
+  closedBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  closedBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'white',
   },
   cartItem: {
     flexDirection: 'row',
@@ -304,83 +379,47 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
+  itemRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   quantityButton: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: '#DC2626',
   },
   quantityText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
     color: '#111827',
-    minWidth: 30,
+    minWidth: 25,
     textAlign: 'center',
+  },
+  closedItemLabel: {
+    fontSize: 11,
+    color: '#EF4444',
+    fontWeight: '500',
   },
   itemTotal: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B6B',
-    minWidth: 70,
+    color: '#DC2626',
+    minWidth: 65,
     textAlign: 'right',
-  },
-  stallTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  stallTotalLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  stallTotalAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF6B6B',
-  },
-  totalSection: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  totalAmount: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-  },
-  clearCartButton: {
-    alignItems: 'center',
-    padding: 12,
-  },
-  clearCartText: {
-    fontSize: 14,
-    color: '#EF4444',
-    fontWeight: '500',
   },
   footer: {
     backgroundColor: 'white',
@@ -393,7 +432,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  footerTotal: {
+  footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -405,9 +444,9 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   footerTotalAmount: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: '#DC2626',
   },
   checkoutButton: {
     borderRadius: 12,
@@ -416,10 +455,36 @@ const styles = StyleSheet.create({
   checkoutGradient: {
     paddingVertical: 14,
     alignItems: 'center',
+    borderRadius: 12,
   },
   checkoutButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  checkoutDisabledArea: {
+    gap: 10,
+  },
+  disabledCheckoutButton: {
+    backgroundColor: '#E5E7EB',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  disabledCheckoutText: {
+    color: '#9CA3AF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  removeClosedButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  removeClosedButtonText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

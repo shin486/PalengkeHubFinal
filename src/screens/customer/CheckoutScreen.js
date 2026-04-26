@@ -386,7 +386,6 @@
           <Text style={styles.sectionTitle}>Special Instructions</Text>
           <TextInput
             style={styles.instructionsInput}
-            placeholder="e.g., Extra spicy, no onions, etc."
             placeholderTextColor="#9CA3AF"
             value={specialInstructions}
             onChangeText={setSpecialInstructions}
