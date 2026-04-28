@@ -14,6 +14,8 @@ import {
   Animated,
   Dimensions,
   Vibration,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -50,6 +52,10 @@ export const SignUpScreen = ({ setIsGuest }) => {
   const [stallName, setStallName] = useState('');
   const [stallSection, setStallSection] = useState('');
   const [stallNumber, setStallNumber] = useState('');
+  
+  // ✅ Terms and Conditions
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   
   // Document uploads
   const [validId, setValidId] = useState(null);
@@ -265,6 +271,13 @@ export const SignUpScreen = ({ setIsGuest }) => {
   };
 
   const handleSignUp = async () => {
+    // ✅ Check Terms and Conditions
+    if (!termsAccepted) {
+      shake();
+      Alert.alert('Terms & Conditions', 'Please accept the Terms and Conditions to continue');
+      return;
+    }
+
     // Basic validation
     if (!fullName || !email || !password || !confirmPassword) {
       shake();
@@ -323,7 +336,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
         }
       }
       
-      // Prepare vendor metadata with document URLs
       const metadata = role === 'vendor' ? {
         stall_name: stallName,
         stall_section: stallSection,
@@ -333,8 +345,14 @@ export const SignUpScreen = ({ setIsGuest }) => {
         business_permit_url: businessPermitUrl,
         barangay_clearance_url: barangayClearanceUrl,
         requires_approval: true,
-      } : { phone: phone };
-      
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
+      } : { 
+        phone: phone,
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
+      };
+
       const result = await signUp(email, password, fullName, role, metadata);
       
       if (result.success) {
@@ -388,6 +406,133 @@ export const SignUpScreen = ({ setIsGuest }) => {
     if (passwordStrength <= 3) return 'Medium';
     return 'Strong';
   };
+
+  // ✅ Terms and Conditions Modal
+  const TermsModal = () => (
+    <Modal
+      visible={showTermsModal}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setShowTermsModal(false)}
+    >
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Terms and Conditions</Text>
+          <TouchableOpacity onPress={() => setShowTermsModal(false)}>
+            <Text style={styles.modalClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.modalContent}>
+          <Text style={styles.termsText}>
+            <Text style={styles.termsHeading}>1. Acceptance of Terms{'\n\n'}</Text>
+            By creating an account on PalengkeHub, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.
+
+            {'\n\n'}<Text style={styles.termsHeading}>2. Description of Service{'\n\n'}</Text>
+            PalengkeHub is an online marketplace platform that connects customers with vendors/stall owners at Lipa City Public Market. Users can browse products, place orders, and communicate with vendors through our platform.
+
+            {'\n\n'}<Text style={styles.termsHeading}>3. User Accounts{'\n\n'}</Text>
+            • You must provide accurate and complete information when creating an account{'\n'}
+            • You are responsible for maintaining the confidentiality of your account credentials{'\n'}
+            • You are responsible for all activities that occur under your account{'\n'}
+            • Notify us immediately of any unauthorized use of your account{'\n'}
+            • We reserve the right to suspend or terminate accounts that violate these terms
+
+            {'\n\n'}<Text style={styles.termsHeading}>4. Vendor Terms{'\n\n'}</Text>
+            • Vendors must provide valid business permits and identification{'\n'}
+            • Vendors are responsible for the accuracy of product listings{'\n'}
+            • Vendors must fulfill orders in a timely manner{'\n'}
+            • Vendors must maintain fair and accurate pricing{'\n'}
+            • Vendors must respond to customer inquiries promptly{'\n'}
+            • Failure to comply may result in account suspension
+
+            {'\n\n'}<Text style={styles.termsHeading}>5. Customer Terms{'\n\n'}</Text>
+            • Customers must provide accurate delivery/pickup information{'\n'}
+            • Customers agree to pay the total amount shown at checkout{'\n'}
+            • Customers must pick up orders on time{'\n'}
+            • Abusive behavior towards vendors will not be tolerated{'\n'}
+            • False or fraudulent orders may result in account ban
+
+            {'\n\n'}<Text style={styles.termsHeading}>6. Payments and Fees{'\n\n'}</Text>
+            • All prices are in Philippine Peso (PHP){'\n'}
+            • Payment methods accepted: Cash on Pickup, GCash, Bank Transfer{'\n'}
+            • Vendors are responsible for their own transaction fees{'\n'}
+            • PalengkeHub may charge service fees (to be disclosed separately){'\n'}
+            • Refunds are subject to vendor approval
+
+            {'\n\n'}<Text style={styles.termsHeading}>7. Order and Delivery{'\n\n'}</Text>
+            • Orders are confirmed once the vendor accepts them{'\n'}
+            • Pickup times are estimates and may vary{'\n'}
+            • Customers should inspect orders upon pickup{'\n'}
+            • Issues with orders should be reported within 24 hours{'\n'}
+            • Vendors may propose changes to orders (quantity/unit changes)
+
+            {'\n\n'}<Text style={styles.termsHeading}>8. Cancellations and Refunds{'\n\n'}</Text>
+            • Customers can cancel orders while still pending{'\n'}
+            • Cancellations after vendor confirmation require vendor approval{'\n'}
+            • Refunds are processed at the vendor's discretion{'\n'}
+            • PalengkeHub may mediate disputes but is not liable for refunds
+
+            {'\n\n'}<Text style={styles.termsHeading}>9. Prohibited Activities{'\n\n'}</Text>
+            • Selling illegal or prohibited items{'\n'}
+            • Misrepresenting products or prices{'\n'}
+            • Harassing other users{'\n'}
+            • Manipulating ratings or reviews{'\n'}
+            • Attempting to bypass our payment system{'\n'}
+            • Sharing account credentials with unauthorized users
+
+            {'\n\n'}<Text style={styles.termsHeading}>10. Ratings and Reviews{'\n\n'}</Text>
+            • Users may rate and review vendors after completed orders{'\n'}
+            • Reviews must be honest and based on actual experience{'\n'}
+            • Fake or malicious reviews may be removed{'\n'}
+            • Vendors may respond to customer reviews{'\n'}
+            • We reserve the right to remove inappropriate content
+
+            {'\n\n'}<Text style={styles.termsHeading}>11. Privacy Policy{'\n\n'}</Text>
+            We collect and process personal information as described in our Privacy Policy. By using our service, you consent to such collection and use.
+
+            {'\n\n'}<Text style={styles.termsHeading}>12. Limitation of Liability{'\n\n'}</Text>
+            PalengkeHub acts as a platform connecting buyers and sellers. We are not responsible for:
+            • Product quality or safety{'\n'}
+            • Vendor-customer disputes{'\n'}
+            • Delays in order fulfillment{'\n'}
+            • Losses due to account compromise{'\n'}
+            • Technical issues beyond our control
+
+            {'\n\n'}<Text style={styles.termsHeading}>13. Modifications to Terms{'\n\n'}</Text>
+            We may modify these terms at any time. Continued use of the platform constitutes acceptance of modified terms.
+
+            {'\n\n'}<Text style={styles.termsHeading}>14. Termination{'\n\n'}</Text>
+            We may terminate or suspend your account immediately, without prior notice, for conduct that violates these terms or is harmful to other users.
+
+            {'\n\n'}<Text style={styles.termsHeading}>15. Contact Information{'\n\n'}</Text>
+            For questions about these Terms, contact us at:{'\n'}
+            Email: support@palengkehub.com{'\n'}
+            Phone: (043) 123-4567{'\n'}
+            Address: Lipa City Public Market, Lipa City, Batangas
+
+            {'\n\n'}<Text style={styles.termsLastUpdated}>Last Updated: January 1, 2024</Text>
+          </Text>
+        </ScrollView>
+        <View style={styles.modalFooter}>
+          <TouchableOpacity
+            style={styles.modalAcceptButton}
+            onPress={() => {
+              setTermsAccepted(true);
+              setShowTermsModal(false);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.modalAcceptGradient}
+            >
+              <Text style={styles.modalAcceptText}>I Accept the Terms</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
 
   // Document upload component
   const DocumentUpload = ({ label, icon, required, onUpload, fileName, file }) => (
@@ -784,6 +929,24 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Vendor-specific fields */}
           {renderVendorFields()}
 
+          {/* ✅ Terms and Conditions Checkbox */}
+          <View style={styles.termsContainer}>
+            <TouchableOpacity
+              style={styles.checkboxContainer}
+              onPress={() => setTermsAccepted(!termsAccepted)}
+            >
+              <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                {termsAccepted && <Text style={styles.checkboxCheck}>✓</Text>}
+              </View>
+              <Text style={styles.termsTextSmall}>
+                I agree to the{' '}
+              </Text>
+              <TouchableOpacity onPress={() => setShowTermsModal(true)}>
+                <Text style={styles.termsLink}>Terms and Conditions</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+
           {/* Sign Up Button */}
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity 
@@ -843,6 +1006,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
           </View>
         </Animated.View>
       </ScrollView>
+
+      {/* Terms and Conditions Modal */}
+      <TermsModal />
     </KeyboardAvoidingView>
   );
 };
@@ -1260,6 +1426,106 @@ const styles = StyleSheet.create({
   loginLink: {
     fontSize: 14,
     color: '#EF4444',
+    fontWeight: '600',
+  },
+  // ✅ Terms and Conditions Styles
+  termsContainer: {
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#DC2626',
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: '#DC2626',
+  },
+  checkboxCheck: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  termsTextSmall: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  termsLink: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+    backgroundColor: '#DC2626',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  modalClose: {
+    fontSize: 24,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#374151',
+  },
+  termsHeading: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#DC2626',
+  },
+  termsLastUpdated: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  modalAcceptButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalAcceptGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalAcceptText: {
+    color: 'white',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

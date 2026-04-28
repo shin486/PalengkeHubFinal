@@ -19,6 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -562,16 +563,24 @@ await fetchAllProducts();
   };
 
 // ========== PDF REPORT GENERATION ==========
+// ========== PDF REPORT GENERATION ==========
+// ========== PDF REPORT GENERATION - TABLES ONLY ==========
+// ========== PDF REPORT GENERATION - TABLES ONLY ==========
+// ========== PDF REPORT GENERATION - SEPARATE WINDOW ==========
 const generatePDFReport = async () => {
   try {
-    // Get current date for report title
+    // Get current date
     const currentDate = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
+    const currentTime = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
     
-    // Calculate statistics for the report
+    // Calculate statistics
     const totalProducts = allProducts.length;
     const activeProducts = allProducts.filter(p => p.is_available).length;
     const inactiveProducts = totalProducts - activeProducts;
@@ -582,356 +591,366 @@ const generatePDFReport = async () => {
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
     
-    // Category averages
+    // Get unique vendors
+    const vendorsSet = new Set();
+    allProducts.forEach(p => {
+      const vendorName = p.stalls?.profiles?.full_name || p.stalls?.stall_name || 'Unknown';
+      vendorsSet.add(vendorName);
+    });
+    const vendorsCount = vendorsSet.size;
+    
+    // Price distribution
+    const priceRanges = [
+      { range: 'Under ₱50', count: allProducts.filter(p => p.price < 50).length },
+      { range: '₱50 - ₱100', count: allProducts.filter(p => p.price >= 50 && p.price < 100).length },
+      { range: '₱100 - ₱200', count: allProducts.filter(p => p.price >= 100 && p.price < 200).length },
+      { range: '₱200 - ₱500', count: allProducts.filter(p => p.price >= 200 && p.price < 500).length },
+      { range: '₱500+', count: allProducts.filter(p => p.price >= 500).length },
+    ];
+    
+    // Average Price by Category
     const normalizeCategory = (category) => {
       if (!category) return 'Uncategorized';
       return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
     };
     
-    const categoryPriceMap = new Map();
+    const categoryMap = new Map();
     allProducts.forEach(p => {
       const category = normalizeCategory(p.category || 'Uncategorized');
-      if (!categoryPriceMap.has(category)) {
-        categoryPriceMap.set(category, { totalPrice: 0, count: 0, products: [] });
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, { totalPrice: 0, count: 0, products: [] });
       }
-      const entry = categoryPriceMap.get(category);
+      const entry = categoryMap.get(category);
       entry.totalPrice += p.price;
       entry.count++;
       entry.products.push(p.name);
     });
     
-    // Generate HTML for PDF
+    const categoryAverages = Array.from(categoryMap.entries()).map(([cat, data]) => ({
+      category: cat,
+      avgPrice: (data.totalPrice / data.count).toFixed(2),
+      count: data.count,
+      uniqueProducts: new Set(data.products).size
+    })).sort((a, b) => parseFloat(b.avgPrice) - parseFloat(a.avgPrice));
+    
+    // Average Price by Product
+    const productMap = new Map();
+    allProducts.forEach(p => {
+      if (!productMap.has(p.name)) {
+        productMap.set(p.name, { prices: [], vendors: new Set(), category: p.category, unit: p.unit });
+      }
+      const entry = productMap.get(p.name);
+      entry.prices.push(p.price);
+      entry.vendors.add(p.stalls?.profiles?.full_name || 'Unknown');
+    });
+    
+    const productAverages = Array.from(productMap.entries()).map(([name, data]) => ({
+      name: name,
+      avgPrice: (data.prices.reduce((a, b) => a + b, 0) / data.prices.length).toFixed(2),
+      minPrice: Math.min(...data.prices),
+      maxPrice: Math.max(...data.prices),
+      vendorCount: data.vendors.size,
+      category: data.category,
+      unit: data.unit
+    })).sort((a, b) => parseFloat(b.avgPrice) - parseFloat(a.avgPrice)).slice(0, 50);
+    
+    // Products with warnings
+    const priceWarnings = allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').slice(0, 30);
+    
+    // Complete product list (first 100)
+    const productList = allProducts.slice(0, 100);
+    
+    // HTML for the report
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Products Report</title>
+        <title>PalengkeHub Products Report</title>
         <style>
+          @media print {
+            body { margin: 0; padding: 0; }
+            .no-print { display: none; }
+            .page-break { page-break-before: always; }
+          }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
           body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 20px;
             color: #333;
-            line-height: 1.6;
+            background: white;
+            font-size: 12px;
+          }
+          .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
           }
           .header {
             text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
             border-bottom: 2px solid #DC2626;
           }
           .logo {
-            font-size: 32px;
-            margin-bottom: 10px;
+            font-size: 40px;
+            margin-bottom: 5px;
           }
           .title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #DC2626;
-            margin: 0;
-          }
-          .subtitle {
-            font-size: 14px;
-            color: #666;
-            margin-top: 5px;
-          }
-          .date {
-            font-size: 12px;
-            color: #888;
-            margin-top: 10px;
-          }
-          .summary-cards {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 30px;
-          }
-          .card {
-            flex: 1;
-            min-width: 150px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 15px;
-            text-align: center;
-            border: 1px solid #e9ecef;
-          }
-          .card-icon {
-            font-size: 30px;
-            margin-bottom: 10px;
-          }
-          .card-value {
             font-size: 24px;
             font-weight: bold;
             color: #DC2626;
-            margin: 5px 0;
           }
-          .card-label {
+          .subtitle {
             font-size: 12px;
             color: #666;
-            text-transform: uppercase;
+            margin-top: 4px;
+          }
+          .date {
+            font-size: 10px;
+            color: #999;
+            margin-top: 6px;
+          }
+          .stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
+          }
+          .stat-card {
+            flex: 1;
+            min-width: 100px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+          }
+          .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #DC2626;
+          }
+          .stat-label {
+            font-size: 10px;
+            color: #666;
+            margin-top: 5px;
           }
           .section-title {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             color: #333;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
+            margin: 25px 0 12px 0;
+            padding-bottom: 6px;
             border-bottom: 2px solid #DC2626;
           }
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            font-size: 11px;
           }
           th {
             background-color: #DC2626;
             color: white;
-            padding: 10px;
+            padding: 8px 6px;
             text-align: left;
-            font-size: 12px;
+            font-weight: 600;
           }
           td {
-            padding: 8px 10px;
+            padding: 6px;
             border-bottom: 1px solid #e9ecef;
-            font-size: 12px;
+          }
+          tr:hover {
+            background-color: #fef2f2;
           }
           .price-warning {
-            background-color: #FEF3C7;
+            background-color: #fef3c7;
+          }
+          .badge-active {
+            background-color: #d1fae5;
+            color: #059669;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            display: inline-block;
+          }
+          .badge-inactive {
+            background-color: #fee2e2;
+            color: #dc2626;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            display: inline-block;
           }
           .footer {
-            margin-top: 40px;
-            padding-top: 20px;
+            margin-top: 25px;
+            padding-top: 12px;
             text-align: center;
-            font-size: 10px;
+            font-size: 9px;
             color: #999;
             border-top: 1px solid #e9ecef;
           }
-          .badge {
-            display: inline-block;
-            background: #10B981;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
+          .text-center {
+            text-align: center;
           }
-          .badge-warning {
-            background: #F59E0B;
+          .print-button {
+            background-color: #DC2626;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            display: block;
+            width: 200px;
+            text-align: center;
+          }
+          .print-button:hover {
+            background-color: #B91C1C;
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div class="logo">🛒</div>
-          <h1 class="title">PalengkeHub Products Report</h1>
-          <div class="subtitle">Complete Product Monitoring & Analytics</div>
-          <div class="date">Generated on: ${currentDate}</div>
+        <div class="report-container">
+          <div style="text-align: right; margin-bottom: 15px;">
+            <button class="print-button no-print" onclick="window.print();">🖨️ Print / Save as PDF</button>
+          </div>
+          
+          <div class="header">
+            <div class="logo">🛒</div>
+            <div class="title">PalengkeHub Products Report</div>
+            <div class="subtitle">Complete Product Monitoring & Analytics</div>
+            <div class="date">Generated on: ${currentDate} at ${currentTime}</div>
+          </div>
+          
+          <!-- Summary Statistics -->
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value">${totalProducts}</div><div class="stat-label">Total Products</div></div>
+            <div class="stat-card"><div class="stat-value">${activeProducts}</div><div class="stat-label">Active Products</div></div>
+            <div class="stat-card"><div class="stat-value">₱${overallAvgPrice}</div><div class="stat-label">Average Price</div></div>
+            <div class="stat-card"><div class="stat-value">${productsOnSale}</div><div class="stat-label">On Sale</div></div>
+            <div class="stat-card"><div class="stat-value">${vendorsCount}</div><div class="stat-label">Active Vendors</div></div>
+            <div class="stat-card"><div class="stat-value">₱${minPrice} - ₱${maxPrice}</div><div class="stat-label">Price Range</div></div>
+          </div>
+          
+          <!-- Table 1: Price Distribution -->
+          <div class="section-title">📊 1. Price Distribution</div>
+          <table>
+            <thead><tr><th>Price Range</th><th>Number of Products</th><th>Percentage</th></tr></thead>
+            <tbody>
+              ${priceRanges.map(r => `<tr><td>${r.range}</td><td>${r.count}</td><td>${totalProducts > 0 ? ((r.count / totalProducts) * 100).toFixed(1) : 0}%</td></tr>`).join('')}
+            </tbody>
+          </table>
+          
+          <!-- Table 2: Average Price by Category -->
+          <div class="section-title">📂 2. Average Price by Category</div>
+          <table>
+            <thead><tr><th>Category</th><th>Average Price</th><th>Products Count</th><th>Unique Items</th></tr></thead>
+            <tbody>
+              ${categoryAverages.map(c => `<tr><td>${c.category}</td><td>₱${c.avgPrice}</td><td>${c.count}</td><td>${c.uniqueProducts}</td></tr>`).join('')}
+              ${categoryAverages.length === 0 ? '<tr><td colspan="4" class="text-center">No categories found</td></tr>' : ''}
+            </tbody>
+          </table>
+          
+          <!-- Table 3: Average Price by Product -->
+          <div class="section-title">📊 3. Average Price by Product</div>
+          <table>
+            <thead><tr><th>Product Name</th><th>Avg Price</th><th>Min Price</th><th>Max Price</th><th>Vendors</th><th>Category</th><th>Unit</th></tr></thead>
+            <tbody>
+              ${productAverages.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>₱${p.avgPrice}</td>
+                  <td>₱${p.minPrice}</td>
+                  <td>₱${p.maxPrice}</td>
+                  <td>${p.vendorCount}</td>
+                  <td>${p.category || 'N/A'}</td>
+                  <td>${p.unit || 'N/A'}</td>
+                </tr>
+              `).join('')}
+              ${productAverages.length === 0 ? '<tr><td colspan="7" class="text-center">No products found</td></tr>' : ''}
+            </tbody>
+          </table>
+          
+          <!-- Table 4: Price Warnings -->
+          <div class="section-title">⚠️ 4. Price Warning Alerts</div>
+          ${priceWarnings.length === 0 ? 
+            '<p style="padding:15px;text-align:center;background:#f0fdf4;color:#059669;border-radius:8px;">✅ No price warnings found. All products are within acceptable price ranges.</p>' :
+            `<table>
+              <thead><tr><th>Product</th><th>Price</th><th>Category</th><th>Vendor</th><th>Status</th></tr></thead>
+              <tbody>
+                ${priceWarnings.map(p => `
+                  <tr class="price-warning">
+                    <td>${p.name}</td>
+                    <td>₱${p.price}</td>
+                    <td>${p.category || 'N/A'}</td>
+                    <td>${p.stalls?.profiles?.full_name || p.stalls?.stall_name || 'Unknown'}</td>
+                    <td>${p.is_available ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>`
+          }
+          
+          <!-- Table 5: Complete Product List -->
+          <div class="section-title">📋 5. Complete Product List (First ${productList.length} of ${totalProducts})</div>
+          <table>
+            <thead><tr><th>Product Name</th><th>Price</th><th>Unit</th><th>Category</th><th>Vendor</th><th>Status</th></tr></thead>
+            <tbody>
+              ${productList.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>₱${p.price}</td>
+                  <td>${p.unit || 'N/A'}</td>
+                  <td>${p.category || 'N/A'}</td>
+                  <td>${p.stalls?.profiles?.full_name || p.stalls?.stall_name || 'Unknown'}</td>
+                  <td>${p.is_available ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>'}</td>
+                </tr>
+              `).join('')}
+              ${productList.length === 0 ? '<tr><td colspan="6" class="text-center">No products found</td></tr>' : ''}
+            </tbody>
+          </table>
+          ${totalProducts > 100 ? `<p class="text-center" style="font-size:10px; color:#999; margin-top:-10px;">* Showing first 100 of ${totalProducts} products. Full list available in the app.</p>` : ''}
+          
+          <div class="footer">
+            <p>PalengkeHub Admin Dashboard - Confidential Report</p>
+            <p>Generated on ${currentDate} | For internal use only</p>
+          </div>
         </div>
         
-        <!-- Summary Section -->
-        <div class="summary-cards">
-          <div class="card">
-            <div class="card-icon">📦</div>
-            <div class="card-value">${totalProducts}</div>
-            <div class="card-label">Total Products</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">✅</div>
-            <div class="card-value">${activeProducts}</div>
-            <div class="card-label">Active Products</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">💰</div>
-            <div class="card-value">₱${overallAvgPrice}</div>
-            <div class="card-label">Avg Price</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">🏷️</div>
-            <div class="card-value">${productsOnSale}</div>
-            <div class="card-label">On Sale</div>
-          </div>
-        </div>
-        
-        <div class="summary-cards">
-          <div class="card">
-            <div class="card-icon">⬇️</div>
-            <div class="card-value">₱${minPrice}</div>
-            <div class="card-label">Min Price</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">⬆️</div>
-            <div class="card-value">₱${maxPrice}</div>
-            <div class="card-label">Max Price</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">🏪</div>
-            <div class="card-value">${vendorsList.length}</div>
-            <div class="card-label">Active Vendors</div>
-          </div>
-          <div class="card">
-            <div class="card-icon">⏸️</div>
-            <div class="card-value">${inactiveProducts}</div>
-            <div class="card-label">Inactive</div>
-          </div>
-        </div>
-        
-        <!-- Price Distribution Chart -->
-        <h2 class="section-title">📊 Price Distribution</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Price Range</th>
-              <th>Number of Products</th>
-              <th>Percentage</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${Object.entries(priceRanges).map(([range, count]) => `
-              <tr>
-                <td>${range}</td>
-                <td>${count}</td>
-                <td>${totalProducts > 0 ? ((count / totalProducts) * 100).toFixed(1) : 0}%</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Category Averages -->
-        <h2 class="section-title">📂 Average Price by Category</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Average Price</th>
-              <th>Products Count</th>
-              <th>Unique Items</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${categoryAverages.map(cat => `
-              <tr>
-                <td>${cat.category}</td>
-                <td>₱${cat.avgPrice}</td>
-                <td>${cat.count}</td>
-                <td>${cat.uniqueProducts}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Top Products by Price -->
-        <h2 class="section-title">🔥 Top 10 Most Expensive Products</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Price</th>
-              <th>Category</th>
-              <th>Unit</th>
-              <th>Vendor</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allProducts.sort((a, b) => b.price - a.price).slice(0, 10).map(product => `
-              <tr>
-                <td>${product.name}</td>
-                <td>₱${product.price}</td>
-                <td>${product.category || 'N/A'}</td>
-                <td>${product.unit}</td>
-                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Products with Price Warnings -->
-        <h2 class="section-title">⚠️ Products with Price Warnings</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Price</th>
-              <th>Category</th>
-              <th>Vendor</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').map(product => `
-              <tr class="price-warning">
-                <td>${product.name}</td>
-                <td>₱${product.price}</td>
-                <td>${product.category || 'N/A'}</td>
-                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
-                <td>${product.is_available ? '<span class="badge">Active</span>' : '<span class="badge badge-warning">Inactive</span>'}</td>
-              </tr>
-            `).join('')}
-            ${allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').length === 0 ? `
-              <tr>
-                <td colspan="5" style="text-align: center; color: #10B981;">✅ No price warnings found</td>
-              </tr>
-            ` : ''}
-          </tbody>
-        </table>
-        
-        <!-- Complete Products List -->
-        <h2 class="section-title">📋 Complete Products List</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Price</th>
-              <th>Unit</th>
-              <th>Category</th>
-              <th>Vendor</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allProducts.slice(0, 50).map(product => `
-              <tr>
-                <td>${product.name}</td>
-                <td>₱${product.price}</td>
-                <td>${product.unit}</td>
-                <td>${product.category || 'N/A'}</td>
-                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
-                <td>${product.is_available ? 'Active' : 'Inactive'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        ${allProducts.length > 50 ? `<p style="text-align: center; color: #666;">* Showing first 50 of ${allProducts.length} products</p>` : ''}
-        
-        <div class="footer">
-          <p>PalengkeHub Admin Dashboard - Products Report</p>
-          <p>Generated on ${currentDate} | Confidential</p>
-        </div>
+        <script>
+          // Auto-open print dialog when page loads (optional)
+          // window.onload = function() { window.print(); };
+        </script>
       </body>
       </html>
     `;
     
-    // Generate PDF
-    const { uri } = await Print.printToFileAsync({ html });
-    
-    // Share the PDF
+    // For web: Open in new window and print
     if (Platform.OS === 'web') {
-      // For web: download the file
-      const link = document.createElement('a');
-      link.href = uri;
-      link.download = `products_report_${Date.now()}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      Alert.alert('Success', 'Report downloaded successfully');
-    } else if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri);
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      // Optional: Auto print
+      // printWindow.print();
     } else {
-      Alert.alert('Success', `Report saved to: ${uri}`);
+      // For mobile: Use expo-print
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
     }
+    
+    Alert.alert('Success', 'Report opened in new window. Use Ctrl+P to save as PDF.');
     
   } catch (error) {
     console.error('Error generating PDF:', error);
-    Alert.alert('Error', 'Failed to generate PDF report');
+    Alert.alert('Error', 'Failed to generate report: ' + error.message);
   }
 };
   
