@@ -35,6 +35,44 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   }
 };
 
+// ✅ Generate consistent random rating based on stall ID
+const getStallRating = (stallId, realRating) => {
+  if (realRating && realRating > 0) return realRating;
+  
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  const rating = 2.5 + (randomValue * 2.5);
+  return Math.round(rating * 10) / 10;
+};
+
+// ✅ Generate random review count
+const getRandomRatingCount = (stallId) => {
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  return Math.floor(5 + (randomValue * 195));
+};
+
+// Star Rating Component
+const StarRating = ({ rating, size = 12 }) => {
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {[...Array(fullStars)].map((_, i) => (
+        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+      ))}
+      {hasHalfStar && (
+        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+      )}
+      {[...Array(emptyStars)].map((_, i) => (
+        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+      ))}
+    </View>
+  );
+};
+
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
@@ -71,7 +109,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
             section,
             description,
             average_rating,
-            total_ratings
+            total_ratings,
+            image_url,
+            is_temporarily_closed
           )
         `)
         .eq('id', productId)
@@ -94,7 +134,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
         .maybeSingle();
       
       setPromotion(promoData);
-      console.log('Promotion:', promoData);
       
       // 3. Determine available units
       let units = [];
@@ -133,7 +172,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   };
 
-  // Get the original (non‑discounted) price for a given unit (from vendor config)
   const getUnitOriginalPrice = (unit) => {
     const priceOptions = product?.price_options || {};
     if (priceOptions[unit]) {
@@ -143,7 +181,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
     return (product?.price || 0) * multiplier;
   };
 
-  // Get discounted price for a unit (if promotion exists)
   const getUnitPrice = (unit) => {
     const original = getUnitOriginalPrice(unit);
     return getDiscountedPrice(original, promotion);
@@ -186,7 +223,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
     
     if (product && stall) {
-      // Create a copy with the discounted price
       const cartProduct = {
         ...product,
         price: currentPrice,
@@ -283,6 +319,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
     });
   };
 
+  // ✅ Get display rating (randomized if no real rating)
+  const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
+  const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
+
   const totalPrice = currentPrice * quantity;
 
   if (loading) {
@@ -369,7 +409,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* Unit Selection - Shows discounted prices */}
+      {/* Unit Selection */}
       {availableUnits.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Unit</Text>
@@ -441,7 +481,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <Text style={styles.totalPrice}>₱{totalPrice.toFixed(2)}</Text>
       </View>
 
-      {/* Stall Info */}
+      {/* Stall Info with Random Rating */}
       {stall ? (
         <TouchableOpacity 
           style={styles.stallSection}
@@ -450,19 +490,27 @@ export default function ProductDetailsScreen({ route, navigation }) {
         >
           <Text style={styles.sectionTitle}>Sold by</Text>
           <View style={styles.stallCard}>
+            {/* ✅ Stall Header with Random Rating */}
             <View style={styles.stallHeader}>
               <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
-              {stall.average_rating > 0 ? (
-                <Text style={styles.stallRating}>⭐ {stall.average_rating.toFixed(1)}</Text>
-              ) : null}
+              <View style={styles.ratingContainer}>
+                <StarRating rating={displayRating} size={12} />
+                <Text style={styles.stallRatingText}>
+                  {displayRating.toFixed(1)}
+                </Text>
+                <Text style={styles.stallRatingCount}>({ratingCount} reviews)</Text>
+              </View>
             </View>
+            
             <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
             <Text style={styles.stallSectionText}>{stall.section}</Text>
+            
             {stall.description ? (
               <Text style={styles.stallDescription} numberOfLines={2}>
                 {stall.description}
               </Text>
             ) : null}
+            
             <Text style={styles.viewStallLink}>View Stall Details →</Text>
           </View>
         </TouchableOpacity>
@@ -534,7 +582,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
-  
   errorText: {
     fontSize: 16,
     color: '#EF4444',
@@ -742,15 +789,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    flexWrap: 'wrap',
   },
   stallNumber: {
     fontSize: 14,
     color: '#DC2626',
     fontWeight: '600',
-  },
-  stallRating: {
-    fontSize: 12,
-    color: '#F59E0B',
   },
   stallName: {
     fontSize: 16,
@@ -773,6 +817,20 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     marginTop: 10,
     fontWeight: '500',
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  stallRatingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F59E0B',
+  },
+  stallRatingCount: {
+    fontSize: 10,
+    color: '#9CA3AF',
   },
   reportSection: {
     backgroundColor: 'white',

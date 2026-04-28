@@ -19,15 +19,49 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 const { width, height } = Dimensions.get('window');
+
+// Stall sections available in the market
+const STALL_SECTIONS = [
+  'Meat Section',
+  'Vegetable Section',
+  'Fish Section',
+  'Fruit Section',
+  'Dry Goods',
+  'Poultry Section',
+  'Rice Section',
+  'Condiments Section',
+  'Frozen Goods',
+  'Beverages Section',
+];
 
 export const SignUpScreen = ({ setIsGuest }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState('consumer');
+  
+  // Vendor-specific fields
+  const [stallName, setStallName] = useState('');
+  const [stallSection, setStallSection] = useState('');
+  const [stallNumber, setStallNumber] = useState('');
+  
+  // Document uploads
+  const [validId, setValidId] = useState(null);
+  const [validIdName, setValidIdName] = useState('');
+  const [businessPermit, setBusinessPermit] = useState(null);
+  const [businessPermitName, setBusinessPermitName] = useState('');
+  const [barangayClearance, setBarangayClearance] = useState(null);
+  const [barangayClearanceName, setBarangayClearanceName] = useState('');
+  
+  const [uploading, setUploading] = useState(false);
+  const [showSectionPicker, setShowSectionPicker] = useState(false);
+  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailValid, setEmailValid] = useState(false);
@@ -65,6 +99,16 @@ export const SignUpScreen = ({ setIsGuest }) => {
         useNativeDriver: true,
       }),
     ]).start();
+    
+    // Request permissions for image picker
+    (async () => {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Needed', 'Please grant gallery access to upload documents');
+        }
+      }
+    })();
   }, []);
 
   // Check if passwords match
@@ -104,7 +148,124 @@ export const SignUpScreen = ({ setIsGuest }) => {
     setPasswordStrength(strength);
   };
 
+  // Pick image/document functions
+  const pickDocument = async (type, setFile, setFileName) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      
+      if (result.canceled === false) {
+        const file = result.assets[0];
+        setFile(file);
+        setFileName(file.name);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Document pick error:', error);
+      Alert.alert('Error', 'Failed to select document');
+    }
+  };
+
+  const pickImage = async (type, setFile, setFileName) => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+        base64: true,
+      });
+      
+      if (!result.canceled) {
+        const file = {
+          uri: result.assets[0].uri,
+          name: `${type}_${Date.now()}.jpg`,
+          type: 'image/jpeg',
+          base64: result.assets[0].base64,
+        };
+        setFile(file);
+        setFileName(file.name);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Image pick error:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  const uploadDocument = async (file, folder) => {
+    if (!file) return null;
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.type || 'image/jpeg',
+      });
+      
+      // Upload to your storage bucket
+      const { data, error } = await supabase.storage
+        .from('vendor_documents')
+        .upload(`${folder}/${Date.now()}_${file.name}`, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      
+      if (error) throw error;
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('vendor_documents')
+        .getPublicUrl(data.path);
+      
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+  };
+
+  // Validate vendor fields
+  const validateVendorFields = () => {
+    if (role !== 'vendor') return true;
+    
+    if (!stallName.trim()) {
+      Alert.alert('Required', 'Please enter your stall name');
+      return false;
+    }
+    
+    if (!stallSection) {
+      Alert.alert('Required', 'Please select your stall section');
+      return false;
+    }
+    
+    if (!stallNumber.trim()) {
+      Alert.alert('Required', 'Please enter your stall number');
+      return false;
+    }
+    
+    if (!phone.trim()) {
+      Alert.alert('Required', 'Please enter your contact number');
+      return false;
+    }
+    
+    if (!validId) {
+      Alert.alert('Required', 'Please upload a valid government ID');
+      return false;
+    }
+    
+    if (!businessPermit) {
+      Alert.alert('Required', 'Please upload your business permit');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSignUp = async () => {
+    // Basic validation
     if (!fullName || !email || !password || !confirmPassword) {
       shake();
       Alert.alert('Error', 'Please fill in all fields');
@@ -129,6 +290,12 @@ export const SignUpScreen = ({ setIsGuest }) => {
       return;
     }
 
+    // Vendor-specific validation
+    if (!validateVendorFields()) {
+      shake();
+      return;
+    }
+
     // Button press animation
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
@@ -137,18 +304,54 @@ export const SignUpScreen = ({ setIsGuest }) => {
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsLoading(true);
+    setUploading(true);
 
     try {
-      const result = await signUp(email, password, fullName, role);
+      // Upload documents if vendor
+      let validIdUrl = null;
+      let businessPermitUrl = null;
+      let barangayClearanceUrl = null;
+      
+      if (role === 'vendor') {
+        const timestamp = Date.now();
+        const userId = `temp_${timestamp}`;
+        
+        validIdUrl = await uploadDocument(validId, `valid_ids/${userId}`);
+        businessPermitUrl = await uploadDocument(businessPermit, `business_permits/${userId}`);
+        if (barangayClearance) {
+          barangayClearanceUrl = await uploadDocument(barangayClearance, `clearances/${userId}`);
+        }
+      }
+      
+      // Prepare vendor metadata with document URLs
+      const metadata = role === 'vendor' ? {
+        stall_name: stallName,
+        stall_section: stallSection,
+        stall_number: stallNumber,
+        phone: phone,
+        valid_id_url: validIdUrl,
+        business_permit_url: businessPermitUrl,
+        barangay_clearance_url: barangayClearanceUrl,
+        requires_approval: true,
+      } : { phone: phone };
+      
+      const result = await signUp(email, password, fullName, role, metadata);
+      
       if (result.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setSignUpSuccess(true);
         
+        let successMessage = result.message || 'Account created successfully! Please check your email to verify.';
+        
+        if (role === 'vendor') {
+          successMessage = 'Vendor application submitted with documents! Your account will be reviewed by admin within 2-3 business days. You will receive an email once approved.';
+        }
+        
         setTimeout(() => {
           setSignUpSuccess(false);
           Alert.alert(
-            'Success!',
-            result.message || 'Account created successfully! Please check your email to verify.',
+            role === 'vendor' ? 'Application Submitted!' : 'Success!',
+            successMessage,
             [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
           );
         }, 1500);
@@ -158,10 +361,12 @@ export const SignUpScreen = ({ setIsGuest }) => {
         Alert.alert('Sign Up Failed', result.error);
       }
     } catch (error) {
+      console.error('Sign up error:', error);
       shake();
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
+      setUploading(false);
     }
   };
 
@@ -184,12 +389,186 @@ export const SignUpScreen = ({ setIsGuest }) => {
     return 'Strong';
   };
 
+  // Document upload component
+  const DocumentUpload = ({ label, icon, required, onUpload, fileName, file }) => (
+    <View style={styles.documentUploadGroup}>
+      <Text style={styles.documentLabel}>
+        {required && <Text style={styles.requiredStar}>*</Text>}
+        {label}
+      </Text>
+      <TouchableOpacity 
+        style={[styles.uploadButton, file && styles.uploadButtonSuccess]}
+        onPress={onUpload}
+      >
+        <Text style={styles.uploadIcon}>{file ? '✅' : icon}</Text>
+        <Text style={[styles.uploadText, file && styles.uploadTextSuccess]}>
+          {file ? fileName : `Upload ${label}`}
+        </Text>
+      </TouchableOpacity>
+      {required && !file && (
+        <Text style={styles.uploadErrorText}>Required document missing</Text>
+      )}
+    </View>
+  );
+
+  // Render vendor-specific fields
+  const renderVendorFields = () => {
+    if (role !== 'vendor') return null;
+    
+    return (
+      <View style={styles.vendorSection}>
+        <Text style={styles.vendorSectionTitle}>🏪 Stall Information</Text>
+        <Text style={styles.vendorSectionSubtitle}>Please provide your stall details for verification</Text>
+        
+        {/* Stall Name */}
+        <View style={styles.inputGroup}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputIcon}>🏷️</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Stall Name (e.g., Mang Juan's Meat Shop)"
+              placeholderTextColor="#9CA3AF"
+              value={stallName}
+              onChangeText={setStallName}
+            />
+          </View>
+        </View>
+        
+        {/* Stall Section Dropdown */}
+        <View style={styles.inputGroup}>
+          <TouchableOpacity 
+            style={styles.inputWrapper}
+            onPress={() => setShowSectionPicker(!showSectionPicker)}
+          >
+            <Text style={styles.inputIcon}>📍</Text>
+            <Text style={[styles.input, stallSection ? styles.inputText : styles.placeholderText]}>
+              {stallSection || 'Select Stall Section'}
+            </Text>
+            <Text style={styles.dropdownArrow}>▼</Text>
+          </TouchableOpacity>
+          
+          {showSectionPicker && (
+            <View style={styles.sectionPicker}>
+              {STALL_SECTIONS.map((section) => (
+                <TouchableOpacity
+                  key={section}
+                  style={[
+                    styles.sectionOption,
+                    stallSection === section && styles.sectionOptionActive
+                  ]}
+                  onPress={() => {
+                    setStallSection(section);
+                    setShowSectionPicker(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Text style={[
+                    styles.sectionOptionText,
+                    stallSection === section && styles.sectionOptionTextActive
+                  ]}>
+                    {section}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+        
+        {/* Stall Number */}
+        <View style={styles.inputGroup}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputIcon}>🔢</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Stall Number (e.g., 42, B-12)"
+              placeholderTextColor="#9CA3AF"
+              value={stallNumber}
+              onChangeText={setStallNumber}
+            />
+          </View>
+        </View>
+        
+        {/* Contact Number */}
+        <View style={styles.inputGroup}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputIcon}>📞</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Contact Number"
+              placeholderTextColor="#9CA3AF"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
+          </View>
+        </View>
+
+        {/* Document Uploads Section */}
+        <View style={styles.documentsSection}>
+          <Text style={styles.documentsSectionTitle}>📄 Required Documents</Text>
+          <Text style={styles.documentsSectionSubtitle}>
+            Please upload clear photos or PDFs of the following documents
+          </Text>
+          
+          {/* Valid ID Upload */}
+          <DocumentUpload
+            label="Government Issued ID"
+            icon="🆔"
+            required={true}
+            fileName={validIdName}
+            file={validId}
+            onUpload={() => pickImage('valid_id', setValidId, setValidIdName)}
+          />
+          
+          {/* Business Permit Upload */}
+          <DocumentUpload
+            label="Business Permit / Mayor's Permit"
+            icon="📜"
+            required={true}
+            fileName={businessPermitName}
+            file={businessPermit}
+            onUpload={() => pickDocument('business_permit', setBusinessPermit, setBusinessPermitName)}
+          />
+          
+          {/* Barangay Clearance (Optional but recommended) */}
+          <DocumentUpload
+            label="Barangay Clearance"
+            icon="🏘️"
+            required={false}
+            fileName={barangayClearanceName}
+            file={barangayClearance}
+            onUpload={() => pickDocument('clearance', setBarangayClearance, setBarangayClearanceName)}
+          />
+        </View>
+        
+        <View style={styles.requirementsNote}>
+          <Text style={styles.requirementsNoteIcon}>📋</Text>
+          <View style={styles.requirementsNoteContent}>
+            <Text style={styles.requirementsNoteTitle}>Document Requirements</Text>
+            <Text style={styles.requirementsNoteText}>
+              • Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
+              • Business Permit or Mayor's Permit{'\n'}
+              • Barangay Clearance (Recommended for faster approval){'\n'}
+              • Photo of your stall (to be submitted after approval)
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.privacyNote}>
+          <Text style={styles.privacyNoteIcon}>🔒</Text>
+          <Text style={styles.privacyNoteText}>
+            Your documents are securely stored and will only be used for verification purposes.
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Animated Gradient Background */}
       <Animated.View style={[styles.background, { opacity: fadeAnim }]}>
         <LinearGradient
           colors={['#FFF5F5', '#FFFFFF', '#FFF0F0']}
@@ -204,7 +583,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo Section with Animation */}
+        {/* Logo Section */}
         <Animated.View 
           style={[
             styles.headerSection,
@@ -231,7 +610,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           <Text style={styles.subtitle}>Create your account</Text>
         </Animated.View>
 
-        {/* Form Section with Slide Animation */}
+        {/* Form Section */}
         <Animated.View 
           style={[
             styles.formSection,
@@ -254,7 +633,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 placeholderTextColor="#9CA3AF"
                 value={fullName}
                 onChangeText={setFullName}
-                onFocus={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
               />
             </View>
           </View>
@@ -271,7 +649,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 onChangeText={validateEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                onFocus={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
               />
               {emailValid && email.length > 0 && (
                 <Text style={styles.checkIcon}>✓</Text>
@@ -281,6 +658,23 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <Text style={styles.errorText}>Please enter a valid email</Text>
             )}
           </View>
+
+          {/* Phone Input (optional for customers) */}
+          {role === 'consumer' && (
+            <View style={styles.inputGroup}>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputIcon}>📞</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Contact Number (Optional)"
+                  placeholderTextColor="#9CA3AF"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+          )}
 
           {/* Password Input */}
           <View style={styles.inputGroup}>
@@ -293,13 +687,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 value={password}
                 onChangeText={checkPasswordStrength}
                 secureTextEntry={!showPassword}
-                onFocus={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
               />
               <TouchableOpacity 
-                onPress={() => {
-                  setShowPassword(!showPassword);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
+                onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeIcon}>
@@ -344,13 +734,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
-                onFocus={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
               />
               <TouchableOpacity 
-                onPress={() => {
-                  setShowConfirmPassword(!showConfirmPassword);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeIcon}>
@@ -395,12 +781,15 @@ export const SignUpScreen = ({ setIsGuest }) => {
             </View>
           </View>
 
+          {/* Vendor-specific fields */}
+          {renderVendorFields()}
+
           {/* Sign Up Button */}
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity 
               style={styles.signUpButton}
               onPress={handleSignUp}
-              disabled={isLoading || signUpSuccess}
+              disabled={isLoading || signUpSuccess || uploading}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -409,12 +798,12 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 end={{ x: 1, y: 0 }}
                 style={styles.signUpGradient}
               >
-                {isLoading ? (
+                {isLoading || uploading ? (
                   <ActivityIndicator color="white" />
                 ) : signUpSuccess ? (
-                  <Text style={styles.signUpButtonText}>✓ Account Created!</Text>
+                  <Text style={styles.signUpButtonText}>✓ {role === 'vendor' ? 'Application Sent!' : 'Account Created!'}</Text>
                 ) : (
-                  <Text style={styles.signUpButtonText}>Create Account</Text>
+                  <Text style={styles.signUpButtonText}>{role === 'vendor' ? 'Submit Application' : 'Create Account'}</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -565,6 +954,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
   },
+  inputText: {
+    color: '#111827',
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
   eyeButton: {
     padding: 8,
   },
@@ -639,6 +1034,159 @@ const styles = StyleSheet.create({
   },
   roleTextActive: {
     color: 'white',
+  },
+  vendorSection: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  vendorSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  vendorSectionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 16,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    paddingLeft: 8,
+  },
+  sectionPicker: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginTop: 8,
+    maxHeight: 200,
+  },
+  sectionOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  sectionOptionActive: {
+    backgroundColor: '#FEF3F2',
+  },
+  sectionOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  sectionOptionTextActive: {
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  documentsSection: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  documentsSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  documentsSectionSubtitle: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  documentUploadGroup: {
+    marginBottom: 16,
+  },
+  documentLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  requiredStar: {
+    color: '#EF4444',
+    marginRight: 4,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    borderStyle: 'dashed',
+  },
+  uploadButtonSuccess: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#10B981',
+    borderStyle: 'solid',
+  },
+  uploadIcon: {
+    fontSize: 22,
+  },
+  uploadText: {
+    fontSize: 14,
+    color: '#6B7280',
+    flex: 1,
+  },
+  uploadTextSuccess: {
+    color: '#10B981',
+    fontWeight: '500',
+  },
+  uploadErrorText: {
+    fontSize: 11,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  requirementsNote: {
+    flexDirection: 'row',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  requirementsNoteIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  requirementsNoteContent: {
+    flex: 1,
+  },
+  requirementsNoteTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  requirementsNoteText: {
+    fontSize: 11,
+    color: '#78350F',
+    lineHeight: 16,
+  },
+  privacyNote: {
+    flexDirection: 'row',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+  },
+  privacyNoteIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  privacyNoteText: {
+    flex: 1,
+    fontSize: 10,
+    color: '#3B82F6',
+    lineHeight: 14,
   },
   signUpButton: {
     marginBottom: 24,

@@ -14,10 +14,14 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
 
 const isWeb = Platform.OS === 'web';
 
@@ -125,6 +129,7 @@ const ReportsSection = () => {
     };
     return icons[type] || '📝';
   };
+
 
   const currentReports = activeReportTab === 'customer' ? customerReports : vendorReports;
   const pendingCount = currentReports.filter(r => r.status === 'pending').length;
@@ -365,6 +370,14 @@ export default function AdminDashboardScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   
+// Add these with your other state declarations
+const [allProducts, setAllProducts] = useState([]);
+const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
+const [priceWarnings, setPriceWarnings] = useState({});
+// DELETE these from inside renderProducts
+const [searchVendorText, setSearchVendorText] = useState('');
+const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+  
   // Data states
   const [stats, setStats] = useState({});
   const [users, setUsers] = useState([]);
@@ -399,12 +412,35 @@ export default function AdminDashboardScreen({ navigation }) {
   const [reminderModalVisible, setReminderModalVisible] = useState(false);
   const [reminderReason, setReminderReason] = useState('');
   const [selectedReminderVendor, setSelectedReminderVendor] = useState(null);
+const fetchAllProducts = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        stalls (
+          id,
+          stall_number,
+          stall_name,
+          section,
+          vendor_id,
+          profiles:vendor_id (full_name, email)
+        )
+      `)
+      .order('created_at', { ascending: false });
 
+    if (error) throw error;
+    setAllProducts(data || []);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+  }
+};
   // Fetch all data
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      
+      // Add this in fetchAllData function
+await fetchAllProducts();
       const [usersCount, vendorsCount, consumersCount, pendingApps, stallsCount, ordersCount, salesData] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'vendor'),
@@ -525,6 +561,380 @@ export default function AdminDashboardScreen({ navigation }) {
     setRefreshing(false);
   };
 
+// ========== PDF REPORT GENERATION ==========
+const generatePDFReport = async () => {
+  try {
+    // Get current date for report title
+    const currentDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    
+    // Calculate statistics for the report
+    const totalProducts = allProducts.length;
+    const activeProducts = allProducts.filter(p => p.is_available).length;
+    const inactiveProducts = totalProducts - activeProducts;
+    const productsOnSale = allProducts.filter(p => p.promotion?.is_active).length;
+    
+    const prices = allProducts.map(p => p.price);
+    const overallAvgPrice = prices.length > 0 ? (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2) : 0;
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    
+    // Category averages
+    const normalizeCategory = (category) => {
+      if (!category) return 'Uncategorized';
+      return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+    };
+    
+    const categoryPriceMap = new Map();
+    allProducts.forEach(p => {
+      const category = normalizeCategory(p.category || 'Uncategorized');
+      if (!categoryPriceMap.has(category)) {
+        categoryPriceMap.set(category, { totalPrice: 0, count: 0, products: [] });
+      }
+      const entry = categoryPriceMap.get(category);
+      entry.totalPrice += p.price;
+      entry.count++;
+      entry.products.push(p.name);
+    });
+    
+    // Generate HTML for PDF
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Products Report</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            color: #333;
+            line-height: 1.6;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #DC2626;
+          }
+          .logo {
+            font-size: 32px;
+            margin-bottom: 10px;
+          }
+          .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #DC2626;
+            margin: 0;
+          }
+          .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+          }
+          .date {
+            font-size: 12px;
+            color: #888;
+            margin-top: 10px;
+          }
+          .summary-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+          .card {
+            flex: 1;
+            min-width: 150px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+          }
+          .card-icon {
+            font-size: 30px;
+            margin-bottom: 10px;
+          }
+          .card-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #DC2626;
+            margin: 5px 0;
+          }
+          .card-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+          }
+          .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #DC2626;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          th {
+            background-color: #DC2626;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-size: 12px;
+          }
+          td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 12px;
+          }
+          .price-warning {
+            background-color: #FEF3C7;
+          }
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+            border-top: 1px solid #e9ecef;
+          }
+          .badge {
+            display: inline-block;
+            background: #10B981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+          }
+          .badge-warning {
+            background: #F59E0B;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo">🛒</div>
+          <h1 class="title">PalengkeHub Products Report</h1>
+          <div class="subtitle">Complete Product Monitoring & Analytics</div>
+          <div class="date">Generated on: ${currentDate}</div>
+        </div>
+        
+        <!-- Summary Section -->
+        <div class="summary-cards">
+          <div class="card">
+            <div class="card-icon">📦</div>
+            <div class="card-value">${totalProducts}</div>
+            <div class="card-label">Total Products</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">✅</div>
+            <div class="card-value">${activeProducts}</div>
+            <div class="card-label">Active Products</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">💰</div>
+            <div class="card-value">₱${overallAvgPrice}</div>
+            <div class="card-label">Avg Price</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">🏷️</div>
+            <div class="card-value">${productsOnSale}</div>
+            <div class="card-label">On Sale</div>
+          </div>
+        </div>
+        
+        <div class="summary-cards">
+          <div class="card">
+            <div class="card-icon">⬇️</div>
+            <div class="card-value">₱${minPrice}</div>
+            <div class="card-label">Min Price</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">⬆️</div>
+            <div class="card-value">₱${maxPrice}</div>
+            <div class="card-label">Max Price</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">🏪</div>
+            <div class="card-value">${vendorsList.length}</div>
+            <div class="card-label">Active Vendors</div>
+          </div>
+          <div class="card">
+            <div class="card-icon">⏸️</div>
+            <div class="card-value">${inactiveProducts}</div>
+            <div class="card-label">Inactive</div>
+          </div>
+        </div>
+        
+        <!-- Price Distribution Chart -->
+        <h2 class="section-title">📊 Price Distribution</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Price Range</th>
+              <th>Number of Products</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(priceRanges).map(([range, count]) => `
+              <tr>
+                <td>${range}</td>
+                <td>${count}</td>
+                <td>${totalProducts > 0 ? ((count / totalProducts) * 100).toFixed(1) : 0}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <!-- Category Averages -->
+        <h2 class="section-title">📂 Average Price by Category</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Average Price</th>
+              <th>Products Count</th>
+              <th>Unique Items</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${categoryAverages.map(cat => `
+              <tr>
+                <td>${cat.category}</td>
+                <td>₱${cat.avgPrice}</td>
+                <td>${cat.count}</td>
+                <td>${cat.uniqueProducts}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <!-- Top Products by Price -->
+        <h2 class="section-title">🔥 Top 10 Most Expensive Products</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Price</th>
+              <th>Category</th>
+              <th>Unit</th>
+              <th>Vendor</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allProducts.sort((a, b) => b.price - a.price).slice(0, 10).map(product => `
+              <tr>
+                <td>${product.name}</td>
+                <td>₱${product.price}</td>
+                <td>${product.category || 'N/A'}</td>
+                <td>${product.unit}</td>
+                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <!-- Products with Price Warnings -->
+        <h2 class="section-title">⚠️ Products with Price Warnings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Price</th>
+              <th>Category</th>
+              <th>Vendor</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').map(product => `
+              <tr class="price-warning">
+                <td>${product.name}</td>
+                <td>₱${product.price}</td>
+                <td>${product.category || 'N/A'}</td>
+                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
+                <td>${product.is_available ? '<span class="badge">Active</span>' : '<span class="badge badge-warning">Inactive</span>'}</td>
+              </tr>
+            `).join('')}
+            ${allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').length === 0 ? `
+              <tr>
+                <td colspan="5" style="text-align: center; color: #10B981;">✅ No price warnings found</td>
+              </tr>
+            ` : ''}
+          </tbody>
+        </table>
+        
+        <!-- Complete Products List -->
+        <h2 class="section-title">📋 Complete Products List</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Price</th>
+              <th>Unit</th>
+              <th>Category</th>
+              <th>Vendor</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allProducts.slice(0, 50).map(product => `
+              <tr>
+                <td>${product.name}</td>
+                <td>₱${product.price}</td>
+                <td>${product.unit}</td>
+                <td>${product.category || 'N/A'}</td>
+                <td>${product.stalls?.profiles?.full_name || product.stalls?.stall_name || 'Unknown'}</td>
+                <td>${product.is_available ? 'Active' : 'Inactive'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${allProducts.length > 50 ? `<p style="text-align: center; color: #666;">* Showing first 50 of ${allProducts.length} products</p>` : ''}
+        
+        <div class="footer">
+          <p>PalengkeHub Admin Dashboard - Products Report</p>
+          <p>Generated on ${currentDate} | Confidential</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    // Generate PDF
+    const { uri } = await Print.printToFileAsync({ html });
+    
+    // Share the PDF
+    if (Platform.OS === 'web') {
+      // For web: download the file
+      const link = document.createElement('a');
+      link.href = uri;
+      link.download = `products_report_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      Alert.alert('Success', 'Report downloaded successfully');
+    } else if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri);
+    } else {
+      Alert.alert('Success', `Report saved to: ${uri}`);
+    }
+    
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    Alert.alert('Error', 'Failed to generate PDF report');
+  }
+};
+  
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -714,6 +1124,39 @@ const confirmStallAction = (stall, action) => {
   setStallModalVisible(true);
 };
 
+const exportProductsReport = async (products) => {
+  try {
+    const csvRows = [
+      ['Product Name', 'Price', 'Unit', 'Category', 'Vendor', 'Status', 'Image URL']
+    ];
+    
+    products.forEach(product => {
+      csvRows.push([
+        product.name,
+        product.price,
+        product.unit,
+        product.category,
+        product.stalls?.profiles?.full_name || 'Unknown',
+        product.is_available ? 'Active' : 'Inactive',
+        product.image_url || ''
+      ]);
+    });
+    
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const fileUri = FileSystem.documentDirectory + `products_report_${Date.now()}.csv`;
+    await FileSystem.writeAsStringAsync(fileUri, csvContent);
+    
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(fileUri);
+    } else {
+      Alert.alert('Export Ready', 'File saved locally');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    Alert.alert('Error', 'Failed to export report');
+  }
+};
+
 const executeStallAction = async () => {
   if (!selectedStall) {
     console.log('No selected stall');
@@ -789,18 +1232,466 @@ const executeStallAction = async () => {
     return { status: 'Critical', color: '#EF4444', issues };
   };
 
-  const menuItems = [
-    { id: 'overview', label: 'Overview', icon: '📊', color: '#DC2626' },
-    { id: 'users', label: 'Users', icon: '👥', color: '#3B82F6' },
-    { id: 'vendors', label: 'Vendors', icon: '🏪', color: '#10B981' },
-    { id: 'compliance', label: 'Compliance', icon: '✅', color: '#8B5CF6' },
-    { id: 'applications', label: 'Applications', icon: '📋', color: '#F59E0B' },
-    { id: 'stalls', label: 'Stalls', icon: '📍', color: '#EC4899' },
-    { id: 'announcements', label: 'Announcements', icon: '📢', color: '#8B5CF6' },
-    { id: 'violations', label: 'Violations', icon: '⚠️', color: '#EF4444' },
-    { id: 'complaints', label: 'Complaints', icon: '💬', color: '#EC4899' },
-    { id: 'reports', label: 'Reports', icon: '📄', color: '#6B7280' },
-  ];
+const menuItems = [
+  { id: 'overview', label: 'Overview', icon: '📊', color: '#DC2626' },
+  { id: 'users', label: 'Users', icon: '👥', color: '#3B82F6' },
+  { id: 'vendors', label: 'Vendors', icon: '🏪', color: '#10B981' },
+  { id: 'compliance', label: 'Compliance', icon: '✅', color: '#8B5CF6' },
+  { id: 'applications', label: 'Applications', icon: '📋', color: '#F59E0B' },
+  { id: 'stalls', label: 'Stalls', icon: '📍', color: '#EC4899' },
+  { id: 'products', label: 'Products', icon: '📦', color: '#8B5CF6' }, // ✅ ADD THIS
+  { id: 'announcements', label: 'Announcements', icon: '📢', color: '#8B5CF6' },
+  { id: 'violations', label: 'Violations', icon: '⚠️', color: '#EF4444' },
+  { id: 'complaints', label: 'Complaints', icon: '💬', color: '#EC4899' },
+  { id: 'reports', label: 'Reports', icon: '📄', color: '#6B7280' },
+];
+
+const renderProducts = () => {
+  // ========== Basic Statistics ==========
+  const totalProducts = allProducts.length;
+  const activeProducts = allProducts.filter(p => p.is_available).length;
+  const inactiveProducts = totalProducts - activeProducts;
+  const productsOnSale = allProducts.filter(p => p.promotion?.is_active).length;
+  
+  const prices = allProducts.map(p => p.price);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+  const overallAvgPrice = prices.length > 0 ? (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2) : 0;
+  
+  const highPriceCount = allProducts.filter(p => p.price > 1000 && p.category !== 'Meat').length;
+  
+  // ========== Product Averages (by name) ==========
+  const productPriceMap = new Map();
+  allProducts.forEach(p => {
+    const productName = p.name;
+    if (!productPriceMap.has(productName)) {
+      productPriceMap.set(productName, {
+        name: productName,
+        totalPrice: 0,
+        count: 0,
+        prices: [],
+        vendors: new Set(),
+        category: p.category,
+        unit: p.unit
+      });
+    }
+    const entry = productPriceMap.get(productName);
+    entry.totalPrice += p.price;
+    entry.count++;
+    entry.prices.push(p.price);
+    entry.vendors.add(p.stalls?.profiles?.full_name || p.stalls?.stall_name || 'Unknown');
+  });
+  
+  const productAverages = Array.from(productPriceMap.values()).map(product => ({
+    ...product,
+    avgPrice: (product.totalPrice / product.count).toFixed(2),
+    minPrice: Math.min(...product.prices),
+    maxPrice: Math.max(...product.prices),
+    vendorCount: product.vendors.size,
+    priceSpread: Math.max(...product.prices) - Math.min(...product.prices)
+  })).sort((a, b) => parseFloat(b.avgPrice) - parseFloat(a.avgPrice));
+  
+  // ========== Category Normalization ==========
+  const normalizeCategory = (category) => {
+    if (!category) return 'Uncategorized';
+    return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+  };
+  
+  // Calculate average price per category (with normalization)
+  const categoryPriceMap = new Map();
+  allProducts.forEach(p => {
+    const rawCategory = p.category || 'Uncategorized';
+    const category = normalizeCategory(rawCategory);
+    
+    if (!categoryPriceMap.has(category)) {
+      categoryPriceMap.set(category, {
+        category: category,
+        totalPrice: 0,
+        count: 0,
+        products: new Set(),
+        originalCategories: new Set()
+      });
+    }
+    const entry = categoryPriceMap.get(category);
+    entry.totalPrice += p.price;
+    entry.count++;
+    entry.products.add(p.name);
+    entry.originalCategories.add(rawCategory);
+  });
+  
+  const categoryAverages = Array.from(categoryPriceMap.values()).map(cat => ({
+    ...cat,
+    avgPrice: (cat.totalPrice / cat.count).toFixed(2),
+    uniqueProducts: cat.products.size,
+    variations: cat.originalCategories.size > 1 ? cat.originalCategories.size : 0
+  })).sort((a, b) => parseFloat(b.avgPrice) - parseFloat(a.avgPrice));
+  
+  // ========== Category Distribution ==========
+  const categoryCount = {};
+  allProducts.forEach(p => {
+    const normalizedCat = normalizeCategory(p.category || 'Uncategorized');
+    categoryCount[normalizedCat] = (categoryCount[normalizedCat] || 0) + 1;
+  });
+  const topCategory = Object.entries(categoryCount).sort((a, b) => b[1] - a[1])[0];
+  
+  // ========== Price Distribution ==========
+  const priceRanges = {
+    'Under ₱50': allProducts.filter(p => p.price < 50).length,
+    '₱50 - ₱100': allProducts.filter(p => p.price >= 50 && p.price < 100).length,
+    '₱100 - ₱200': allProducts.filter(p => p.price >= 100 && p.price < 200).length,
+    '₱200 - ₱500': allProducts.filter(p => p.price >= 200 && p.price < 500).length,
+    '₱500+': allProducts.filter(p => p.price >= 500).length,
+  };
+  
+  // ========== Vendor List ==========
+  const vendorsMap = new Map();
+  allProducts.forEach(p => {
+    const vendorId = p.stalls?.vendor_id;
+    const vendorName = p.stalls?.profiles?.full_name || p.stalls?.stall_name || 'Unknown';
+    if (vendorId && !vendorsMap.has(vendorId)) {
+      vendorsMap.set(vendorId, {
+        id: vendorId,
+        name: vendorName,
+        productCount: allProducts.filter(x => x.stalls?.vendor_id === vendorId).length,
+        stallName: p.stalls?.stall_name,
+        stallNumber: p.stalls?.stall_number
+      });
+    }
+  });
+  
+  const vendorsList = Array.from(vendorsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const filteredVendors = searchVendorText 
+    ? vendorsList.filter(v => v.name.toLowerCase().includes(searchVendorText.toLowerCase()))
+    : vendorsList;
+  
+  const selectedVendor = vendorsList.find(v => v.id === selectedVendorFilter);
+  const filteredProducts = selectedVendorFilter === 'all' 
+    ? allProducts 
+    : allProducts.filter(p => p.stalls?.vendor_id === selectedVendorFilter);
+  
+  const getPriceWarning = (product) => {
+    const productAvg = productAverages.find(p => p.name === product.name);
+    if (productAvg && parseFloat(product.price) > parseFloat(productAvg.avgPrice) * 1.3) {
+      return { warning: true, message: `30%+ above avg (₱${productAvg.avgPrice})` };
+    }
+    if (product.price > 1000 && product.category !== 'Meat') {
+      return { warning: true, message: 'Price seems high' };
+    }
+    return { warning: false, message: '' };
+  };
+  
+  return (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      {/* KPI Cards */}
+      <View style={styles.statsGridModern}>
+        <LinearGradient colors={['#6366F1', '#818CF8']} style={styles.statCardModern}>
+          <View style={styles.statIconContainer}><Text style={styles.statIcon}>📦</Text></View>
+          <Text style={styles.statValueModern}>{totalProducts}</Text>
+          <Text style={styles.statLabelModern}>Total Products</Text>
+        </LinearGradient>
+
+        <LinearGradient colors={['#10B981', '#34D399']} style={styles.statCardModern}>
+          <View style={styles.statIconContainer}><Text style={styles.statIcon}>✅</Text></View>
+          <Text style={styles.statValueModern}>{activeProducts}</Text>
+          <Text style={styles.statLabelModern}>Active Products</Text>
+        </LinearGradient>
+
+        <LinearGradient colors={['#F59E0B', '#FBBF24']} style={styles.statCardModern}>
+          <View style={styles.statIconContainer}><Text style={styles.statIcon}>💰</Text></View>
+          <Text style={styles.statValueModern}>₱{overallAvgPrice}</Text>
+          <Text style={styles.statLabelModern}>Overall Avg Price</Text>
+        </LinearGradient>
+
+        <LinearGradient colors={['#EF4444', '#F87171']} style={styles.statCardModern}>
+          <View style={styles.statIconContainer}><Text style={styles.statIcon}>⚠️</Text></View>
+          <Text style={styles.statValueModern}>{highPriceCount}</Text>
+          <Text style={styles.statLabelModern}>High Price Alerts</Text>
+        </LinearGradient>
+      </View>
+
+      {/* Additional Stats */}
+      <View style={styles.additionalStatsRow}>
+        <View style={styles.additionalStatCard}>
+          <Text style={styles.additionalStatValue}>{productsOnSale}</Text>
+          <Text style={styles.additionalStatLabel}>🏷️ On Sale</Text>
+        </View>
+        <View style={styles.additionalStatCard}>
+          <Text style={styles.additionalStatValue}>{inactiveProducts}</Text>
+          <Text style={styles.additionalStatLabel}>⏸️ Inactive</Text>
+        </View>
+        <View style={styles.additionalStatCard}>
+          <Text style={styles.additionalStatValue}>{vendorsList.length}</Text>
+          <Text style={styles.additionalStatLabel}>🏪 Vendors</Text>
+        </View>
+        {topCategory && (
+          <View style={styles.additionalStatCard}>
+            <Text style={styles.additionalStatValue}>{topCategory[0]}</Text>
+            <Text style={styles.additionalStatLabel}>🥇 Top Category</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Category Average Prices Section */}
+      <View style={styles.tableCard}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>📊 Average Price by Category</Text>
+          <Text style={styles.cardSubtitle}>Compare average prices across product categories</Text>
+        </View>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, styles.categoryCellName]}>Category</Text>
+          <Text style={[styles.headerCell, styles.categoryCellAvgPrice]}>Avg Price</Text>
+          <Text style={[styles.headerCell, styles.categoryCellCount]}>Products</Text>
+          <Text style={[styles.headerCell, styles.categoryCellUnique]}>Unique Items</Text>
+          <Text style={[styles.headerCell, styles.categoryCellVariations]}>Variations</Text>
+        </View>
+        {categoryAverages.map((cat, idx) => (
+          <View key={idx} style={styles.tableRow}>
+            <Text style={[styles.rowCell, styles.categoryCellName]}>
+              {cat.category}
+              {cat.variations > 1 && (
+                <Text style={styles.variationBadge}> (mixed case)</Text>
+              )}
+            </Text>
+            <Text style={[styles.rowCell, styles.categoryCellAvgPrice]}>₱{cat.avgPrice}</Text>
+            <Text style={[styles.rowCell, styles.categoryCellCount]}>{cat.count}</Text>
+            <Text style={[styles.rowCell, styles.categoryCellUnique]}>{cat.uniqueProducts}</Text>
+            <Text style={[styles.rowCell, styles.categoryCellVariations]}>
+              {cat.variations > 1 ? `${cat.variations} formats` : '—'}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Product Average Prices Section */}
+      <View style={styles.tableCard}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>📊 Average Price by Product</Text>
+          <Text style={styles.cardSubtitle}>Monitor price variations across different vendors</Text>
+        </View>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, styles.productCellName]}>Product</Text>
+          <Text style={[styles.headerCell, styles.productCellAvgPrice]}>Avg Price</Text>
+          <Text style={[styles.headerCell, styles.productCellMin]}>Min</Text>
+          <Text style={[styles.headerCell, styles.productCellMax]}>Max</Text>
+          <Text style={[styles.headerCell, styles.productCellSpread]}>Spread</Text>
+          <Text style={[styles.headerCell, styles.productCellVendors]}>Vendors</Text>
+        </View>
+        <ScrollView style={styles.productAvgScroll} showsVerticalScrollIndicator={true}>
+          {productAverages.slice(0, 20).map((product, idx) => (
+            <View key={idx} style={styles.tableRow}>
+              <Text style={[styles.rowCell, styles.productCellName]} numberOfLines={2}>{product.name}</Text>
+              <Text style={[styles.rowCell, styles.productCellAvgPrice]}>₱{product.avgPrice}</Text>
+              <Text style={[styles.rowCell, styles.productCellMin]}>₱{product.minPrice}</Text>
+              <Text style={[styles.rowCell, styles.productCellMax]}>₱{product.maxPrice}</Text>
+              <Text style={[
+                styles.rowCell, 
+                styles.productCellSpread,
+                product.priceSpread > 100 ? styles.highSpread : product.priceSpread > 50 ? styles.mediumSpread : styles.lowSpread
+              ]}>
+                ₱{product.priceSpread}
+              </Text>
+              <Text style={[styles.rowCell, styles.productCellVendors]}>{product.vendorCount}</Text>
+            </View>
+          ))}
+        </ScrollView>
+        {productAverages.length > 20 && (
+          <View style={styles.moreResultsRow}>
+            <Text style={styles.moreResultsText}>+ {productAverages.length - 20} more products</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Price Distribution Chart */}
+      <View style={styles.tableCard}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>📊 Price Distribution</Text>
+          <Text style={styles.cardSubtitle}>How products are priced across ranges</Text>
+        </View>
+        <View style={styles.priceDistributionContainer}>
+          {Object.entries(priceRanges).map(([range, count]) => {
+            const percentage = totalProducts > 0 ? (count / totalProducts) * 100 : 0;
+            return (
+              <View key={range} style={styles.distributionRow}>
+                <Text style={styles.distributionLabel}>{range}</Text>
+                <View style={styles.distributionBarContainer}>
+                  <View style={[styles.distributionBar, { width: `${percentage}%`, backgroundColor: percentage > 30 ? '#EF4444' : percentage > 15 ? '#F59E0B' : '#10B981' }]} />
+                </View>
+                <Text style={styles.distributionCount}>{count}</Text>
+                <Text style={styles.distributionPercent}>{percentage.toFixed(0)}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Products Monitoring Table */}
+      <View style={styles.tableCard}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>📦 Products Monitoring</Text>
+          <Text style={styles.cardSubtitle}>Monitor vendor products and pricing</Text>
+        </View>
+        
+        {/* Export PDF Button */}
+        <View style={styles.exportSection}>
+          <TouchableOpacity 
+            style={styles.exportPDFButton}
+            onPress={generatePDFReport}
+          >
+            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.exportPDFGradient}>
+              <Text style={styles.exportPDFButtonText}>📄 Generate PDF Report</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Vendor Filter */}
+        <View style={styles.advancedFilterContainer}>
+          <Text style={styles.filterLabel}>Filter by Vendor:</Text>
+          
+          <View style={styles.currentFilterRow}>
+            <View style={styles.currentFilterBadge}>
+              <Text style={styles.currentFilterBadgeText}>
+                {selectedVendorFilter === 'all' 
+                  ? `All Vendors (${vendorsList.length})` 
+                  : `${selectedVendor?.name || 'Selected Vendor'} (${selectedVendor?.productCount || 0} products)`}
+              </Text>
+              {selectedVendorFilter !== 'all' && (
+                <TouchableOpacity onPress={() => setSelectedVendorFilter('all')} style={styles.clearFilterBtn}>
+                  <Text style={styles.clearFilterBtnText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={styles.changeVendorBtn}
+              onPress={() => setShowVendorDropdown(!showVendorDropdown)}
+            >
+              <Text style={styles.changeVendorBtnText}>
+                {showVendorDropdown ? '▲ Hide Vendors' : '▼ Select Vendor'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Vendor Dropdown */}
+          {showVendorDropdown && (
+            <View style={styles.vendorDropdownContainer}>
+              <View style={styles.searchInputContainer}>
+                <Text style={styles.searchIcon}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search vendor by name..."
+                  placeholderTextColor="#9CA3AF"
+                  value={searchVendorText}
+                  onChangeText={setSearchVendorText}
+                />
+                {searchVendorText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchVendorText('')}>
+                    <Text style={styles.clearSearchIcon}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <ScrollView style={styles.vendorListScroll} showsVerticalScrollIndicator={true}>
+                {filteredVendors.length === 0 ? (
+                  <View style={styles.noVendorsFound}>
+                    <Text style={styles.noVendorsFoundText}>No vendors found</Text>
+                  </View>
+                ) : (
+                  filteredVendors.map(vendor => (
+                    <TouchableOpacity
+                      key={vendor.id}
+                      style={[styles.vendorItem, selectedVendorFilter === vendor.id && styles.vendorItemActive]}
+                      onPress={() => {
+                        setSelectedVendorFilter(vendor.id);
+                        setShowVendorDropdown(false);
+                        setSearchVendorText('');
+                      }}
+                    >
+                      <View style={styles.vendorItemLeft}>
+                        <Text style={styles.vendorItemIcon}>🏪</Text>
+                        <View>
+                          <Text style={[styles.vendorItemName, selectedVendorFilter === vendor.id && styles.vendorItemNameActive]}>
+                            {vendor.name}
+                          </Text>
+                          <Text style={styles.vendorItemSubtext}>
+                            Stall #{vendor.stallNumber} • {vendor.productCount} products
+                          </Text>
+                        </View>
+                      </View>
+                      {selectedVendorFilter === vendor.id && (
+                        <Text style={styles.vendorItemCheck}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+        
+        {/* Products Table Header */}
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, styles.cellProductImage]}>Image</Text>
+          <Text style={[styles.headerCell, styles.cellProductName]}>Product</Text>
+          <Text style={[styles.headerCell, styles.cellProductPrice]}>Price</Text>
+          <Text style={[styles.headerCell, styles.cellProductAvgPrice]}>Market Avg</Text>
+          <Text style={[styles.headerCell, styles.cellProductUnit]}>Unit</Text>
+          <Text style={[styles.headerCell, styles.cellProductCategory]}>Category</Text>
+          <Text style={[styles.headerCell, styles.cellProductVendor]}>Vendor</Text>
+          <Text style={[styles.headerCell, styles.cellProductStatus]}>Status</Text>
+        </View>
+        
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => {
+            const warning = getPriceWarning(item);
+            const productAvg = productAverages.find(p => p.name === item.name);
+            return (
+              <View style={[styles.tableRow, warning.warning && styles.priceWarningRow]}>
+                <View style={[styles.rowCell, styles.cellProductImage]}>
+                  {item.image_url ? (
+                    <Image source={{ uri: item.image_url }} style={styles.productThumbnail} />
+                  ) : (
+                    <View style={styles.productThumbnailPlaceholder}>
+                      <Text style={styles.productThumbnailEmoji}>📷</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.rowCell, styles.cellProductName]} numberOfLines={2}>{item.name}</Text>
+                <View style={[styles.rowCell, styles.cellProductPrice]}>
+                  <Text style={[styles.productPriceText, warning.warning && styles.priceWarningText]}>
+                    ₱{item.price}
+                  </Text>
+                  {warning.warning && <Text style={styles.priceWarningIcon}>⚠️</Text>}
+                </View>
+                <Text style={[styles.rowCell, styles.cellProductAvgPrice]}>
+                  {productAvg ? `₱${productAvg.avgPrice}` : '—'}
+                </Text>
+                <Text style={[styles.rowCell, styles.cellProductUnit]}>{item.unit}</Text>
+                <Text style={[styles.rowCell, styles.cellProductCategory]}>{item.category}</Text>
+                <Text style={[styles.rowCell, styles.cellProductVendor]} numberOfLines={1}>
+                  {item.stalls?.profiles?.full_name || item.stalls?.stall_name || 'Unknown'}
+                </Text>
+                <View style={[styles.rowCell, styles.cellProductStatus]}>
+                  <View style={[styles.statusBadge, item.is_available ? styles.activeBadge : styles.inactiveBadge]}>
+                    <Text style={styles.statusText}>{item.is_available ? 'Active' : 'Inactive'}</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          }}
+        />
+        
+        {filteredProducts.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>📦</Text>
+            <Text style={styles.emptyTitle}>No Products Found</Text>
+            <Text style={styles.emptyText}>No products available for the selected vendor</Text>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+};
 
   const renderCompliance = () => (
     <View style={styles.tableCard}>
@@ -1423,6 +2314,7 @@ const renderStalls = () => (
     switch (activeSection) {
       case 'overview': return renderOverview();
       case 'users': return renderUsers();
+      case 'products': return renderProducts();
       case 'vendors': return renderVendors();
       case 'compliance': return renderCompliance();
       case 'applications': return renderApplications();
@@ -2475,6 +3367,402 @@ smallButtonText: {
   modalSubmit: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#DC2626', borderRadius: 12 },
   warningSubmit: { backgroundColor: '#F59E0B' },
   modalSubmitText: { color: 'white', fontWeight: '600', fontSize: 14 },
+  // Add these to your styles
+cellProductImage: { width: '10%' },
+cellProductName: { width: '20%' },
+cellProductPrice: { width: '12%' },
+cellProductUnit: { width: '10%' },
+cellProductCategory: { width: '15%' },
+cellProductVendor: { width: '18%' },
+cellProductStatus: { width: '10%' },
+cellProductAction: { width: '10%' },
+
+productThumbnail: {
+  width: 40,
+  height: 40,
+  borderRadius: 8,
+  backgroundColor: '#F3F4F6',
+},
+productThumbnailPlaceholder: {
+  width: 40,
+  height: 40,
+  borderRadius: 8,
+  backgroundColor: '#F3F4F6',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+productThumbnailEmoji: {
+  fontSize: 20,
+},
+productPriceText: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#DC2626',
+},
+priceWarningRow: {
+  backgroundColor: '#FEF3C7',
+},
+priceWarningText: {
+  color: '#F59E0B',
+},
+priceWarningIcon: {
+  fontSize: 12,
+  marginLeft: 4,
+},
+viewProductBtn: {
+  backgroundColor: '#3B82F6',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 8,
+},
+viewProductBtnText: {
+  fontSize: 11,
+  color: 'white',
+  fontWeight: '600',
+},
+filterContainer: {
+  padding: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+  backgroundColor: '#FAFAFA',
+},
+filterLabel: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#64748B',
+  marginBottom: 12,
+},
+filterScroll: {
+  flexDirection: 'row',
+},
+filterChip: {
+  paddingHorizontal: 16,
+  paddingVertical: 8,
+  borderRadius: 20,
+  backgroundColor: '#F1F5F9',
+  marginRight: 8,
+},
+filterChipActive: {
+  backgroundColor: '#DC2626',
+},
+filterChipText: {
+  fontSize: 13,
+  color: '#64748B',
+},
+filterChipTextActive: {
+  color: 'white',
+},
+
+additionalStatsRow: {
+  flexDirection: 'row',
+  gap: 12,
+  marginBottom: 24,
+  flexWrap: 'wrap',
+},
+additionalStatCard: {
+  flex: 1,
+  minWidth: Platform.OS === 'web' ? 180 : '45%',
+  backgroundColor: 'white',
+  borderRadius: 16,
+  padding: 16,
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.05,
+  shadowRadius: 8,
+  elevation: 2,
+  borderWidth: 1,
+  borderColor: '#F1F5F9',
+},
+additionalStatValue: {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: '#1E293B',
+  marginBottom: 4,
+},
+additionalStatLabel: {
+  fontSize: 12,
+  color: '#64748B',
+  fontWeight: '500',
+},
+exportSection: {
+  padding: 16,
+  alignItems: 'flex-end',
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+},
+exportButton: {
+  borderRadius: 8,
+  overflow: 'hidden',
+},
+exportGradient: {
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+  alignItems: 'center',
+},
+exportButtonText: {
+  color: 'white',
+  fontSize: 13,
+  fontWeight: '600',
+},
+// Advanced Filter Styles
+advancedFilterContainer: {
+  padding: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+  backgroundColor: '#FAFAFA',
+},
+currentFilterRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 12,
+},
+currentFilterBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#FEF3F2',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 20,
+  flex: 1,
+  marginRight: 12,
+  justifyContent: 'space-between',
+},
+currentFilterBadgeText: {
+  fontSize: 13,
+  color: '#DC2626',
+  fontWeight: '500',
+},
+clearFilterBtn: {
+  width: 20,
+  height: 20,
+  borderRadius: 10,
+  backgroundColor: '#DC2626',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+clearFilterBtnText: {
+  fontSize: 12,
+  color: 'white',
+  fontWeight: 'bold',
+},
+changeVendorBtn: {
+  backgroundColor: '#F1F5F9',
+  paddingHorizontal: 16,
+  paddingVertical: 8,
+  borderRadius: 20,
+},
+changeVendorBtnText: {
+  fontSize: 12,
+  color: '#64748B',
+  fontWeight: '500',
+},
+vendorDropdownContainer: {
+  marginTop: 12,
+  backgroundColor: 'white',
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  overflow: 'hidden',
+},
+searchInputContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+  backgroundColor: '#F8FAFC',
+},
+searchIcon: {
+  fontSize: 14,
+  marginRight: 8,
+  color: '#94A3B8',
+},
+searchInput: {
+  flex: 1,
+  fontSize: 14,
+  color: '#1E293B',
+  padding: 0,
+},
+clearSearchIcon: {
+  fontSize: 14,
+  color: '#94A3B8',
+  padding: 4,
+},
+quickFiltersRow: {
+  flexDirection: 'row',
+  padding: 12,
+  gap: 8,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+},
+quickFilterChip: {
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  backgroundColor: '#F1F5F9',
+},
+quickFilterChipActive: {
+  backgroundColor: '#DC2626',
+},
+quickFilterText: {
+  fontSize: 12,
+  color: '#64748B',
+},
+quickFilterTextActive: {
+  color: 'white',
+},
+vendorListScroll: {
+  maxHeight: 300,
+},
+vendorItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: 12,
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+},
+vendorItemActive: {
+  backgroundColor: '#FEF3F2',
+},
+vendorItemLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 12,
+},
+vendorItemIcon: {
+  fontSize: 20,
+},
+vendorItemName: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#1E293B',
+},
+vendorItemNameActive: {
+  color: '#DC2626',
+},
+vendorItemSubtext: {
+  fontSize: 11,
+  color: '#94A3B8',
+  marginTop: 2,
+},
+vendorItemCheck: {
+  fontSize: 16,
+  color: '#DC2626',
+  fontWeight: 'bold',
+},
+noVendorsFound: {
+  padding: 40,
+  alignItems: 'center',
+},
+noVendorsFoundText: {
+  fontSize: 14,
+  color: '#94A3B8',
+},
+resultsCountRow: {
+  padding: 12,
+  alignItems: 'center',
+  borderTopWidth: 1,
+  borderTopColor: '#F1F5F9',
+  backgroundColor: '#F8FAFC',
+},
+resultsCountText: {
+  fontSize: 12,
+  color: '#64748B',
+},
+// Category table styles
+categoryCellName: { width: '40%' },
+categoryCellAvgPrice: { width: '20%' },
+categoryCellCount: { width: '20%' },
+categoryCellUnique: { width: '20%' },
+
+// Product average styles
+productCellName: { width: '30%' },
+productCellAvgPrice: { width: '15%' },
+productCellMin: { width: '12%' },
+productCellMax: { width: '12%' },
+productCellSpread: { width: '15%' },
+productCellVendors: { width: '16%' },
+highSpread: { color: '#EF4444', fontWeight: 'bold' },
+mediumSpread: { color: '#F59E0B' },
+lowSpread: { color: '#10B981' },
+
+// Product avg scroll
+productAvgScroll: { maxHeight: 400 },
+moreResultsRow: { padding: 16, alignItems: 'center', backgroundColor: '#F8FAFC' },
+moreResultsText: { fontSize: 12, color: '#64748B' },
+
+// Price distribution styles
+priceDistributionContainer: { padding: 16 },
+distributionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 12 },
+distributionLabel: { width: 80, fontSize: 12, color: '#64748B' },
+distributionBarContainer: { flex: 1, height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
+distributionBar: { height: '100%', borderRadius: 4 },
+distributionCount: { width: 40, fontSize: 12, color: '#1E293B', textAlign: 'right' },
+distributionPercent: { width: 40, fontSize: 12, color: '#64748B', textAlign: 'right' },
+
+// Additional column for market avg
+cellProductAvgPrice: { width: '12%' },
+
+// Category table styles
+categoryCellName: { width: '40%' },
+categoryCellAvgPrice: { width: '20%' },
+categoryCellCount: { width: '15%' },
+categoryCellUnique: { width: '15%' },
+categoryCellVariations: { width: '10%' },
+variationBadge: { fontSize: 10, color: '#F59E0B', marginLeft: 4, fontStyle: 'italic' },
+
+// Product average styles
+productCellName: { width: '30%' },
+productCellAvgPrice: { width: '15%' },
+productCellMin: { width: '12%' },
+productCellMax: { width: '12%' },
+productCellSpread: { width: '15%' },
+productCellVendors: { width: '16%' },
+highSpread: { color: '#EF4444', fontWeight: 'bold' },
+mediumSpread: { color: '#F59E0B' },
+lowSpread: { color: '#10B981' },
+productAvgScroll: { maxHeight: 400 },
+moreResultsRow: { padding: 16, alignItems: 'center', backgroundColor: '#F8FAFC' },
+moreResultsText: { fontSize: 12, color: '#64748B' },
+
+// Price distribution styles
+priceDistributionContainer: { padding: 16 },
+distributionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 12 },
+distributionLabel: { width: 80, fontSize: 12, color: '#64748B' },
+distributionBarContainer: { flex: 1, height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
+distributionBar: { height: '100%', borderRadius: 4 },
+distributionCount: { width: 40, fontSize: 12, color: '#1E293B', textAlign: 'right' },
+distributionPercent: { width: 40, fontSize: 12, color: '#64748B', textAlign: 'right' },
+
+// Additional column for market avg
+cellProductAvgPrice: { width: '12%' },
+// PDF Export Styles
+exportSection: {
+  padding: 16,
+  alignItems: 'flex-end',
+  borderBottomWidth: 1,
+  borderBottomColor: '#F1F5F9',
+},
+exportPDFButton: {
+  borderRadius: 10,
+  overflow: 'hidden',
+},
+exportPDFGradient: {
+  paddingHorizontal: 20,
+  paddingVertical: 10,
+  alignItems: 'center',
+  flexDirection: 'row',
+  gap: 8,
+},
+exportPDFButtonText: {
+  color: 'white',
+  fontSize: 14,
+  fontWeight: '600',
+},
 });
 
 // Helper functions

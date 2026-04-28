@@ -1,5 +1,5 @@
 // src/screens/customer/ProfileScreen.js
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +17,83 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../contexts/AuthContext';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import axios from 'axios';
+
+const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
 
 export default function ProfileScreen({ navigation }) {
-  const { user, profile, logout, setIsGuest, isGuest } = useAuth();
+  const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+
+  const uploadAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant gallery permissions to upload profile picture');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setUploadingAvatar(true);
+      try {
+        const uri = result.assets[0].uri;
+        
+        // Fetch the image
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        
+        // Convert to base64
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64String = reader.result.split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        
+        // Upload to ImgBB
+        const formData = new FormData();
+        formData.append('image', base64);
+        
+        const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
+          params: { key: IMGBB_API_KEY },
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        const avatarUrl = uploadResponse.data.data.url;
+        console.log('✅ Avatar uploaded:', avatarUrl);
+        
+        // Update profile in Supabase
+        const { error } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl })
+          .eq('id', user.id);
+        
+        if (error) throw error;
+        
+        // Refresh user profile
+        await checkUser();
+        setAvatarError(false);
+        Alert.alert('Success', 'Profile picture updated!');
+        
+      } catch (error) {
+        console.error('Upload error:', error);
+        Alert.alert('Error', 'Failed to upload image. Please try again.');
+      } finally {
+        setUploadingAvatar(false);
+      }
+    }
+  };
 
   const handleLogout = async () => {
     // For web, use browser confirm
@@ -109,8 +185,6 @@ export default function ProfileScreen({ navigation }) {
   if (isGuest) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar style="light" backgroundColor="#DC2626" />
-        
       
 
         <ScrollView 
@@ -221,20 +295,41 @@ export default function ProfileScreen({ navigation }) {
   // ========== LOGGED IN USER ==========
   return (
     <SafeAreaView style={styles.container}>
-     
+
+
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* User Avatar Section */}
+        {/* User Avatar Section with Upload */}
         <View style={styles.avatarSection}>
-          <LinearGradient
-            colors={['#DC2626', '#EF4444', '#F87171']}
-            style={styles.avatarGradient}
-          >
-            <Text style={styles.avatarEmoji}>👤</Text>
-          </LinearGradient>
+          <TouchableOpacity onPress={uploadAvatar} disabled={uploadingAvatar} style={styles.avatarContainer}>
+            {uploadingAvatar ? (
+              <View style={styles.avatarGradient}>
+                <ActivityIndicator size="large" color="white" />
+              </View>
+            ) : profile?.avatar_url && !avatarError ? (
+              <Image 
+                source={{ uri: profile.avatar_url }} 
+                style={styles.avatarImage}
+                onError={() => setAvatarError(true)}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#DC2626', '#EF4444', '#F87171']}
+                style={styles.avatarGradient}
+              >
+                <Text style={styles.avatarEmoji}>
+                  {profile?.full_name?.charAt(0)?.toUpperCase() || '👤'}
+                </Text>
+              </LinearGradient>
+            )}
+            <View style={styles.editAvatarBadge}>
+              <Text style={styles.editAvatarBadgeText}>📷</Text>
+            </View>
+          </TouchableOpacity>
+          
           <Text style={styles.userName}>{profile?.full_name || user?.email?.split('@')[0]}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           <View style={styles.roleBadge}>
@@ -242,6 +337,11 @@ export default function ProfileScreen({ navigation }) {
               {profile?.role === 'vendor' ? '🛍️ Vendor' : '🛒 Shopper'}
             </Text>
           </View>
+          <TouchableOpacity onPress={uploadAvatar} disabled={uploadingAvatar} style={styles.changePhotoBtn}>
+            <Text style={styles.changePhotoBtnText}>
+              {uploadingAvatar ? 'Uploading...' : 'Change Profile Photo'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Section */}
@@ -378,21 +478,59 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
   avatarGradient: {
     width: 100,
     height: 100,
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
     shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
   },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#DC2626',
+  },
   avatarEmoji: {
     fontSize: 48,
+  },
+  editAvatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#DC2626',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  editAvatarBadgeText: {
+    fontSize: 16,
+  },
+  changePhotoBtn: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  changePhotoBtnText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '500',
   },
   guestName: {
     fontSize: 24,

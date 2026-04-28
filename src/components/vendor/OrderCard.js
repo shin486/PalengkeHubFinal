@@ -20,7 +20,7 @@ const QUICK_REASONS = [
   { id: 'other', label: 'Other (custom reason)' },
 ];
 
-export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment }) => {
+export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment, onProposeChange }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedReasonId, setSelectedReasonId] = useState(null);
   const [customMessage, setCustomMessage] = useState('');
@@ -64,6 +64,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
   const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled';
   const canReject = order.status === 'pending';
   const canRequestPayment = order.status === 'confirmed';
+  const canProposeChange = order.status === 'pending';
 
   const formatTime = (dateString) => {
     const date = new Date(dateString);
@@ -115,13 +116,15 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
         </View>
 
         <View style={styles.itemsContainer}>
-          {order.items?.map((item, idx) => (
-            <View key={idx} style={styles.itemRow}>
-              <Text style={styles.itemName}>{item.quantity}x {item.name}</Text>
-              <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
-            </View>
-          ))}
-        </View>
+  {order.items?.map((item, idx) => (
+    <View key={idx} style={styles.itemRow}>
+      <Text style={styles.itemName}>
+  {item.quantity}x {item.name} ({item.unit})
+</Text>
+      <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+    </View>
+  ))}
+</View>
 
         {order.special_instructions && (
           <View style={styles.instructionsContainer}>
@@ -142,6 +145,15 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
           </View>
 
           <View style={styles.actionButtons}>
+            {/* Propose Change button - for pending orders */}
+            {canProposeChange && onProposeChange && (
+              <TouchableOpacity style={styles.proposeButton} onPress={() => onProposeChange(order)}>
+                <LinearGradient colors={['#3B82F6', '#2563EB']} style={styles.proposeGradient}>
+                  <Text style={styles.proposeButtonText}>✏️ Propose Change</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
             {/* Request Payment button - for confirmed orders */}
             {canRequestPayment && onRequestPayment && (
               <TouchableOpacity style={styles.requestPaymentButton} onPress={() => onRequestPayment(order)}>
@@ -176,7 +188,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
         </View>
       </View>
 
-      {/* Reject Modal - unchanged */}
+      {/* Reject Modal */}
       <Modal visible={showRejectModal} transparent animationType="fade" onRequestClose={() => setShowRejectModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -364,6 +376,20 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 12,
     flexWrap: 'wrap',
+  },
+  proposeButton: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  proposeGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  proposeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
   },
   requestPaymentButton: {
     borderRadius: 8,

@@ -225,21 +225,6 @@ export default function NotificationScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
       
-      {/* Custom Header - Red Gradient */}
-      <LinearGradient
-        colors={['#DC2626', '#EF4444', '#F87171']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.headerGradient}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          <View style={styles.placeholder} />
-        </View>
-      </LinearGradient>
       
       {notifications.length === 0 ? (
         <View style={styles.emptyContainer}>

@@ -251,7 +251,7 @@ export default function OrdersScreen({ navigation }) {
     );
   };
 
-  // ---------- CUSTOMER CANCELLATION (with chat notification) ----------
+  // CUSTOMER CANCELLATION (with chat notification)
   const handleCancelOrder = async () => {
     if (!cancelReasonId) return;
     const reasonObj = CANCEL_REASONS.find(r => r.id === cancelReasonId);
@@ -326,8 +326,117 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  // ---------- PAY VIA GCASH (NEW) ----------
- 
+  // ========== HANDLE PROPOSAL RESPONSES ==========
+const handleAcceptProposal = async (order, proposalData) => {
+  try {
+    // Update order items with new quantity, unit, and price
+    const updatedItems = order.items.map(item => {
+      if (item.id === proposalData.item_id) {
+        return {
+          ...item,
+          quantity: proposalData.proposed_quantity,
+          unit: proposalData.proposed_unit,
+          price: proposalData.price_per_unit, // Use price_per_unit from proposal
+        };
+      }
+      return item;
+    });
+    
+    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Update order in database
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        items: updatedItems,
+        total_amount: newTotal,
+        proposed_changes: { ...proposalData, status: 'accepted' }
+      })
+      .eq('id', order.id);
+    
+    if (error) throw error;
+    
+    // Get conversation ID
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('customer_id', user.id)
+      .eq('stall_id', order.stall_id)
+      .maybeSingle();
+    
+    if (conversation) {
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        sender_id: user.id,
+        sender_role: 'customer',
+        message: `✅ I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+        is_read: false,
+      });
+      
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: `✅ Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+          last_message_time: new Date(),
+          vendor_unread_count: 1,
+        })
+        .eq('id', conversation.id);
+    }
+    
+    await refreshOrders();
+    Alert.alert('Order Updated', `Order updated to ${proposalData.proposed_quantity} ${proposalData.proposed_unit} of ${proposalData.item_name}`);
+    
+  } catch (error) {
+    console.error('Accept proposal error:', error);
+    Alert.alert('Error', 'Failed to accept proposal');
+  }
+};
+
+  const handleRejectProposal = async (order, proposalData) => {
+  try {
+    // Get conversation ID
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('customer_id', user.id)
+      .eq('stall_id', order.stall_id)
+      .maybeSingle();
+    
+    if (conversation) {
+      // Send rejection message
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        sender_id: user.id,
+        sender_role: 'customer',
+        message: `❌ I do not accept the proposal. Please fulfill the original order or cancel.`,
+        is_read: false,
+      });
+      
+      // Update conversation
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: `❌ Customer rejected the proposal. Please fulfill original order.`,
+          last_message_time: new Date(),
+          vendor_unread_count: 1,
+        })
+        .eq('id', conversation.id);
+    }
+    
+    // Update order - mark proposal as rejected (keep original order unchanged)
+    await supabase
+      .from('orders')
+      .update({ proposed_changes: { ...proposalData, status: 'rejected' } })
+      .eq('id', order.id);
+    
+    await refreshOrders();
+    Alert.alert('Proposal Rejected', 'The vendor has been notified of your decision');
+    
+  } catch (error) {
+    console.error('Reject proposal error:', error);
+    Alert.alert('Error', 'Failed to reject proposal');
+  }
+};
 
   // UI helpers
   const getStatusColor = (status) => {
@@ -399,6 +508,10 @@ export default function OrdersScreen({ navigation }) {
     const isPending = order.status === 'pending';
     const isConfirmed = order.status === 'confirmed';
     
+    // Check for pending proposal
+    const hasPendingProposal = order.proposed_changes && order.proposed_changes.status === 'pending';
+    const proposalData = order.proposed_changes;
+    
     return (
       <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
@@ -423,7 +536,47 @@ export default function OrdersScreen({ navigation }) {
           </View>
         </View>
 
-       
+        {/* PROPOSAL BANNER - shows when vendor proposed a change */}
+        {hasPendingProposal && proposalData && (
+  <View style={styles.proposalContainer}>
+    <View style={styles.proposalBanner}>
+      <Text style={styles.proposalTitle}>📝 Vendor Proposed a Change</Text>
+      <Text style={styles.proposalText}>
+        {proposalData.item_name}:
+      </Text>
+      <Text style={styles.proposalText}>
+        Original: {proposalData.original_quantity} {proposalData.original_unit}
+      </Text>
+      <Text style={styles.proposalText}>
+        Proposed: {proposalData.proposed_quantity} {proposalData.proposed_unit}
+      </Text>
+      <Text style={styles.proposalPrice}>
+        New total: ₱{proposalData.proposed_price.toFixed(2)} 
+        (was ₱{proposalData.original_price.toFixed(2)})
+      </Text>
+    </View>
+       <View style={styles.proposalButtons}>
+      <TouchableOpacity 
+        style={styles.rejectProposalBtn}
+        onPress={() => handleRejectProposal(order, proposalData)}
+      >
+        <Text style={styles.rejectProposalBtnText}>❌ Reject</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={styles.acceptProposalBtn}
+        onPress={() => handleAcceptProposal(order, proposalData)}
+      >
+        <LinearGradient
+          colors={['#10B981', '#059669']}
+          style={styles.acceptProposalGradient}
+        >
+          <Text style={styles.acceptProposalBtnText}>✅ Accept</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
 
         <View style={styles.stallInfo}>
           <Text style={styles.stallName}>
@@ -433,15 +586,15 @@ export default function OrdersScreen({ navigation }) {
         </View>
 
         <View style={styles.itemsContainer}>
-          {order.items?.map((item, idx) => (
-            <View key={idx} style={styles.itemRow}>
-              <Text style={styles.itemName}>
-                {item.quantity}x {item.name}
-              </Text>
-              <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
-            </View>
-          ))}
-        </View>
+  {order.items?.map((item, idx) => (
+    <View key={idx} style={styles.itemRow}>
+      <Text style={styles.itemName}>
+        {item.quantity}x {item.name} ({item.unit})
+      </Text>
+      <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+    </View>
+  ))}
+</View>
 
         <View style={styles.pickupContainer}>
           <Text style={styles.pickupLabel}>⏰ Pickup Time:</Text>
@@ -926,25 +1079,6 @@ const styles = StyleSheet.create({
   cardDeleteIcon: { marginLeft: 4, padding: 4 },
   cardDeleteIconText: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
   
-  // Pay via GCash button
-  payNowButton: {
-    marginBottom: 12,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  payNowGradient: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  payNowButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'white',
-  },
-  
   stallInfo: { backgroundColor: '#F9FAFB', padding: 10, borderRadius: 10, marginBottom: 12 },
   stallName: { fontSize: 14, fontWeight: '600', color: '#111827' },
   stallSection: { fontSize: 12, color: '#6B7280', marginTop: 2 },
@@ -1022,4 +1156,78 @@ const styles = StyleSheet.create({
   reasonText: { fontSize: 14, color: '#374151' },
   reasonTextSelected: { color: '#DC2626', fontWeight: '500' },
   customInput: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, fontSize: 14, color: '#111827', textAlignVertical: 'top', marginTop: 8, marginBottom: 12 },
+
+  // Proposal styles
+  proposalContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  proposalBanner: {
+    marginBottom: 12,
+  },
+  proposalTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  proposalText: {
+    fontSize: 13,
+    color: '#78350F',
+    marginBottom: 4,
+  },
+  proposalPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B45309',
+    marginBottom: 4,
+  },
+  proposalNotes: {
+    fontSize: 12,
+    color: '#92400E',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+   proposalUnitNote: {           // ← ADD THIS
+    fontSize: 12,
+    color: '#78350F',
+    marginTop: 4,
+  },
+  proposalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rejectProposalBtn: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  rejectProposalBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  acceptProposalBtn: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  acceptProposalGradient: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  acceptProposalBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
 });

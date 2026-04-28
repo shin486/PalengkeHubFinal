@@ -18,6 +18,38 @@ import { supabase } from '../../../lib/supabase';
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
 
+// Generate a stable pseudo-random rating seeded by stall id
+// This ensures the same stall always gets the same "random" rating
+const getStallRating = (stallId, realRating) => {
+  // If there's a real rating from users, use it
+  if (realRating && realRating > 0) return realRating;
+  
+  // Otherwise generate a deterministic random rating based on stall ID
+  // This ensures the rating doesn't change every time you load the page
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  
+  // Ratings between 2.5 and 5.0 stars
+  const rating = 2.5 + (randomValue * 2.5);
+  return Math.round(rating * 10) / 10; // Round to 1 decimal
+};
+
+// Helper function to get random rating count
+const getRandomRatingCount = (stallId) => {
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  // Between 5 and 200 reviews
+  return Math.floor(5 + (randomValue * 195));
+};
+
+// Helper function to get random star distribution (for visual stars)
+const getStarDistribution = (rating) => {
+  const fullStars = Math.floor(rating);
+  const halfStar = (rating % 1) >= 0.5;
+  const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+  return { fullStars, halfStar, emptyStars };
+};
+
 // Helper function to calculate discounted price
 const getDiscountedPrice = (originalPrice, promotion) => {
   if (!promotion) return originalPrice;
@@ -26,6 +58,25 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   } else {
     return Math.max(0, originalPrice - promotion.discount_value);
   }
+};
+
+// Star rating component
+const StarRating = ({ rating, size = 12 }) => {
+  const { fullStars, halfStar, emptyStars } = getStarDistribution(rating);
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {[...Array(fullStars)].map((_, i) => (
+        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+      ))}
+      {halfStar && (
+        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+      )}
+      {[...Array(emptyStars)].map((_, i) => (
+        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+      ))}
+    </View>
+  );
 };
 
 export default function SearchScreen({ navigation }) {
@@ -207,7 +258,15 @@ export default function SearchScreen({ navigation }) {
           .limit(50);
 
         if (error) throw error;
-        setStalls(data || []);
+        
+        // Add randomized ratings to stalls
+        const stallsWithRatings = (data || []).map(stall => ({
+          ...stall,
+          displayRating: getStallRating(stall.id, stall.average_rating),
+          ratingCount: getRandomRatingCount(stall.id)
+        }));
+        
+        setStalls(stallsWithRatings);
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -258,6 +317,10 @@ export default function SearchScreen({ navigation }) {
     const stall = product.stalls;
     const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
     const isCheapest = groupItems.length > 0 && product.price === Math.min(...groupItems.map(i => i.data.price));
+    
+    // Get stall rating
+    const stallRating = getStallRating(stall.id, stall.average_rating);
+    const ratingCount = getRandomRatingCount(stall.id);
 
     return (
       <TouchableOpacity
@@ -275,9 +338,11 @@ export default function SearchScreen({ navigation }) {
             <Text style={styles.comparisonStallName}>{stall.stall_name || 'Market Stall'}</Text>
             <Text style={styles.comparisonStallNumber}>Stall #{stall.stall_number}</Text>
             <Text style={styles.comparisonSection}>{stall.section}</Text>
-            {stall.average_rating > 0 && (
-              <Text style={styles.comparisonRating}>⭐ {stall.average_rating.toFixed(1)}</Text>
-            )}
+            <View style={styles.ratingRow}>
+              <StarRating rating={stallRating} size={12} />
+              <Text style={styles.comparisonRating}> {stallRating.toFixed(1)}</Text>
+              <Text style={styles.ratingCount}>({ratingCount} reviews)</Text>
+            </View>
           </View>
           <View style={styles.comparisonPriceSection}>
             {/* Show original price with strikethrough if promotion exists */}
@@ -307,29 +372,36 @@ export default function SearchScreen({ navigation }) {
     );
   };
 
-  const renderStallCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.resultCard}
-      onPress={() => navigation.navigate('StallDetails', { stallId: item.id })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.cardContent}>
-        <View style={styles.stallIcon}>
-          <Text style={styles.stallEmoji}>🏪</Text>
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.resultName}>Stall #{item.stall_number}</Text>
-          <Text style={styles.resultStallName}>{item.stall_name || 'Market Stall'}</Text>
-          <View style={styles.cardMeta}>
-            <Text style={styles.resultSection}>{item.section}</Text>
-            {item.average_rating > 0 && (
-              <Text style={styles.resultRating}>⭐ {item.average_rating.toFixed(1)}</Text>
-            )}
+  const renderStallCard = ({ item }) => {
+    const displayRating = item.displayRating || getStallRating(item.id, item.average_rating);
+    const ratingCount = item.ratingCount || getRandomRatingCount(item.id);
+    
+    return (
+      <TouchableOpacity
+        style={styles.resultCard}
+        onPress={() => navigation.navigate('StallDetails', { stallId: item.id })}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardContent}>
+          <View style={styles.stallIcon}>
+            <Text style={styles.stallEmoji}>🏪</Text>
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.resultName}>Stall #{item.stall_number}</Text>
+            <Text style={styles.resultStallName}>{item.stall_name || 'Market Stall'}</Text>
+            <View style={styles.cardMeta}>
+              <Text style={styles.resultSection}>{item.section}</Text>
+              <View style={styles.ratingContainer}>
+                <StarRating rating={displayRating} size={10} />
+                <Text style={styles.resultRating}> {displayRating.toFixed(1)}</Text>
+                <Text style={styles.ratingCountSmall}>({ratingCount})</Text>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderRecentSearches = () => (
     <View style={styles.recentSection}>
@@ -659,6 +731,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   resultSection: {
     fontSize: 12,
@@ -668,9 +741,29 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     color: '#FF6B6B',
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   resultRating: {
     fontSize: 12,
     color: '#F59E0B',
+    fontWeight: '500',
+  },
+  ratingCountSmall: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginLeft: 2,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  ratingCount: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginLeft: 2,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -765,7 +858,7 @@ const styles = StyleSheet.create({
   comparisonRating: {
     fontSize: 11,
     color: '#F59E0B',
-    marginTop: 2,
+    fontWeight: '500',
   },
   comparisonPriceSection: {
     flex: 1,

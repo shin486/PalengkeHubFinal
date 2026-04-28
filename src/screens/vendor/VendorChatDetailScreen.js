@@ -15,10 +15,9 @@ import {
   Image,
   Alert,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../hooks/useChat';
 import { Header } from '../../components/Header';
@@ -27,15 +26,37 @@ export default function VendorChatDetailScreen({ navigation, route }) {
   const { conversationId, customer } = route.params;
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
-  const [sendingImage, setSendingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showImageModal, setShowImageModal] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
   const flatListRef = useRef(null);
-  const { messages, loading, sending, sendMessage } = useChat(
-    conversationId,
-    user,
-    'vendor'
-  );
+  
+  const { 
+    messages, 
+    loading, 
+    sending, 
+    uploadingImage,
+    sendMessage, 
+    sendImage 
+  } = useChat(conversationId, user, 'vendor');
+
+  // ✅ Suggested messages
+  const suggestedMessages = [
+    { id: 1, text: "📋 Ask for details about the Order", emoji: "📋" },
+    { id: 2, text: "📷 Send me the QR Code", emoji: "📷" },
+    { id: 3, text: "✅ Confirm Payment", emoji: "✅" },
+    { id: 4, text: "❓ Ask about Availability", emoji: "❓" },
+    { id: 5, text: "💰 Ask for Total Amount", emoji: "💰" },
+    { id: 6, text: "⏰ Confirm Pickup Time", emoji: "⏰" },
+  ];
+
+  // ✅ SIMPLE - just call sendImage() from the hook
+  const handleSendImage = () => {
+    if (uploadingImage) {
+      Alert.alert('Please wait', 'Image is still uploading...');
+      return;
+    }
+    sendImage();
+  };
 
   const handleSend = async () => {
     if (!messageText.trim()) return;
@@ -43,93 +64,13 @@ export default function VendorChatDetailScreen({ navigation, route }) {
     setMessageText('');
   };
 
-  // Pick image from gallery
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant gallery permissions to send images');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
-    }
+  const handleSuggestedMessage = async (suggestedText) => {
+    await sendMessage(suggestedText);
   };
 
-  // Take photo with camera
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant camera permissions to send photos');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
-    }
-  };
-
-  // Upload image to Supabase storage
-  const uploadImage = async (uri) => {
-    try {
-      setSendingImage(true);
-      
-      // Generate unique filename
-      const fileExt = uri.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `chat_images/${conversationId}/${fileName}`;
-      
-      // Convert URI to blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Upload to Supabase storage
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(filePath, blob);
-      
-      if (uploadError) throw uploadError;
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-images')
-        .getPublicUrl(filePath);
-      
-      // Send image message
-      await sendMessage('📷 Sent an image', publicUrl, true);
-      
-      setSelectedImage(null);
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to send image. Please try again.');
-    } finally {
-      setSendingImage(false);
-    }
-  };
-
-  const handleSendImage = () => {
-    Alert.alert(
-      'Send Photo',
-      'Choose an option',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Take Photo', onPress: takePhoto },
-        { text: 'Choose from Gallery', onPress: pickImage },
-      ]
-    );
+  const openImageModal = (imageUrl) => {
+    setSelectedImage(imageUrl);
+    setImageModalVisible(true);
   };
 
   const formatTime = (dateString) => {
@@ -137,47 +78,62 @@ export default function VendorChatDetailScreen({ navigation, route }) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderMessage = ({ item }) => {
-    const isMyMessage = item.sender_id === user.id;
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const renderMessage = ({ item, index }) => {
+    const isMyMessage = item.sender_id === user?.id;
+    const isImage = item.is_image === true || (item.image_url && item.image_url.length > 0);
+    const showDateHeader = index === 0 || 
+      new Date(item.created_at).toDateString() !== new Date(messages[index - 1]?.created_at).toDateString();
     
     return (
-      <View style={[
-        styles.messageRow,
-        isMyMessage ? styles.myMessageRow : styles.theirMessageRow
-      ]}>
+      <>
+        {showDateHeader && (
+          <View style={styles.dateHeader}>
+            <Text style={styles.dateHeaderText}>{formatDate(item.created_at)}</Text>
+          </View>
+        )}
         <View style={[
-          styles.messageBubble,
-          isMyMessage ? styles.myBubble : styles.theirBubble
+          styles.messageRow,
+          isMyMessage ? styles.myMessageRow : styles.theirMessageRow
         ]}>
-          {/* Show image if message has image_url */}
-          {item.image_url && (
-            <TouchableOpacity 
-              onPress={() => {
-                setSelectedImage(item.image_url);
-                setShowImageModal(true);
-              }}
-            >
-              <Image 
-                source={{ uri: item.image_url }} 
-                style={styles.messageImage}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          )}
-          
-          {/* Show text message if exists */}
-          {item.message && (
-            <Text style={[
-              styles.messageText,
-              isMyMessage ? styles.myMessageText : styles.theirMessageText
-            ]}>
-              {item.message}
-            </Text>
-          )}
-          
-          <Text style={styles.messageTime}>{formatTime(item.created_at)}</Text>
+          <View style={[
+            styles.messageBubble,
+            isMyMessage ? styles.myBubble : styles.theirBubble
+          ]}>
+            {isImage && item.image_url ? (
+              <TouchableOpacity onPress={() => openImageModal(item.image_url)}>
+                <Image 
+                  source={{ uri: item.image_url }} 
+                  style={styles.chatImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ) : (
+              <Text style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.theirMessageText
+              ]}>
+                {item.message}
+              </Text>
+            )}
+            <Text style={styles.messageTime}>{formatTime(item.created_at)}</Text>
+          </View>
         </View>
-      </View>
+      </>
     );
   };
 
@@ -189,14 +145,28 @@ export default function VendorChatDetailScreen({ navigation, route }) {
     }
   }, [messages]);
 
+  const customerName = customer?.name || 'Customer';
+
+  if (!conversationId) {
+    return (
+      <View style={styles.container}>
+        <Header title="Chat" showBack onBackPress={() => navigation.goBack()} />
+        <View style={styles.centerContainer}>
+          <Text>Loading conversation...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
       
+      {/* ✅ Header Component - Already Integrated */}
       <Header 
-        title={customer?.name || 'Chat'}
+        title={customerName}
         subtitle="Customer"
-        showBackButton
+        showBack={true}
         onBackPress={() => navigation.goBack()}
       />
       
@@ -219,265 +189,265 @@ export default function VendorChatDetailScreen({ navigation, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
+        {/* Suggested Messages Row */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.suggestedContainer}
+          contentContainerStyle={styles.suggestedContent}
+        >
+          {suggestedMessages.map((suggested) => (
+            <TouchableOpacity
+              key={suggested.id}
+              style={styles.suggestedButton}
+              onPress={() => handleSuggestedMessage(suggested.text)}
+            >
+              <Text style={styles.suggestedText}>{suggested.text}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        
         <View style={styles.inputContainer}>
-          {/* Image preview before sending */}
-          {selectedImage && typeof selectedImage === 'string' && !selectedImage.startsWith('http') && (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
-              <TouchableOpacity 
-                style={styles.removeImageBtn}
-                onPress={() => setSelectedImage(null)}
-              >
-                <Text style={styles.removeImageText}>✕</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.sendImageBtn}
-                onPress={() => uploadImage(selectedImage)}
-                disabled={sendingImage}
-              >
-                <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.sendImageGradient}>
-                  {sendingImage ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text style={styles.sendImageText}>Send Image →</Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#9CA3AF"
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+          />
           
-          <View style={styles.inputRow}>
-            {/* Photo/Screenshot button */}
-            <TouchableOpacity 
-              style={styles.attachButton}
-              onPress={handleSendImage}
-              disabled={sendingImage}
+          <TouchableOpacity 
+            style={styles.imageButton}
+            onPress={handleSendImage}
+            disabled={uploadingImage}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.imageGradient}
             >
-              <Text style={styles.attachIcon}>📷</Text>
-            </TouchableOpacity>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Type a reply... or send a QR code screenshot"
-              placeholderTextColor="#9CA3AF"
-              value={messageText}
-              onChangeText={setMessageText}
-              multiline
-              editable={!sendingImage}
-            />
-            
-            <TouchableOpacity 
-              style={[styles.sendButton, (!messageText.trim() || sendingImage) && styles.sendButtonDisabled]}
-              onPress={handleSend}
-              disabled={sending || !messageText.trim() || sendingImage}
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.imageText}>📷</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={sending || !messageText.trim()}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.sendGradient}
             >
-              <LinearGradient
-                colors={['#DC2626', '#EF4444']}
-                style={styles.sendGradient}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={styles.sendText}>📤</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+              {sending ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.sendText}>📤</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-      
-      {/* Full screen image modal for viewing images */}
-      <Modal visible={showImageModal} transparent={true} animationType="fade">
-        <View style={styles.imageModalContainer}>
+
+      {/* Image Modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
           <TouchableOpacity 
-            style={styles.imageModalClose}
-            onPress={() => setShowImageModal(false)}
+            style={styles.modalCloseButton}
+            onPress={() => setImageModalVisible(false)}
           >
-            <Text style={styles.imageModalCloseText}>✕</Text>
+            <Text style={styles.modalCloseText}>✕</Text>
           </TouchableOpacity>
           {selectedImage && (
             <Image 
               source={{ uri: selectedImage }} 
-              style={styles.fullImage}
-              resizeMode="contain"
+              style={styles.modalImage} 
+              resizeMode="contain" 
             />
           )}
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F9FAFB' 
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
   },
-  loadingContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  messagesList: { 
-    padding: 16, 
-    paddingBottom: 20 
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  messageRow: { 
-    marginBottom: 12 
+  messagesList: {
+    padding: 16,
+    paddingBottom: 20,
   },
-  myMessageRow: { 
-    alignItems: 'flex-end' 
+  dateHeader: {
+    alignItems: 'center',
+    marginVertical: 12,
   },
-  theirMessageRow: { 
-    alignItems: 'flex-start' 
+  dateHeaderText: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 11,
+    color: '#6B7280',
+    overflow: 'hidden',
   },
-  messageBubble: { 
-    maxWidth: '80%', 
-    padding: 12, 
-    borderRadius: 20 
+  messageRow: {
+    marginBottom: 12,
   },
-  myBubble: { 
-    backgroundColor: '#DC2626', 
-    borderBottomRightRadius: 4 
+  myMessageRow: {
+    alignItems: 'flex-end',
   },
-  theirBubble: { 
-    backgroundColor: '#F3F4F6', 
-    borderBottomLeftRadius: 4 
+  theirMessageRow: {
+    alignItems: 'flex-start',
   },
-  messageText: { 
-    fontSize: 15, 
-    lineHeight: 20 
+  messageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 20,
   },
-  myMessageText: { 
-    color: 'white' 
+  myBubble: {
+    backgroundColor: '#DC2626',
+    borderBottomRightRadius: 4,
   },
-  theirMessageText: { 
-    color: '#111827' 
+  theirBubble: {
+    backgroundColor: '#F3F4F6',
+    borderBottomLeftRadius: 4,
   },
-  messageImage: {
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  myMessageText: {
+    color: 'white',
+  },
+  theirMessageText: {
+    color: '#111827',
+  },
+  messageTime: {
+    fontSize: 10,
+    marginTop: 4,
+    color: '#9CA3AF',
+    textAlign: 'right',
+  },
+  chatImage: {
     width: 200,
     height: 200,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 4,
+    backgroundColor: '#f0f0f0',
   },
-  messageTime: { 
-    fontSize: 10, 
-    marginTop: 4, 
-    color: '#9CA3AF', 
-    textAlign: 'right' 
-  },
-  inputContainer: { 
-    backgroundColor: 'white', 
-    borderTopWidth: 1, 
+  suggestedContainer: {
+    backgroundColor: 'white',
+    borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    paddingVertical: 8,
+  },
+  suggestedContent: {
     paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    gap: 8,
   },
-  inputRow: {
-    flexDirection: 'row', 
+  suggestedButton: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  suggestedText: {
+    fontSize: 13,
+    color: '#374151',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
     alignItems: 'flex-end',
+    gap: 8,
   },
-  attachButton: {
+  input: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 16,
+    maxHeight: 100,
+  },
+  imageButton: {
+    borderRadius: 25,
+    overflow: 'hidden',
+  },
+  imageGradient: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
   },
-  attachIcon: {
-    fontSize: 24,
+  imageText: {
+    fontSize: 20,
   },
-  input: { 
-    flex: 1, 
-    backgroundColor: '#F9FAFB', 
-    borderRadius: 20, 
-    paddingHorizontal: 16, 
-    paddingVertical: 10, 
-    fontSize: 16, 
-    maxHeight: 100,
-  },
-  sendButton: { 
-    marginLeft: 8, 
-    borderRadius: 25, 
-    overflow: 'hidden' 
-  },
-  sendButtonDisabled: { 
-    opacity: 0.5 
-  },
-  sendGradient: { 
-    width: 44, 
-    height: 44, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  sendText: { 
-    fontSize: 20 
-  },
-  imagePreviewContainer: {
-    marginBottom: 12,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  imagePreview: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  removeImageBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeImageText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  sendImageBtn: {
-    borderRadius: 8,
+  sendButton: {
+    borderRadius: 25,
     overflow: 'hidden',
   },
-  sendImageGradient: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
-  sendImageText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  imageModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
+  sendGradient: {
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageModalClose: {
+  sendText: {
+    fontSize: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
     position: 'absolute',
     top: 50,
     right: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    zIndex: 1,
+    backgroundColor: 'white',
+    borderRadius: 20,
     width: 40,
     height: 40,
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageModalCloseText: {
-    color: 'white',
+  modalCloseText: {
     fontSize: 20,
+    color: '#DC2626',
     fontWeight: 'bold',
   },
-  fullImage: {
+  modalImage: {
     width: '100%',
     height: '80%',
   },

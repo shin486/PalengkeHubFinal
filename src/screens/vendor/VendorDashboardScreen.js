@@ -16,9 +16,12 @@ import {
   Modal,
   TextInput,
   FlatList,
+  Image,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
+import axios from 'axios';
 import { supabase } from '../../../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -32,6 +35,8 @@ import { SalesChart } from '../../components/vendor/SalesChart';
 import { Header } from '../../components/Header';
 
 const { width } = Dimensions.get('window');
+
+const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
 
 // Helper for status colors
 const getStatusColor = (status) => {
@@ -54,36 +59,52 @@ const getOrderProgress = (status) => {
   return (index / (steps.length - 1)) * 100;
 };
 
+const getUnitDisplayName = (unit) => {
+    switch (unit) {
+      case 'kg': return 'kg';
+      case '500g': return '500g';
+      case '250g': return '250g';
+      case 'piece': return 'piece';
+      case 'bundle': return 'bundle';
+      case 'dozen': return 'dozen';
+      case 'pack': return 'pack';
+      default: return unit;
+    }
+  };
+
 export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();
   const [stall, setStall] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+const [uploadingStallImage, setUploadingStallImage] = useState(false);
+const [stallImageError, setStallImageError] = useState(false);
   const [loadingStall, setLoadingStall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [salesData, setSalesData] = useState([]);
-    // --- Feature 1: Notifications ---
+  
+  // Notifications
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  
   const [chats, setChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  
   const [salesSummary, setSalesSummary] = useState({
-    today: 0,
-    week: 0,
-    month: 0,
-    total: 0,
-    ordersToday: 0,
-    ordersWeek: 0,
-    ordersMonth: 0
+    today: 0, week: 0, month: 0, total: 0,
+    ordersToday: 0, ordersWeek: 0, ordersMonth: 0
   });
   const [reportStats, setReportStats] = useState({ pending: 0, total: 0 });
-// --- Feature 7: Customer History (Suki) ---
-const [frequentCustomers, setFrequentCustomers] = useState([]);
-const [loadingCustomers, setLoadingCustomers] = useState(false);
-  // --- Promotions state ---
+  
+  // Customer History (Suki)
+  const [frequentCustomers, setFrequentCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  
+  // Promotions state
   const [promotions, setPromotions] = useState([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [productsList, setProductsList] = useState([]);
@@ -93,33 +114,194 @@ const [loadingCustomers, setLoadingCustomers] = useState(false);
     discount_value: '',
     end_date: '',
   });
-  // --- Feature 2: Sales Analytics ---
+  
+  // Sales Analytics
   const [bestSellingProducts, setBestSellingProducts] = useState([]);
   const [peakHours, setPeakHours] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-
-  // --- Feature 6: Reports ---
-  const [reportPeriod, setReportPeriod] = useState('week'); // 'day', 'week', 'month'
+  
+  // Reports
+  const [reportPeriod, setReportPeriod] = useState('week');
   const [reportData, setReportData] = useState([]);
   const [exporting, setExporting] = useState(false);
-
-  // --- Feature 8: Pause Orders ---
+  
+  // Pause Orders
   const [isPaused, setIsPaused] = useState(false);
   const [pausing, setPausing] = useState(false);
+  
+  // Rating Insights Stats
+  const [ratingStats, setRatingStats] = useState({
+    averageRating: 0,
+    totalReviews: 0,
+    positivePercentage: 0,
+    ratedProducts: 0
+  });
+  
+ // Improved Propose Change state
+const [proposeModalVisible, setProposeModalVisible] = useState(false);
+const [selectedOrder, setSelectedOrder] = useState(null);
+const [selectedItemId, setSelectedItemId] = useState(null);
+const [proposedUnit, setProposedUnit] = useState('');
+const [proposedQuantity, setProposedQuantity] = useState('');
+const [proposalNotes, setProposalNotes] = useState('');
+const [availableUnits, setAvailableUnits] = useState([]);
+const [unitPrices, setUnitPrices] = useState({});
+const [submittingProposal, setSubmittingProposal] = useState(false);
+  
+  // Order tab state
+  const [orderStatusTab, setOrderStatusTab] = useState('pending');
+
   // Fetch stall
   useEffect(() => {
     if (user) fetchStall();
   }, [user]);
 
+  const fetchStall = async () => {
+    try {
+      setLoadingStall(true);
+      const { data, error } = await supabase
+        .from('stalls')
+        .select('*')
+        .eq('vendor_id', user?.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      setStall(data);
+    } catch (error) {
+      console.error('Error fetching stall:', error);
+    } finally {
+      setLoadingStall(false);
+    }
+  };
 
-  // --- Rating Insights Stats ---
-const [ratingStats, setRatingStats] = useState({
-  averageRating: 0,
-  totalReviews: 0,
-  positivePercentage: 0,
-  ratedProducts: 0
-});
-    // --- Feature 1: Fetch Notifications ---
+  // Add this function - Stall Image Upload using ImgBB
+  const uploadStallImage = async () => {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission needed', 'Please grant gallery permissions to upload stall image');
+    return;
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [16, 9],
+    quality: 0.8,
+  });
+
+  if (!result.canceled) {
+    setUploadingStallImage(true);
+    try {
+      const uri = result.assets[0].uri;
+      
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      
+      const formData = new FormData();
+      formData.append('image', base64);
+      
+      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
+        params: { key: IMGBB_API_KEY },
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const stallImageUrl = uploadResponse.data.data.url;
+      console.log('✅ Stall image uploaded:', stallImageUrl);
+      
+      const { error } = await supabase
+        .from('stalls')
+        .update({ image_url: stallImageUrl })
+        .eq('id', stall.id);
+      
+      if (error) throw error;
+      
+      setStallImageError(false);
+      await fetchStall();
+      Alert.alert('Success', 'Stall image updated!');
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to upload image');
+    } finally {
+      setUploadingStallImage(false);
+    }
+  }
+};
+// Add this function - Vendor Avatar Upload using ImgBB
+
+const uploadVendorAvatar = async () => {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission needed', 'Please grant gallery permissions to upload profile picture');
+    return;
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.8,
+  });
+
+  if (!result.canceled) {
+    setUploadingAvatar(true);
+    try {
+      const uri = result.assets[0].uri;
+      
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      
+      const formData = new FormData();
+      formData.append('image', base64);
+      
+      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
+        params: { key: IMGBB_API_KEY },
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const avatarUrl = uploadResponse.data.data.url;
+      console.log('✅ Vendor avatar uploaded:', avatarUrl);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
+      // Refresh stall data to update profile info
+      await fetchStall();
+      
+      Alert.alert('Success', 'Profile picture updated!');
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Error', 'Failed to upload image');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+};
+
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -143,7 +325,6 @@ const [ratingStats, setRatingStats] = useState({
     }
   }, [user]);
 
-  // Mark notification as read
   const markNotificationRead = async (notificationId) => {
     try {
       await supabase
@@ -160,7 +341,6 @@ const [ratingStats, setRatingStats] = useState({
     }
   };
 
-  // Mark all as read
   const markAllNotificationsRead = async () => {
     try {
       await supabase
@@ -175,22 +355,6 @@ const [ratingStats, setRatingStats] = useState({
     } catch (error) {
       console.error('Error marking all read:', error);
       Alert.alert('Error', 'Failed to mark all as read');
-    }
-  };
-  const fetchStall = async () => {
-    try {
-      setLoadingStall(true);
-      const { data, error } = await supabase
-        .from('stalls')
-        .select('*')
-        .eq('vendor_id', user?.id)
-        .single();
-      if (error && error.code !== 'PGRST116') throw error;
-      setStall(data);
-    } catch (error) {
-      console.error('Error fetching stall:', error);
-    } finally {
-      setLoadingStall(false);
     }
   };
 
@@ -209,67 +373,17 @@ const [ratingStats, setRatingStats] = useState({
     }
   }, [user]);
 
-   const handleRequestPayment = async (order) => {
-  try {
-    // 1. Get or create conversation (vendor is the sender)
-    let { data: conversation } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('customer_id', order.consumer_id)  // ← Fixed: use order.consumer_id, not user.id
-      .eq('stall_id', order.stall_id)
-      .maybeSingle();
 
-    let conversationId;
-    if (conversation) {
-      conversationId = conversation.id;
-    } else {
-      const { data: newConv, error: convError } = await supabase
-        .from('conversations')
-        .insert({
-          customer_id: order.consumer_id,  // ← Fixed: customer is the order consumer
-          stall_id: order.stall_id,
-          last_message: `💰 Payment request for Order #${order.order_number?.slice(-8)}`,
-          last_message_time: new Date(),
-          vendor_unread_count: 1,
-        })
-        .select()
-        .single();
-      if (convError) throw convError;
-      conversationId = newConv.id;
-    }
+  const fetchAvailableProducts = useCallback(async () => {
+  if (!stall?.id) return;
+  const { data } = await supabase
+    .from('products')
+    .select('id, name, price, unit')
+    .eq('stall_id', stall.id)
+    .eq('is_available', true);
+  setAvailableProducts(data || []);
+}, [stall]);
 
-    // 2. Send payment request message (VENDOR sends to CUSTOMER)
-    if (conversationId) {
-      const paymentMessage = `💳 **PAYMENT REQUEST**\n\nOrder #${order.order_number?.slice(-8)}\nTotal Amount: ₱${order.total_amount}\n\nPlease send payment to GCash: **09XX-XXX-XXXX**\n\nAfter payment, send screenshot here.`;
-      
-      await supabase.from('messages').insert({
-        conversation_id: conversationId,
-        sender_id: user.id,  // Vendor's ID
-        sender_role: 'vendor',  // ← Fixed: changed from 'customer' to 'vendor'
-        message: paymentMessage,
-        is_read: false,
-      });
-
-      // Update conversation last message
-      await supabase
-        .from('conversations')
-        .update({
-          last_message: paymentMessage,
-          last_message_time: new Date(),
-          customer_unread_count: 1,  // ← Fixed: increment customer's unread count
-        })
-        .eq('id', conversationId);
-    }
-
-    // 3. Optionally update order status to 'awaiting_payment'
-    await originalUpdateOrderStatus(order.id, 'awaiting_payment');
-
-    Alert.alert('Success', 'Payment request sent to customer');
-  } catch (error) {
-    console.error('Request payment error:', error);
-    Alert.alert('Error', 'Failed to send payment request');
-  }
-};
   const fetchChats = useCallback(async () => {
     if (!stall?.id) return;
     try {
@@ -391,23 +505,17 @@ const [ratingStats, setRatingStats] = useState({
     refreshOrders,
   } = useVendorOrders(stall?.id);
 
-  // Wrap updateOrderStatus to also refresh sales & low stock
   const handleUpdateOrderStatus = async (order, newStatus) => {
     await originalUpdateOrderStatus(order, newStatus);
     await fetchSalesData();
     await refreshOrders();
   };
 
-  // --- Reject order (with chat) ---
-  const handleRejectOrder = async (orderId, reasonId, finalMessage) => {
+  const handleRequestPayment = async (order) => {
   try {
-    await originalUpdateOrderStatus(orderId, 'cancelled');
-    const order = orders.find(o => o.id === orderId);
-    if (!order) throw new Error('Order not found');
-
     let { data: conversation } = await supabase
       .from('conversations')
-      .select('id, vendor_unread_count')
+      .select('id')
       .eq('customer_id', order.consumer_id)
       .eq('stall_id', order.stall_id)
       .maybeSingle();
@@ -415,21 +523,13 @@ const [ratingStats, setRatingStats] = useState({
     let conversationId;
     if (conversation) {
       conversationId = conversation.id;
-      await supabase
-        .from('conversations')
-        .update({
-          last_message: `❌ Order cancelled: ${finalMessage}`,
-          last_message_time: new Date(),
-          vendor_unread_count: (conversation.vendor_unread_count || 0) + 1,
-        })
-        .eq('id', conversationId);
     } else {
       const { data: newConv, error: convError } = await supabase
         .from('conversations')
         .insert({
           customer_id: order.consumer_id,
           stall_id: order.stall_id,
-          last_message: `❌ Order cancelled: ${finalMessage}`,
+          last_message: `💰 Payment request for Order #${order.order_number?.slice(-8)}`,
           last_message_time: new Date(),
           vendor_unread_count: 1,
         })
@@ -439,79 +539,174 @@ const [ratingStats, setRatingStats] = useState({
       conversationId = newConv.id;
     }
 
-    const messageText = `❌ Order #${order.order_number?.slice(-8)} cancelled: ${finalMessage}`;
-    await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      sender_role: 'vendor',
-      message: messageText,
-      is_read: false,
-    });
-
-    // ✅ ADD THIS: Create notification for the customer
-    await supabase.from('notifications').insert({
-      user_id: order.consumer_id,
-      title: 'Order Cancelled ❌',
-      message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`,
-      type: 'order',
-      data: { order_id: order.id, type: 'cancellation' },
-      is_read: false,
-      created_at: new Date().toISOString(),
-    });
-
-    await refreshOrders();
-    await fetchSalesData();
-    await fetchChats();
-    Alert.alert('Order Rejected', 'The order has been cancelled and the customer has been notified via chat and notification.');
-  } catch (error) {
-    console.error('Rejection error:', error);
-    Alert.alert('Error', error.message || 'Failed to reject order');
-    throw error;
-  }
-};// --- Fetch Rating Stats for Preview ---
-const fetchRatingStats = useCallback(async () => {
-  if (!stall?.id) return;
-  try {
-    const { data: ratings, error } = await supabase
-      .from('ratings')
-      .select('rating, product_id')
-      .eq('stall_id', stall.id);
-
-    if (error) throw error;
-    if (!ratings || ratings.length === 0) {
-      setRatingStats({
-        averageRating: 0,
-        totalReviews: 0,
-        positivePercentage: 0,
-        ratedProducts: 0
+    if (conversationId) {
+      const paymentMessage = `💳 **PAYMENT REQUEST**\n\nOrder #${order.order_number?.slice(-8)}\nTotal Amount: ₱${order.total_amount}\n\nPlease send payment to GCash: **09XX-XXX-XXXX**\n\nAfter payment, send screenshot here.`;
+      
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        sender_role: 'vendor',
+        message: paymentMessage,
+        is_read: false,
       });
-      return;
+
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: paymentMessage,
+          last_message_time: new Date(),
+          customer_unread_count: 1,
+        })
+        .eq('id', conversationId);
     }
 
-    const totalReviews = ratings.length;
-    const sumRatings = ratings.reduce((acc, r) => acc + r.rating, 0);
-    const averageRating = sumRatings / totalReviews;
+    // ✅ FIX: Change to 'confirmed' instead of 'awaiting_payment'
+    await originalUpdateOrderStatus(order.id, 'confirmed');
     
-    // Positive ratings are 4 or 5 stars
-    const positiveCount = ratings.filter(r => r.rating >= 4).length;
-    const positivePercentage = (positiveCount / totalReviews) * 100;
-    
-    // Count unique products with ratings
-    const uniqueProducts = new Set(ratings.map(r => r.product_id).filter(id => id));
-    const ratedProducts = uniqueProducts.size;
-
-    setRatingStats({
-      averageRating: averageRating.toFixed(1),
-      totalReviews,
-      positivePercentage: Math.round(positivePercentage),
-      ratedProducts
-    });
+    Alert.alert('Success', 'Payment request sent to customer');
   } catch (error) {
-    console.error('Error fetching rating stats:', error);
+    console.error('Request payment error:', error);
+    Alert.alert('Error', 'Failed to send payment request');
   }
-}, [stall]);
+};
 
-  // --- Promotions functions ---
+  const handleRejectOrder = async (orderId, reasonId, finalMessage) => {
+    try {
+      await originalUpdateOrderStatus(orderId, 'cancelled');
+      const order = orders.find(o => o.id === orderId);
+      if (!order) throw new Error('Order not found');
+
+      let { data: conversation } = await supabase
+        .from('conversations')
+        .select('id, vendor_unread_count')
+        .eq('customer_id', order.consumer_id)
+        .eq('stall_id', order.stall_id)
+        .maybeSingle();
+
+      let conversationId;
+      if (conversation) {
+        conversationId = conversation.id;
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: `❌ Order cancelled: ${finalMessage}`,
+            last_message_time: new Date(),
+            vendor_unread_count: (conversation.vendor_unread_count || 0) + 1,
+          })
+          .eq('id', conversationId);
+      } else {
+        const { data: newConv, error: convError } = await supabase
+          .from('conversations')
+          .insert({
+            customer_id: order.consumer_id,
+            stall_id: order.stall_id,
+            last_message: `❌ Order cancelled: ${finalMessage}`,
+            last_message_time: new Date(),
+            vendor_unread_count: 1,
+          })
+          .select()
+          .single();
+        if (convError) throw convError;
+        conversationId = newConv.id;
+      }
+
+      const messageText = `❌ Order #${order.order_number?.slice(-8)} cancelled: ${finalMessage}`;
+      await supabase.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        sender_role: 'vendor',
+        message: messageText,
+        is_read: false,
+      });
+
+      await supabase.from('notifications').insert({
+        user_id: order.consumer_id,
+        title: 'Order Cancelled ❌',
+        message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`,
+        type: 'order',
+        data: { order_id: order.id, type: 'cancellation' },
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+
+      await refreshOrders();
+      await fetchSalesData();
+      await fetchChats();
+      Alert.alert('Order Rejected', 'The order has been cancelled and the customer has been notified via chat and notification.');
+    } catch (error) {
+      console.error('Rejection error:', error);
+      Alert.alert('Error', error.message || 'Failed to reject order');
+      throw error;
+    }
+  };
+
+  const fetchRatingStats = useCallback(async () => {
+    if (!stall?.id) return;
+    try {
+      const { data: ratings, error } = await supabase
+        .from('ratings')
+        .select('rating, product_id')
+        .eq('stall_id', stall.id);
+
+      if (error) throw error;
+      if (!ratings || ratings.length === 0) {
+        setRatingStats({
+          averageRating: 0,
+          totalReviews: 0,
+          positivePercentage: 0,
+          ratedProducts: 0
+        });
+        return;
+      }
+
+      const totalReviews = ratings.length;
+      const sumRatings = ratings.reduce((acc, r) => acc + r.rating, 0);
+      const averageRating = sumRatings / totalReviews;
+      const positiveCount = ratings.filter(r => r.rating >= 4).length;
+      const positivePercentage = (positiveCount / totalReviews) * 100;
+      const uniqueProducts = new Set(ratings.map(r => r.product_id).filter(id => id));
+      const ratedProducts = uniqueProducts.size;
+
+      setRatingStats({
+        averageRating: averageRating.toFixed(1),
+        totalReviews,
+        positivePercentage: Math.round(positivePercentage),
+        ratedProducts
+      });
+    } catch (error) {
+      console.error('Error fetching rating stats:', error);
+    }
+  }, [stall]);
+
+  const fetchProductUnitPrices = useCallback(async (productId) => {
+  const { data } = await supabase
+    .from('products')
+    .select('price, price_options, unit_options')
+    .eq('id', productId)
+    .single();
+  
+  if (data) {
+    const units = data.unit_options || ['kg', '500g', '250g', 'piece'];
+    const prices = data.price_options || {};
+    
+    // If no custom price for a unit, calculate using multiplier
+    const multipliers = {
+      'kg': 1, '500g': 2, '250g': 4,
+      'piece': 0.25, 'bundle': 0.35, 'dozen': 2.4, 'pack': 0.8
+    };
+    
+    units.forEach(unit => {
+      if (!prices[unit]) {
+        const multiplier = multipliers[unit] || 1;
+        prices[unit] = data.price * multiplier;
+      }
+    });
+    
+    setAvailableUnits(units);
+    setUnitPrices(prices);
+  }
+}, []);
+
   const fetchProductsForPromo = useCallback(async () => {
     if (!stall?.id) return;
     const { data } = await supabase
@@ -533,105 +728,99 @@ const fetchRatingStats = useCallback(async () => {
     setPromotions(data || []);
   }, [stall]);
 
-    // --- Feature 2: Sales Analytics Functions ---
- const fetchBestSellingProducts = useCallback(async () => {
-  if (!stall?.id) return;
-  try {
-    setAnalyticsLoading(true);
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('items')
-      .eq('stall_id', stall.id)
-      .eq('status', 'completed');
-    
-    if (!orders || orders.length === 0) return;
-    
-    const productSales = {};
-    orders.forEach(order => {
-      if (order.items && Array.isArray(order.items)) {
-        order.items.forEach(item => {
-          if (productSales[item.id]) {
-            productSales[item.id].quantity += item.quantity;
-            productSales[item.id].revenue += item.price * item.quantity;
-          } else {
-            productSales[item.id] = {
-              id: item.id,
-              name: item.name,
-              quantity: item.quantity,
-              revenue: item.price * item.quantity
-            };
-          }
-        });
-      }
-    });
-    
-    const sorted = Object.values(productSales).sort((a, b) => b.quantity - a.quantity);
-    setBestSellingProducts(sorted.slice(0, 5));
-    
-    // Calculate peak hours
-    const { data: hourlyOrders } = await supabase
-      .from('orders')
-      .select('created_at')
-      .eq('stall_id', stall.id)
-      .eq('status', 'completed');
-    
-    if (hourlyOrders && hourlyOrders.length > 0) {
-      const hourCounts = Array(24).fill(0);
-      hourlyOrders.forEach(order => {
-        const hour = new Date(order.created_at).getHours();
-        hourCounts[hour]++;
+  const fetchBestSellingProducts = useCallback(async () => {
+    if (!stall?.id) return;
+    try {
+      setAnalyticsLoading(true);
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('items')
+        .eq('stall_id', stall.id)
+        .eq('status', 'completed');
+      
+      if (!orders || orders.length === 0) return;
+      
+      const productSales = {};
+      orders.forEach(order => {
+        if (order.items && Array.isArray(order.items)) {
+          order.items.forEach(item => {
+            if (productSales[item.id]) {
+              productSales[item.id].quantity += item.quantity;
+              productSales[item.id].revenue += item.price * item.quantity;
+            } else {
+              productSales[item.id] = {
+                id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                revenue: item.price * item.quantity
+              };
+            }
+          });
+        }
       });
-      const peakHourData = hourCounts.map((count, hour) => ({ hour, count }));
-      setPeakHours(peakHourData);
-    }
-  } catch (error) {
-    console.error('Error fetching best sellers:', error);
-  } finally {
-    setAnalyticsLoading(false);
-  }
-}, [stall]);
-
-// --- Feature 7: Fetch Frequent Customers (Suki) ---
-const fetchFrequentCustomers = useCallback(async () => {
-  if (!stall?.id) return;
-  try {
-    setLoadingCustomers(true);
-    const { data: orders, error } = await supabase
-      .from('orders')
-      .select('consumer_id, profiles(full_name, email)')
-      .eq('stall_id', stall.id)
-      .eq('status', 'completed');
-
-    if (error) throw error;
-    if (!orders || orders.length === 0) return;
-
-    // Count orders per customer
-    const customerCounts = {};
-    orders.forEach(order => {
-      const customerId = order.consumer_id;
-      if (customerCounts[customerId]) {
-        customerCounts[customerId].count++;
-      } else {
-        customerCounts[customerId] = {
-          id: customerId,
-          name: order.profiles?.full_name || 'Customer',
-          email: order.profiles?.email,
-          count: 1
-        };
+      
+      const sorted = Object.values(productSales).sort((a, b) => b.quantity - a.quantity);
+      setBestSellingProducts(sorted.slice(0, 5));
+      
+      const { data: hourlyOrders } = await supabase
+        .from('orders')
+        .select('created_at')
+        .eq('stall_id', stall.id)
+        .eq('status', 'completed');
+      
+      if (hourlyOrders && hourlyOrders.length > 0) {
+        const hourCounts = Array(24).fill(0);
+        hourlyOrders.forEach(order => {
+          const hour = new Date(order.created_at).getHours();
+          hourCounts[hour]++;
+        });
+        const peakHourData = hourCounts.map((count, hour) => ({ hour, count }));
+        setPeakHours(peakHourData);
       }
-    });
+    } catch (error) {
+      console.error('Error fetching best sellers:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [stall]);
 
-    // Sort by order count (highest first) and take top 5
-    const sorted = Object.values(customerCounts).sort((a, b) => b.count - a.count);
-    setFrequentCustomers(sorted.slice(0, 5));
-  } catch (error) {
-    console.error('Error fetching frequent customers:', error);
-  } finally {
-    setLoadingCustomers(false);
-  }
-}, [stall]);
+  const fetchFrequentCustomers = useCallback(async () => {
+    if (!stall?.id) return;
+    try {
+      setLoadingCustomers(true);
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('consumer_id, profiles(full_name, email)')
+        .eq('stall_id', stall.id)
+        .eq('status', 'completed');
 
-  // --- Feature 6: Reports Functions ---
+      if (error) throw error;
+      if (!orders || orders.length === 0) return;
+
+      const customerCounts = {};
+      orders.forEach(order => {
+        const customerId = order.consumer_id;
+        if (customerCounts[customerId]) {
+          customerCounts[customerId].count++;
+        } else {
+          customerCounts[customerId] = {
+            id: customerId,
+            name: order.profiles?.full_name || 'Customer',
+            email: order.profiles?.email,
+            count: 1
+          };
+        }
+      });
+
+      const sorted = Object.values(customerCounts).sort((a, b) => b.count - a.count);
+      setFrequentCustomers(sorted.slice(0, 5));
+    } catch (error) {
+      console.error('Error fetching frequent customers:', error);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  }, [stall]);
+
   const fetchReportData = useCallback(async () => {
     if (!stall?.id) return;
     try {
@@ -702,7 +891,6 @@ const fetchFrequentCustomers = useCallback(async () => {
     }
   };
 
-  // --- Feature 8: Pause Orders Toggle ---
   const togglePauseOrders = async () => {
     setPausing(true);
     try {
@@ -729,7 +917,6 @@ const fetchFrequentCustomers = useCallback(async () => {
     }
   };
 
-  // --- Feature 7: Customer History Helper ---
   const getCustomerOrderCount = useCallback(async (customerId) => {
     const { count } = await supabase
       .from('orders')
@@ -739,6 +926,7 @@ const fetchFrequentCustomers = useCallback(async () => {
       .eq('status', 'completed');
     return count || 0;
   }, [stall]);
+
   const handleCreatePromotion = async () => {
     console.log('Creating promotion with data:', newPromo);
     
@@ -832,33 +1020,43 @@ const fetchFrequentCustomers = useCallback(async () => {
     }, [stall, fetchSalesData, fetchChats, fetchReportStats, fetchPromotions, fetchNotifications, fetchProductsForPromo, fetchBestSellingProducts, fetchFrequentCustomers, fetchRatingStats])
   );
 
-const onRefresh = async () => {
-  setRefreshing(true);
-  await Promise.all([
-    refreshProducts(),
-    refreshOrders(),
-    fetchStall(),
-    fetchSalesData(),
-    fetchChats(),
-    fetchReportStats(),
-    fetchPromotions(),
-    fetchProductsForPromo(),
-    fetchBestSellingProducts(),
-    fetchFrequentCustomers(),
-    fetchRatingStats() // Add this line // Add this line,  // ← ADD THIS
-  ]);
-  setRefreshing(false);
-};
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      refreshProducts(),
+      refreshOrders(),
+      fetchStall(),
+      fetchSalesData(),
+      fetchChats(),
+      fetchReportStats(),
+      fetchPromotions(),
+      fetchProductsForPromo(),
+      fetchBestSellingProducts(),
+      fetchFrequentCustomers(),
+      fetchRatingStats()
+    ]);
+    setRefreshing(false);
+  };
 
   const handleAddProduct = async (productData) => {
     const success = await addProduct(productData);
     if (success) setShowAddModal(false);
   };
 
-  const handleUpdateProduct = async (productData) => {
-    const success = await updateProduct(editingProduct.id, productData);
-    if (success) setEditingProduct(null);
-  };
+const handleUpdateProduct = async (productData) => {
+  console.log('🔵 handleUpdateProduct - FULL DATA:', JSON.stringify(productData, null, 2));
+  console.log('🔵 handleUpdateProduct - IMAGE_URL:', productData.image_url);
+  
+  const success = await updateProduct(editingProduct.id, productData);
+  if (success) setEditingProduct(null);
+};
+
+// Add this function - it's called when user taps Edit on a product
+const handleEditProduct = (product) => {
+  console.log('🔵 Editing product:', product.name);
+  console.log('🔵 Product image_url:', product.image_url);
+  setEditingProduct(product); // This passes the product data to the modal
+};
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -900,6 +1098,144 @@ const onRefresh = async () => {
     }
   };
 
+const handleProposeChange = async (order) => {
+  setSelectedOrder(order);
+  setSelectedItemId(null);
+  setProposedUnit('');
+  setProposedQuantity('');
+  setProposalNotes('');
+  setProposeModalVisible(true);
+};
+
+const submitProposal = async () => {
+  if (!selectedOrder || !selectedItemId || !proposedUnit || !proposedQuantity) {
+    Alert.alert('Error', 'Please select item, unit, and quantity');
+    return;
+  }
+  
+  setSubmittingProposal(true);
+  
+  try {
+    const selectedItem = selectedOrder.items.find(i => i.id === selectedItemId);
+    if (!selectedItem) throw new Error('Item not found');
+    
+    const newQuantity = parseInt(proposedQuantity);
+    if (isNaN(newQuantity) || newQuantity <= 0) {
+      Alert.alert('Error', 'Please enter a valid quantity');
+      setSubmittingProposal(false);
+      return;
+    }
+    
+    const unitPrice = unitPrices[proposedUnit];
+    if (!unitPrice) {
+      Alert.alert('Error', 'Price not available for selected unit');
+      setSubmittingProposal(false);
+      return;
+    }
+    
+    const oldTotal = selectedItem.price * selectedItem.quantity;
+    const newTotal = unitPrice * newQuantity;
+    
+    // Get or create conversation
+    let { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('customer_id', selectedOrder.consumer_id)
+      .eq('stall_id', selectedOrder.stall_id)
+      .maybeSingle();
+    
+    let conversationId;
+    if (conversation) {
+      conversationId = conversation.id;
+    } else {
+      const { data: newConv } = await supabase
+        .from('conversations')
+        .insert({
+          customer_id: selectedOrder.consumer_id,
+          stall_id: selectedOrder.stall_id,
+          last_message: `📝 Change proposal for Order #${selectedOrder.order_number?.slice(-8)}`,
+          last_message_time: new Date(),
+          vendor_unread_count: 1,
+        })
+        .select()
+        .single();
+      conversationId = newConv.id;
+    }
+    
+    const proposalData = {
+      item_id: selectedItem.id,
+      item_name: selectedItem.name,
+      original_quantity: selectedItem.quantity,
+      original_unit: selectedItem.unit,
+      original_price: oldTotal,
+      proposed_quantity: newQuantity,
+      proposed_unit: proposedUnit,
+      proposed_price: newTotal,
+      price_per_unit: unitPrice,
+      notes: proposalNotes,
+      status: 'pending'
+    };
+    
+    await supabase
+      .from('orders')
+      .update({ proposed_changes: proposalData })
+      .eq('id', selectedOrder.id);
+    
+    // Build proposal message
+    let proposalMessage = `📝 **ORDER CHANGE PROPOSAL**\n\n`;
+    proposalMessage += `**Item:** ${selectedItem.name}\n`;
+    proposalMessage += `**Original:** ${selectedItem.quantity} ${selectedItem.unit} (₱${oldTotal.toFixed(2)})\n`;
+    proposalMessage += `**Proposed:** ${newQuantity} x ${getUnitDisplayName(proposedUnit)} at ₱${unitPrice.toFixed(2)} each\n`;
+    proposalMessage += `**New Total:** ₱${newTotal.toFixed(2)}`;
+    
+    const difference = newTotal - oldTotal;
+    if (difference > 0) {
+      proposalMessage += `\n**Additional:** ₱${difference.toFixed(2)}`;
+    } else if (difference < 0) {
+      proposalMessage += `\n**Savings:** ₱${Math.abs(difference).toFixed(2)}`;
+    }
+    
+    if (proposalNotes) {
+      proposalMessage += `\n\n**Note from vendor:** ${proposalNotes}`;
+    }
+    
+    proposalMessage += `\n\nDo you accept this change?`;
+    
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      sender_role: 'vendor',
+      message: proposalMessage,
+      is_read: false,
+      message_type: 'proposal',
+      proposal_data: proposalData
+    });
+    
+    await supabase
+      .from('conversations')
+      .update({
+        last_message: proposalMessage,
+        last_message_time: new Date(),
+        customer_unread_count: 1,
+      })
+      .eq('id', conversationId);
+    
+    Alert.alert('Proposal Sent', 'The customer will be notified to accept or reject the change');
+    setProposeModalVisible(false);
+    setSelectedOrder(null);
+    setSelectedItemId(null);
+    setProposedUnit('');
+    setProposedQuantity('');
+    setProposalNotes('');
+    
+  } catch (error) {
+    console.error('Proposal error:', error);
+    Alert.alert('Error', 'Failed to send proposal');
+  } finally {
+    setSubmittingProposal(false);
+  }
+};
+
   if (loadingStall) {
     return (
       <SafeAreaView style={styles.centerContainer}>
@@ -937,7 +1273,6 @@ const WelcomeHeader = () => {
 
   return (
     <View style={styles.welcomeHeader}>
-      {/* Top row: Profile + Greeting + Stall Badge */}
       <View style={styles.welcomeTopRow}>
         <View style={styles.profileImageContainer}>
           {profile?.avatar_url ? (
@@ -961,12 +1296,11 @@ const WelcomeHeader = () => {
           <Text style={styles.welcomeSubtext}>Here's your store performance</Text>
         </View>
         
-     <View style={styles.welcomeBadge}>
-  <Text style={styles.welcomeBadgeText}>Stall #{stall.stall_number}</Text>
-</View>
+        <View style={styles.welcomeBadge}>
+          <Text style={styles.welcomeBadgeText}>Stall #{stall.stall_number}</Text>
+        </View>
       </View>
 
-      {/* Bottom row: Store Status Toggle */}
       <View style={styles.statusRow}>
         <View style={styles.statusIndicator}>
           <View style={[styles.statusDot, { backgroundColor: isPaused ? '#EF4444' : '#10B981' }]} />
@@ -1021,9 +1355,9 @@ const WelcomeHeader = () => {
     );
   };
 
-  // ----- Overview Tab (Low Stock section removed) -----
+  // ----- Overview Tab -----
   const renderOverview = () => {
-    const urgentOrder = [...orderStats.active].sort((a,b) => new Date(a.created_at) - new Date(b.created_at))[0];
+    const urgentOrder = [...(orderStats.active || [])].sort((a,b) => new Date(a.created_at) - new Date(b.created_at))[0];
     const salesTrend = 12.5;
     const pendingTrend = -8.3;
 
@@ -1036,7 +1370,7 @@ const WelcomeHeader = () => {
 
         <View style={styles.statsGridModern}>
           <StatCard title="Today's Sales" value={salesSummary.today} icon="💰" gradientColors={['#DC2626', '#EF4444']} trend={true} trendValue={salesTrend} isCurrency={true} />
-          <StatCard title="Pending Orders" value={orderStats.pending.length} icon="📋" gradientColors={['#F59E0B', '#FBBF24']} trend={true} trendValue={pendingTrend} />
+          <StatCard title="Pending Orders" value={orderStats.pending?.length || 0} icon="📋" gradientColors={['#F59E0B', '#FBBF24']} trend={true} trendValue={pendingTrend} />
           <StatCard title="Total Products" value={products.length} icon="📦" gradientColors={['#10B981', '#34D399']} trend={false} />
         </View>
 
@@ -1066,117 +1400,109 @@ const WelcomeHeader = () => {
             </TouchableOpacity>
           </View>
         </View>
-        {/* Feature 2 & 7: Sales Analytics & Customer Insights */}
+
         <View style={styles.section}>
-  <Text style={styles.sectionTitle}>📊 Sales Insights</Text>
-  {analyticsLoading ? (
-    <ActivityIndicator size="small" color="#DC2626" />
-  ) : (
-    <>
-      {/* Best Selling Products */}
-      {bestSellingProducts.length > 0 && (
-        <View style={styles.analyticsCard}>
-          <Text style={styles.analyticsSubtitle}>🔥 Best Selling Products</Text>
-          {bestSellingProducts.map((product, idx) => (
-            <View key={product.id} style={styles.bestSellerRow}>
-              <Text style={styles.bestSellerRank}>#{idx + 1}</Text>
-              <Text style={styles.bestSellerName}>{product.name}</Text>
-              <Text style={styles.bestSellerQty}>{product.quantity} sold</Text>
-            </View>
-          ))}
-        </View>
-      )}
-      
-      {/* Peak Hours */}
-      {peakHours.length > 0 && (
-        <View style={styles.analyticsCard}>
-          <Text style={styles.analyticsSubtitle}>⏰ Peak Hours</Text>
-          <View style={styles.peakHoursContainer}>
-            {peakHours.filter(h => h.count > 0).slice(0, 5).map(hour => (
-              <View key={hour.hour} style={styles.peakHourBadge}>
-                <Text style={styles.peakHourText}>{hour.hour}:00</Text>
+          <Text style={styles.sectionTitle}>📊 Sales Insights</Text>
+          {analyticsLoading ? (
+            <ActivityIndicator size="small" color="#DC2626" />
+          ) : (
+            <>
+              {bestSellingProducts.length > 0 && (
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsSubtitle}>🔥 Best Selling Products</Text>
+                  {bestSellingProducts.map((product, idx) => (
+                    <View key={product.id} style={styles.bestSellerRow}>
+                      <Text style={styles.bestSellerRank}>#{idx + 1}</Text>
+                      <Text style={styles.bestSellerName}>{product.name}</Text>
+                      <Text style={styles.bestSellerQty}>{product.quantity} sold</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              
+              {peakHours.length > 0 && (
+                <View style={styles.analyticsCard}>
+                  <Text style={styles.analyticsSubtitle}>⏰ Peak Hours</Text>
+                  <View style={styles.peakHoursContainer}>
+                    {peakHours.filter(h => h.count > 0).slice(0, 5).map(hour => (
+                      <View key={hour.hour} style={styles.peakHourBadge}>
+                        <Text style={styles.peakHourText}>{hour.hour}:00</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.analyticsCard}>
+                <Text style={styles.analyticsSubtitle}>⭐ Your Suki (Regulars)</Text>
+                {loadingCustomers ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : frequentCustomers.length === 0 ? (
+                  <Text style={styles.noCustomersText}>No regular customers yet</Text>
+                ) : (
+                  frequentCustomers.map((customer, idx) => (
+                    <View key={customer.id} style={styles.customerRow}>
+                      <View style={styles.customerRank}>
+                        <Text style={styles.customerRankText}>#{idx + 1}</Text>
+                      </View>
+                      <View style={styles.customerInfo}>
+                        <Text style={styles.customerName}>{customer.name}</Text>
+                        <Text style={styles.customerOrders}>{customer.count} orders</Text>
+                      </View>
+                      <View style={styles.sukiBadge}>
+                        <Text style={styles.sukiBadgeText}>🏆 Suki</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
               </View>
-            ))}
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.ratingHeader}>
+            <Text style={styles.sectionTitle}>⭐ Rating Insights</Text>
+            <View style={styles.ratingBadge}>
+              <Text style={styles.ratingBadgeText}>{ratingStats.averageRating} ★</Text>
+            </View>
           </View>
-        </View>
-      )}
-
-      {/* Frequent Customers (Suki) */}
-      <View style={styles.analyticsCard}>
-        <Text style={styles.analyticsSubtitle}>⭐ Your Suki (Regulars)</Text>
-        {loadingCustomers ? (
-          <ActivityIndicator size="small" color="#DC2626" />
-        ) : frequentCustomers.length === 0 ? (
-          <Text style={styles.noCustomersText}>No regular customers yet</Text>
-        ) : (
-          frequentCustomers.map((customer, idx) => (
-            <View key={customer.id} style={styles.customerRow}>
-              <View style={styles.customerRank}>
-                <Text style={styles.customerRankText}>#{idx + 1}</Text>
-              </View>
-              <View style={styles.customerInfo}>
-                <Text style={styles.customerName}>{customer.name}</Text>
-                <Text style={styles.customerOrders}>{customer.count} orders</Text>
-              </View>
-              <View style={styles.sukiBadge}>
-                <Text style={styles.sukiBadgeText}>🏆 Suki</Text>
-              </View>
+          
+          <View style={styles.ratingPreviewRow}>
+            <View style={styles.ratingPreviewItem}>
+              <Text style={styles.ratingPreviewValue}>{ratingStats.totalReviews}</Text>
+              <Text style={styles.ratingPreviewLabel}>Reviews</Text>
             </View>
-          ))
-        )}
-      </View>
-    </>
-  )}
-</View>
+            <View style={styles.ratingDivider} />
+            <View style={styles.ratingPreviewItem}>
+              <Text style={styles.ratingPreviewValue}>{ratingStats.positivePercentage}%</Text>
+              <Text style={styles.ratingPreviewLabel}>Positive</Text>
+            </View>
+            <View style={styles.ratingDivider} />
+            <View style={styles.ratingPreviewItem}>
+              <Text style={styles.ratingPreviewValue}>{ratingStats.ratedProducts}</Text>
+              <Text style={styles.ratingPreviewLabel}>Products</Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.viewRatingsButton}
+            onPress={() => navigation.navigate('VendorRatings')}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.viewRatingsGradient}
+            >
+              <Text style={styles.viewRatingsIcon}>📊</Text>
+              <Text style={styles.viewRatingsText}>View Detailed Ratings</Text>
+              <Text style={styles.viewRatingsArrow}>→</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
-            
-{/* Feature 11: Rating Insights with Real Data */}
-<View style={styles.section}>
-  <View style={styles.ratingHeader}>
-    <Text style={styles.sectionTitle}>⭐ Rating Insights</Text>
-    <View style={styles.ratingBadge}>
-      <Text style={styles.ratingBadgeText}>{ratingStats.averageRating} ★</Text>
-    </View>
-  </View>
-  
-  {/* Preview Stats with Real Data */}
-  <View style={styles.ratingPreviewRow}>
-    <View style={styles.ratingPreviewItem}>
-      <Text style={styles.ratingPreviewValue}>{ratingStats.totalReviews}</Text>
-      <Text style={styles.ratingPreviewLabel}>Reviews</Text>
-    </View>
-    <View style={styles.ratingDivider} />
-    <View style={styles.ratingPreviewItem}>
-      <Text style={styles.ratingPreviewValue}>{ratingStats.positivePercentage}%</Text>
-      <Text style={styles.ratingPreviewLabel}>Positive</Text>
-    </View>
-    <View style={styles.ratingDivider} />
-    <View style={styles.ratingPreviewItem}>
-      <Text style={styles.ratingPreviewValue}>{ratingStats.ratedProducts}</Text>
-      <Text style={styles.ratingPreviewLabel}>Products</Text>
-    </View>
-  </View>
-  
-  {/* Prominent Button */}
-  <TouchableOpacity 
-    style={styles.viewRatingsButton}
-    onPress={() => navigation.navigate('VendorRatings')}
-    activeOpacity={0.85}
-  >
-    <LinearGradient
-      colors={['#DC2626', '#EF4444']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.viewRatingsGradient}
-    >
-      <Text style={styles.viewRatingsIcon}>📊</Text>
-      <Text style={styles.viewRatingsText}>View Detailed Ratings</Text>
-      <Text style={styles.viewRatingsArrow}>→</Text>
-    </LinearGradient>
-  </TouchableOpacity>
-</View>
-
-        {/* Reports Quick Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 Reports</Text>
           <View style={styles.reportsRow}>
@@ -1211,10 +1537,10 @@ const WelcomeHeader = () => {
               </TouchableOpacity>
             </View>
           )}
-          {orderStats.active.slice(0, 3).map(order => (
-            <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} onRequestPayment={handleRequestPayment} />
+          {(orderStats.active || []).slice(0, 3).map(order => (
+            <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} onRequestPayment={handleRequestPayment} onProposeChange={handleProposeChange} />
           ))}
-          {orderStats.active.length === 0 && (
+          {(orderStats.active || []).length === 0 && (
             <View style={styles.emptyStateCard}><Text style={styles.emptyStateEmoji}>📦</Text><Text style={styles.emptyStateTitle}>No orders yet</Text><Text style={styles.emptyStateText}>When customers place orders, they'll appear here</Text></View>
           )}
         </View>
@@ -1239,20 +1565,126 @@ const WelcomeHeader = () => {
     </ScrollView>
   );
 
-
   // ----- Orders Tab -----
-const renderOrders = () => (
-  <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Active Orders ({orderStats.active.length})</Text>
-      {ordersLoading ? <ActivityIndicator size="small" color="#DC2626" /> : orderStats.active.length === 0 ? (
-        <View style={styles.emptyStateCard}><Text style={styles.emptyStateEmoji}>📭</Text><Text style={styles.emptyStateTitle}>No active orders</Text><Text style={styles.emptyStateText}>New orders will appear here</Text></View>
-      ) : (
-        orderStats.active.map(order => <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} onRejectOrder={handleRejectOrder} onRequestPayment={handleRequestPayment} />)
-      )}
+// ----- Orders Tab -----
+// ----- Orders Tab - CLEAN VERSION -----
+// ----- Orders Tab - FULL WORKING VERSION -----
+const renderOrders = () => {
+  // Safe data
+  const pendingOrders = orderStats?.pending || [];
+  const confirmedOrders = orderStats?.confirmed || [];
+  const preparingOrders = orderStats?.preparing || [];
+  const readyOrders = orderStats?.ready || [];
+  const completedOrders = orderStats?.completed || [];
+  const cancelledOrders = orderStats?.cancelled || [];
+
+  let currentOrders = [];
+  let tabTitle = '';
+  
+  switch (orderStatusTab) {
+    case 'pending': 
+      currentOrders = pendingOrders; 
+      tabTitle = 'Pending';
+      break;
+    case 'confirmed': 
+      currentOrders = confirmedOrders; 
+      tabTitle = 'Confirmed';
+      break;
+    case 'preparing': 
+      currentOrders = preparingOrders; 
+      tabTitle = 'Preparing';
+      break;
+    case 'ready': 
+      currentOrders = readyOrders; 
+      tabTitle = 'Ready';
+      break;
+    case 'completed': 
+      currentOrders = completedOrders; 
+      tabTitle = 'Completed';
+      break;
+    case 'cancelled': 
+      currentOrders = cancelledOrders; 
+      tabTitle = 'Cancelled';
+      break;
+    default: 
+      currentOrders = pendingOrders;
+      tabTitle = 'Pending';
+  }
+
+  const tabs = [
+    { key: 'pending', label: 'Pending', count: pendingOrders.length, color: '#F59E0B' },
+    { key: 'confirmed', label: 'Confirmed', count: confirmedOrders.length, color: '#3B82F6' },
+    { key: 'preparing', label: 'Preparing', count: preparingOrders.length, color: '#8B5CF6' },
+    { key: 'ready', label: 'Ready', count: readyOrders.length, color: '#10B981' },
+    { key: 'completed', label: 'Completed', count: completedOrders.length, color: '#6B7280' },
+    { key: 'cancelled', label: 'Cancelled', count: cancelledOrders.length, color: '#EF4444' },
+  ];
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Tab Bar */}
+      <View style={styles.tabsWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScrollContent}
+        >
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.orderTab, orderStatusTab === tab.key && styles.orderTabActive]}
+              onPress={() => setOrderStatusTab(tab.key)}
+            >
+              <Text style={[styles.orderTabText, orderStatusTab === tab.key && styles.orderTabTextActive]}>
+                {tab.label}
+              </Text>
+              {tab.count > 0 ? (
+                <View style={[styles.orderTabBadge, { backgroundColor: tab.color }]}>
+                  <Text style={styles.orderTabBadgeText}>{tab.count}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+      
+      {/* Orders List */}
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{tabTitle} Orders ({currentOrders.length})</Text>
+          
+          {ordersLoading ? (
+            <ActivityIndicator size="small" color="#DC2626" />
+          ) : currentOrders.length === 0 ? (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateEmoji}>📭</Text>
+              <Text style={styles.emptyStateTitle}>No {tabTitle.toLowerCase()} orders</Text>
+              <Text style={styles.emptyStateText}>
+                {orderStatusTab === 'pending' 
+                  ? 'New orders will appear here' 
+                  : 'Orders will appear here when status changes'}
+              </Text>
+            </View>
+          ) : (
+            currentOrders.map((order) => (
+              <OrderCard 
+                key={order.id} 
+                order={order} 
+                onUpdateStatus={handleUpdateOrderStatus} 
+                onRejectOrder={handleRejectOrder} 
+                onRequestPayment={handleRequestPayment}
+                onProposeChange={handleProposeChange}
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
     </View>
-  </ScrollView>
-);
+  );
+};
 
   // ----- Chats Tab -----
   const renderChats = () => (
@@ -1339,30 +1771,113 @@ const renderOrders = () => (
   };
 
   // ----- Profile Tab -----
-  const renderProfile = () => (
+const renderProfile = () => {
+  const firstLetter = profile?.full_name?.charAt(0).toUpperCase() || 'V';
+
+  return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
       <View style={styles.section}>
+        {/* Profile Header with Avatar Upload */}
         <View style={styles.profileHeader}>
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.profileAvatarGradient}><Text style={styles.avatarText}>👤</Text></LinearGradient>
+          <TouchableOpacity 
+            onPress={uploadVendorAvatar} 
+            disabled={uploadingAvatar} 
+            style={styles.profileAvatarContainer}
+          >
+            {uploadingAvatar ? (
+              <View style={styles.profileAvatarGradient}>
+                <ActivityIndicator size="large" color="white" />
+              </View>
+            ) : profile?.avatar_url ? (
+              <Image 
+                source={{ uri: profile.avatar_url }} 
+                style={styles.profileAvatarImage}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#DC2626', '#EF4444']}
+                style={styles.profileAvatarGradient}
+              >
+                <Text style={styles.avatarText}>{firstLetter}</Text>
+              </LinearGradient>
+            )}
+            <View style={styles.editAvatarBadge}>
+              <Text style={styles.editAvatarBadgeText}>📷</Text>
+            </View>
+          </TouchableOpacity>
+          
           <Text style={styles.profileName}>{profile?.full_name || 'Vendor'}</Text>
           <Text style={styles.profileEmail}>{user?.email}</Text>
-          <View style={styles.roleBadge}><Text style={styles.roleText}>🛍️ Vendor</Text></View>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>🛍️ Vendor</Text>
+          </View>
         </View>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Stall Number</Text><Text style={styles.infoValue}>{stall.stall_number}</Text></View>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Stall Name</Text><Text style={styles.infoValue}>{stall.stall_name || 'Your Stall'}</Text></View>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Section</Text><Text style={styles.infoValue}>{stall.section}</Text></View>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Total Sales</Text><Text style={styles.infoValue}>₱{salesSummary.total.toFixed(2)}</Text></View>
-        <View style={styles.infoRow}><Text style={styles.infoLabel}>Total Orders</Text><Text style={styles.infoValue}>{salesSummary.ordersMonth}</Text></View>
+
+        {/* Stall Image Section */}
+        <View style={styles.stallImageSection}>
+          <Text style={styles.stallImageLabel}>Stall Banner Image</Text>
+          <TouchableOpacity 
+            onPress={uploadStallImage} 
+            disabled={uploadingStallImage} 
+            style={styles.stallImageContainer}
+          >
+            {uploadingStallImage ? (
+              <View style={styles.stallImageUploading}>
+                <ActivityIndicator size="large" color="#DC2626" />
+                <Text style={styles.stallImageUploadingText}>Uploading...</Text>
+              </View>
+            ) : stall?.image_url && !stallImageError ? (
+              <Image 
+                source={{ uri: stall.image_url }} 
+                style={styles.stallImage}
+                onError={() => setStallImageError(true)}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.stallImagePlaceholder}>
+                <Text style={styles.stallImageEmoji}>🏪</Text>
+                <Text style={styles.stallImagePlaceholderText}>Tap to add stall image</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Stall Information */}
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Stall Number</Text>
+          <Text style={styles.infoValue}>{stall.stall_number}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Stall Name</Text>
+          <Text style={styles.infoValue}>{stall.stall_name || 'Your Stall'}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Section</Text>
+          <Text style={styles.infoValue}>{stall.section}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Total Sales</Text>
+          <Text style={styles.infoValue}>₱{salesSummary.total.toFixed(2)}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Total Orders</Text>
+          <Text style={styles.infoValue}>{salesSummary.ordersMonth}</Text>
+        </View>
+        
         {Platform.OS === 'web' ? (
           <button onClick={async () => { if (window.confirm('Logout?')) { await supabase.auth.signOut(); window.location.href = '/'; } }} style={{ backgroundColor: '#DC2626', color: 'white', padding: 14, borderRadius: 12, border: 'none', cursor: 'pointer', width: '100%', fontSize: 16, fontWeight: '600', marginTop: 20 }}>🚪 Logout</button>
         ) : (
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.logoutGradient}><Text style={styles.logoutButtonText}>Logout</Text></LinearGradient>
+            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.logoutGradient}>
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </LinearGradient>
           </TouchableOpacity>
         )}
       </View>
     </ScrollView>
-  );  // ----- Notifications Tab -----
+  );
+};
+  // ----- Notifications Tab -----
   const renderNotifications = () => (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
       <View style={styles.section}>
@@ -1411,149 +1926,132 @@ const renderOrders = () => (
       </View>
     </ScrollView>
   );
-  // ----- Feature 6: Reports Tab -----
-  const renderReports = () => {
-    useEffect(() => {
-      fetchReportData();
-    }, [reportPeriod]);
 
-    const getTotalSales = () => {
-      return reportData.reduce((sum, order) => sum + order.total_amount, 0);
-    };
+  // ----- Reports Tab -----
+// ----- Reports Tab -----
+// ----- Reports Tab -----
+const renderReports = () => {
+  const getTotalSales = () => {
+    return (reportData || []).reduce((sum, order) => sum + (order?.total_amount || 0), 0);
+  };
 
-    const getAverageOrder = () => {
-      if (reportData.length === 0) return 0;
-      return getTotalSales() / reportData.length;
-    };
+  const getAverageOrder = () => {
+    if (reportData.length === 0) return 0;
+    return getTotalSales() / reportData.length;
+  };
 
-    return (
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📈 Sales Reports</Text>
-          
-          <View style={styles.reportPeriodSelector}>
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📈 Sales Reports</Text>
+        
+        <View style={styles.reportPeriodSelector}>
+          {['day', 'week', 'month'].map((period) => (
             <TouchableOpacity
-              style={[styles.periodButton, reportPeriod === 'day' && styles.periodButtonActive]}
-              onPress={() => setReportPeriod('day')}
+              key={period}
+              style={[styles.periodButton, reportPeriod === period && styles.periodButtonActive]}
+              onPress={() => setReportPeriod(period)}
             >
-              <Text style={[styles.periodButtonText, reportPeriod === 'day' && styles.periodButtonTextActive]}>Today</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.periodButton, reportPeriod === 'week' && styles.periodButtonActive]}
-              onPress={() => setReportPeriod('week')}
-            >
-              <Text style={[styles.periodButtonText, reportPeriod === 'week' && styles.periodButtonTextActive]}>Week</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.periodButton, reportPeriod === 'month' && styles.periodButtonActive]}
-              onPress={() => setReportPeriod('month')}
-            >
-              <Text style={[styles.periodButtonText, reportPeriod === 'month' && styles.periodButtonTextActive]}>Month</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.reportStatsRow}>
-            <View style={styles.reportStatCard}>
-              <Text style={styles.reportStatValue}>{reportData.length}</Text>
-              <Text style={styles.reportStatLabel}>Orders</Text>
-            </View>
-            <View style={styles.reportStatCard}>
-              <Text style={styles.reportStatValue}>₱{getTotalSales().toFixed(2)}</Text>
-              <Text style={styles.reportStatLabel}>Sales</Text>
-            </View>
-            <View style={styles.reportStatCard}>
-              <Text style={styles.reportStatValue}>₱{getAverageOrder().toFixed(2)}</Text>
-              <Text style={styles.reportStatLabel}>Avg Order</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.exportButton}
-            onPress={exportToCSV}
-            disabled={exporting}
-          >
-            <LinearGradient colors={['#10B981', '#059669']} style={styles.exportGradient}>
-              <Text style={styles.exportButtonText}>
-                {exporting ? 'Exporting...' : '📥 Export to CSV'}
+              <Text style={[styles.periodButtonText, reportPeriod === period && styles.periodButtonTextActive]}>
+                {period === 'day' ? 'Today' : period === 'week' ? 'Week' : 'Month'}
               </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📋 Order Details</Text>
-          {reportData.length === 0 ? (
-            <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateEmoji}>📭</Text>
-              <Text style={styles.emptyStateTitle}>No orders this period</Text>
-            </View>
-          ) : (
-            reportData.map(order => (
-              <View key={order.id} style={styles.reportOrderItem}>
-                <View style={styles.reportOrderHeader}>
-                  <Text style={styles.reportOrderNumber}>#{order.order_number?.slice(-8)}</Text>
-                  <Text style={[styles.reportOrderStatus, { color: getStatusColor(order.status) }]}>
-                    {order.status}
-                  </Text>
-                </View>
-                <Text style={styles.reportOrderDate}>{new Date(order.created_at).toLocaleDateString()}</Text>
-                <Text style={styles.reportOrderTotal}>₱{order.total_amount}</Text>
+        <View style={styles.reportStatsRow}>
+          <View style={styles.reportStatCard}>
+            <Text style={styles.reportStatValue}>{reportData.length}</Text>
+            <Text style={styles.reportStatLabel}>Orders</Text>
+          </View>
+          <View style={styles.reportStatCard}>
+            <Text style={styles.reportStatValue}>₱{getTotalSales().toFixed(2)}</Text>
+            <Text style={styles.reportStatLabel}>Sales</Text>
+          </View>
+          <View style={styles.reportStatCard}>
+            <Text style={styles.reportStatValue}>₱{getAverageOrder().toFixed(2)}</Text>
+            <Text style={styles.reportStatLabel}>Avg Order</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.exportButton}
+          onPress={exportToCSV}
+          disabled={exporting}
+        >
+          <LinearGradient colors={['#10B981', '#059669']} style={styles.exportGradient}>
+            <Text style={styles.exportButtonText}>
+              {exporting ? 'Exporting...' : '📥 Export to CSV'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📋 Order Details</Text>
+        {reportData.length === 0 ? (
+          <View style={styles.emptyStateCard}>
+            <Text style={styles.emptyStateEmoji}>📭</Text>
+            <Text style={styles.emptyStateTitle}>No orders this period</Text>
+          </View>
+        ) : (
+          reportData.map((order) => (
+            <View key={order.id} style={styles.reportOrderItem}>
+              <View style={styles.reportOrderHeader}>
+                <Text style={styles.reportOrderNumber}>#{order.order_number?.slice(-8)}</Text>
+                <Text style={[styles.reportOrderStatus, { color: getStatusColor(order.status) }]}>
+                  {order.status}
+                </Text>
               </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
-    );
-  };
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'overview': return renderOverview();
-      case 'products': return renderProducts();
-      case 'orders': return renderOrders();
-      case 'chats': return renderChats();
-      case 'promotions': return renderPromotions();
-      case 'notifications': return renderNotifications();  // ← ADD THIS
-      case 'profile': return renderProfile();
-      default: return renderOverview();
-    }
-  };
+              <Text style={styles.reportOrderDate}>{new Date(order.created_at).toLocaleDateString()}</Text>
+              <Text style={styles.reportOrderTotal}>₱{order.total_amount}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    </ScrollView>
+  );
+};
 
-         return (
+const renderContent = () => {
+  switch (activeTab) {
+    case 'overview': return renderOverview();
+    case 'products': return renderProducts();
+    case 'orders': return renderOrders();
+    case 'chats': return renderChats();
+    case 'promotions': return renderPromotions();
+    case 'notifications': return renderNotifications();
+    case 'reports': return renderReports();
+    case 'profile': return renderProfile();
+    default: return renderOverview();
+  }
+};
+
+  return (
     <View style={styles.container}>
       <Header title="PalengkeHub" subtitle={stall.stall_name || 'Manage your stall'} />
       
-      {/* Content area - each tab has its own ScrollView */}
       <View style={styles.contentArea}>
         {renderContent()}
       </View>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'overview' && styles.navItemActive]} 
-          onPress={() => setActiveTab('overview')}
-        >
+            <View style={styles.bottomNav}>
+        <TouchableOpacity style={[styles.navItem, activeTab === 'overview' && styles.navItemActive]} onPress={() => setActiveTab('overview')}>
           <Text style={[styles.navIcon, activeTab === 'overview' && styles.navIconActive]}>📊</Text>
           <Text style={[styles.navText, activeTab === 'overview' && styles.navTextActive]}>Overview</Text>
           {activeTab === 'overview' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'products' && styles.navItemActive]} 
-          onPress={() => setActiveTab('products')}
-        >
+        <TouchableOpacity style={[styles.navItem, activeTab === 'products' && styles.navItemActive]} onPress={() => setActiveTab('products')}>
           <Text style={[styles.navIcon, activeTab === 'products' && styles.navIconActive]}>📦</Text>
           <Text style={[styles.navText, activeTab === 'products' && styles.navTextActive]}>Products</Text>
           {activeTab === 'products' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'orders' && styles.navItemActive]} 
-          onPress={() => setActiveTab('orders')}
-        >
+        <TouchableOpacity style={[styles.navItem, activeTab === 'orders' && styles.navItemActive]} onPress={() => setActiveTab('orders')}>
           <Text style={[styles.navIcon, activeTab === 'orders' && styles.navIconActive]}>📋</Text>
           <Text style={[styles.navText, activeTab === 'orders' && styles.navTextActive]}>Orders</Text>
-          {orderStats.pending.length > 0 && (
+          {orderStats.pending?.length > 0 && (
             <View style={styles.navBadge}>
               <Text style={styles.navBadgeText}>{orderStats.pending.length}</Text>
             </View>
@@ -1561,19 +2059,13 @@ const renderOrders = () => (
           {activeTab === 'orders' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'promotions' && styles.navItemActive]} 
-          onPress={() => setActiveTab('promotions')}
-        >
+        <TouchableOpacity style={[styles.navItem, activeTab === 'promotions' && styles.navItemActive]} onPress={() => setActiveTab('promotions')}>
           <Text style={[styles.navIcon, activeTab === 'promotions' && styles.navIconActive]}>🏷️</Text>
           <Text style={[styles.navText, activeTab === 'promotions' && styles.navTextActive]}>Promos</Text>
           {activeTab === 'promotions' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'chats' && styles.navItemActive]} 
-          onPress={() => setActiveTab('chats')}
-        >
+        <TouchableOpacity style={[styles.navItem, activeTab === 'chats' && styles.navItemActive]} onPress={() => setActiveTab('chats')}>
           <Text style={[styles.navIcon, activeTab === 'chats' && styles.navIconActive]}>💬</Text>
           <Text style={[styles.navText, activeTab === 'chats' && styles.navTextActive]}>Chats</Text>
           {unreadCount > 0 && (
@@ -1583,10 +2075,8 @@ const renderOrders = () => (
           )}
           {activeTab === 'chats' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
-                <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'notifications' && styles.navItemActive]} 
-          onPress={() => setActiveTab('notifications')}
-        >
+        
+        <TouchableOpacity style={[styles.navItem, activeTab === 'notifications' && styles.navItemActive]} onPress={() => setActiveTab('notifications')}>
           <Text style={[styles.navIcon, activeTab === 'notifications' && styles.navIconActive]}>🔔</Text>
           <Text style={[styles.navText, activeTab === 'notifications' && styles.navTextActive]}>Alerts</Text>
           {notificationUnreadCount > 0 && (
@@ -1596,10 +2086,14 @@ const renderOrders = () => (
           )}
           {activeTab === 'notifications' && <View style={styles.navActiveIndicator} />}
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]} 
-          onPress={() => setActiveTab('profile')}
-        >
+        
+        <TouchableOpacity style={[styles.navItem, activeTab === 'reports' && styles.navItemActive]} onPress={() => setActiveTab('reports')}>
+          <Text style={[styles.navIcon, activeTab === 'reports' && styles.navIconActive]}>📊</Text>
+          <Text style={[styles.navText, activeTab === 'reports' && styles.navTextActive]}>Reports</Text>
+          {activeTab === 'reports' && <View style={styles.navActiveIndicator} />}
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]} onPress={() => setActiveTab('profile')}>
           <Text style={[styles.navIcon, activeTab === 'profile' && styles.navIconActive]}>👤</Text>
           <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>Profile</Text>
           {activeTab === 'profile' && <View style={styles.navActiveIndicator} />}
@@ -1608,6 +2102,162 @@ const renderOrders = () => (
 
       <AddProductModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSubmit={handleAddProduct} />
       <AddProductModal visible={!!editingProduct} onClose={() => setEditingProduct(null)} onSubmit={handleUpdateProduct} editingProduct={editingProduct} />
+      
+      {/* Partial Fulfillment Proposal Modal */}
+ {/* Improved Proposal Modal */}
+<Modal
+  visible={proposeModalVisible}
+  transparent={true}
+  animationType="slide"
+  onRequestClose={() => setProposeModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+      <Text style={styles.modalTitle}>Propose Order Change</Text>
+      <Text style={styles.modalSubtitle}>Suggest a different quantity or unit</Text>
+      
+      {/* Select Item to Change */}
+      <Text style={styles.label}>Select Item</Text>
+      {selectedOrder?.items?.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          style={[styles.itemSelectOption, selectedItemId === item.id && styles.itemSelectOptionActive]}
+          onPress={async () => {
+            setSelectedItemId(item.id);
+            setProposedUnit(item.unit);
+            setProposedQuantity(item.quantity.toString());
+            await fetchProductUnitPrices(item.id);
+          }}
+        >
+          <View>
+            <Text style={styles.itemSelectName}>{item.name}</Text>
+            <Text style={styles.itemSelectDetail}>
+              {item.quantity} {item.unit} × ₱{item.price}/{item.unit} = ₱{(item.price * item.quantity).toFixed(2)}
+            </Text>
+          </View>
+          {selectedItemId === item.id && <Text style={styles.itemSelectCheck}>✓</Text>}
+        </TouchableOpacity>
+      ))}
+
+      {selectedItemId && (
+        <>
+          {/* Select Unit */}
+          <Text style={styles.label}>Proposed Unit</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.unitScroll}>
+            {availableUnits.map((unit) => (
+              <TouchableOpacity
+                key={unit}
+                style={[styles.unitChip, proposedUnit === unit && styles.unitChipActive]}
+                onPress={() => {
+                  setProposedUnit(unit);
+                  // Reset quantity when unit changes
+                  setProposedQuantity('');
+                }}
+              >
+                <Text style={[styles.unitChipText, proposedUnit === unit && styles.unitChipTextActive]}>
+                  {unit === 'kg' ? 'Kilo (kg)' : 
+                   unit === '500g' ? '500g' : 
+                   unit === '250g' ? '250g' : 
+                   unit === 'piece' ? 'Piece' :
+                   unit === 'bundle' ? 'Bundle' :
+                   unit === 'dozen' ? 'Dozen' : 'Pack'}
+                </Text>
+                <Text style={[styles.unitChipPrice, proposedUnit === unit && styles.unitChipPriceActive]}>
+                  ₱{unitPrices[unit]?.toFixed(2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Proposed Quantity */}
+          <Text style={styles.label}>Proposed Quantity ({proposedUnit})</Text>
+          <View style={styles.quantityRow}>
+            <TouchableOpacity 
+              style={styles.quantityBtn} 
+              onPress={() => {
+                const newVal = Math.max(0, parseInt(proposedQuantity) - 1);
+                setProposedQuantity(newVal.toString());
+              }}
+            >
+              <Text style={styles.quantityBtnText}>-</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.quantityInput}
+              keyboardType="numeric"
+              value={proposedQuantity}
+              onChangeText={setProposedQuantity}
+              textAlign="center"
+              placeholder="0"
+            />
+            <TouchableOpacity 
+              style={styles.quantityBtn} 
+              onPress={() => {
+                const newVal = (parseInt(proposedQuantity) || 0) + 1;
+                setProposedQuantity(newVal.toString());
+              }}
+            >
+              <Text style={styles.quantityBtnText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Price Preview */}
+          {(() => {
+            const selectedItem = selectedOrder?.items?.find(i => i.id === selectedItemId);
+            const newQty = parseInt(proposedQuantity);
+            const unitPrice = unitPrices[proposedUnit] || 0;
+            if (selectedItem && !isNaN(newQty) && newQty > 0 && unitPrice > 0) {
+              const oldTotal = selectedItem.price * selectedItem.quantity;
+              const newTotal = unitPrice * newQty;
+              const difference = newTotal - oldTotal;
+              return (
+                <View style={styles.pricePreview}>
+                  <Text style={styles.pricePreviewText}>
+                    Original: {selectedItem.quantity} {selectedItem.unit} = ₱{oldTotal.toFixed(2)}
+                  </Text>
+                  <Text style={styles.pricePreviewText}>
+                    Proposed: {newQty} {proposedUnit} × ₱{unitPrice.toFixed(2)} = ₱{newTotal.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.differenceText, difference > 0 ? styles.increaseText : styles.decreaseText]}>
+                    {difference > 0 ? `+₱${difference.toFixed(2)}` : difference < 0 ? `-₱${Math.abs(difference).toFixed(2)}` : 'No change'}
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Notes to Customer */}
+          <Text style={styles.label}>Reason (Optional)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="e.g., Only 500g pieces available, sorry for the inconvenience..."
+            value={proposalNotes}
+            onChangeText={setProposalNotes}
+            multiline
+            numberOfLines={3}
+          />
+        </>
+      )}
+
+      <View style={styles.modalButtons}>
+        <TouchableOpacity style={styles.cancelModalButton} onPress={() => setProposeModalVisible(false)}>
+          <Text style={styles.cancelModalText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.submitModalButton, (!selectedItemId || !proposedUnit || !proposedQuantity || submittingProposal) && styles.confirmModalDisabled]}
+          onPress={submitProposal}
+          disabled={!selectedItemId || !proposedUnit || !proposedQuantity || submittingProposal}
+        >
+          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.submitGradient}>
+            <Text style={styles.submitButtonText}>
+              {submittingProposal ? 'Sending...' : 'Send Proposal'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  </View>
+</Modal>
       
       {/* Promotion Modal */}
       {showPromoModal && (
@@ -1688,6 +2338,7 @@ const renderOrders = () => (
     </View>
   );
 }
+
 
 // ---- Styles ----
 const styles = StyleSheet.create({
@@ -2312,5 +2963,338 @@ viewRatingsArrow: {
   fontSize: 16,
   color: 'white',
   marginLeft: 4,
+},
+
+    // Order Tabs Styles - IMPROVED
+  tabsWrapper: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingVertical: 8,
+  },
+  tabScrollContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  orderTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 30,
+    backgroundColor: '#F5F5F5',
+    gap: 6,
+  },
+  orderTabActive: {
+    backgroundColor: '#DC2626',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  orderTabIcon: {
+    fontSize: 14,
+  },
+  orderTabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  orderTabTextActive: {
+    color: '#FFFFFF',
+  },
+  orderTabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 20,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  orderTabBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'white',
+  },
+  itemSelectOption: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 12,
+  backgroundColor: '#F9FAFB',
+  borderRadius: 8,
+  marginBottom: 8,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+},
+itemSelectOptionActive: {
+  backgroundColor: '#FEF3F2',
+  borderColor: '#DC2626',
+},
+itemSelectName: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#111827',
+},
+itemSelectDetail: {
+  fontSize: 12,
+  color: '#6B7280',
+  marginTop: 2,
+},
+itemSelectCheck: {
+  fontSize: 18,
+  color: '#DC2626',
+  fontWeight: 'bold',
+},
+quantityRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+quantityBtn: {
+  width: 40,
+  height: 40,
+  backgroundColor: '#F3F4F6',
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+quantityBtnText: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: '#DC2626',
+},
+quantityInput: {
+  flex: 1,
+  height: 40,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+  borderRadius: 8,
+  marginHorizontal: 8,
+  fontSize: 16,
+},
+substituteContainer: {
+  marginBottom: 16,
+},
+substituteScroll: {
+  flexDirection: 'row',
+},
+substituteChip: {
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  backgroundColor: '#F3F4F6',
+  borderRadius: 20,
+  marginRight: 8,
+},
+substituteChipActive: {
+  backgroundColor: '#DC2626',
+},
+substituteChipText: {
+  fontSize: 12,
+  color: '#374151',
+},
+substituteChipTextActive: {
+  color: 'white',
+},
+textArea: {
+  minHeight: 80,
+  textAlignVertical: 'top',
+},
+unitScroll: {
+  flexDirection: 'row',
+  marginBottom: 16,
+},
+unitChip: {
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+  backgroundColor: '#F3F4F6',
+  borderRadius: 24,
+  marginRight: 8,
+  alignItems: 'center',
+},
+unitChipActive: {
+  backgroundColor: '#DC2626',
+},
+unitChipText: {
+  fontSize: 14,
+  color: '#374151',
+},
+unitChipTextActive: {
+  color: 'white',
+},
+unitChipPrice: {
+  fontSize: 12,
+  color: '#6B7280',
+  marginTop: 2,
+},
+unitChipPriceActive: {
+  color: 'rgba(255,255,255,0.9)',
+},
+itemSelectOption: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 12,
+  backgroundColor: '#F9FAFB',
+  borderRadius: 8,
+  marginBottom: 8,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+},
+itemSelectOptionActive: {
+  backgroundColor: '#FEF3F2',
+  borderColor: '#DC2626',
+},
+itemSelectName: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#111827',
+},
+itemSelectDetail: {
+  fontSize: 12,
+  color: '#6B7280',
+  marginTop: 2,
+},
+itemSelectCheck: {
+  fontSize: 18,
+  color: '#DC2626',
+  fontWeight: 'bold',
+},
+quantityRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+quantityBtn: {
+  width: 40,
+  height: 40,
+  backgroundColor: '#F3F4F6',
+  borderRadius: 8,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+quantityBtnText: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: '#DC2626',
+},
+quantityInput: {
+  flex: 1,
+  height: 40,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+  borderRadius: 8,
+  marginHorizontal: 8,
+  fontSize: 16,
+},
+pricePreview: {
+  backgroundColor: '#FEF3F2',
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 16,
+},
+pricePreviewText: {
+  fontSize: 12,
+  color: '#78350F',
+  marginBottom: 4,
+},
+differenceText: {
+  fontSize: 13,
+  fontWeight: '600',
+  marginTop: 4,
+},
+increaseText: {
+  color: '#EF4444',
+},
+decreaseText: {
+  color: '#10B981',
+},
+textArea: {
+  minHeight: 80,
+  textAlignVertical: 'top',
+},
+
+editAvatarBadgeText: {
+  fontSize: 12,
+},
+profileAvatarContainer: {
+  position: 'relative',
+  marginBottom: 12,
+},
+profileAvatarImage: {
+  width: 100,
+  height: 100,
+  borderRadius: 50,
+  borderWidth: 3,
+  borderColor: '#DC2626',
+},
+editAvatarBadge: {
+  position: 'absolute',
+  bottom: 0,
+  right: 0,
+  backgroundColor: '#DC2626',
+  width: 28,
+  height: 28,
+  borderRadius: 14,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 2,
+  borderColor: 'white',
+},
+editAvatarBadgeText: {
+  fontSize: 14,
+},
+stallImageSection: {
+  marginTop: 20,
+  marginBottom: 20,
+},
+stallImageLabel: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#374151',
+  marginBottom: 12,
+},
+stallImageContainer: {
+  borderRadius: 16,
+  overflow: 'hidden',
+  backgroundColor: '#F3F4F6',
+  height: 150,
+},
+stallImage: {
+  width: '100%',
+  height: 150,
+  borderRadius: 16,
+},
+stallImagePlaceholder: {
+  width: '100%',
+  height: 150,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#F3F4F6',
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+  borderStyle: 'dashed',
+  borderRadius: 16,
+},
+stallImageEmoji: {
+  fontSize: 48,
+  marginBottom: 8,
+},
+stallImagePlaceholderText: {
+  fontSize: 12,
+  color: '#6B7280',
+},
+stallImageUploading: {
+  width: '100%',
+  height: 150,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#F3F4F6',
+  borderRadius: 16,
+},
+stallImageUploadingText: {
+  fontSize: 12,
+  color: '#DC2626',
+  marginTop: 8,
 },
 });

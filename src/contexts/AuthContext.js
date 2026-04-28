@@ -115,46 +115,116 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // ========== SIGN UP ==========
-  const signUp = async (email, password, fullName, role) => {
-    try {
-      setLoading(true);
-      
-      const redirectUrl = 'palengkehub://auth/callback';
-      console.log('📧 Signup attempt for:', email);
-      
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: { 
-            full_name: fullName, 
-            role 
-          }
+  // ========== SIGN UP WITH DOCUMENT SUPPORT ==========
+  const signUp = async (email, password, fullName, role, metadata = {}) => {
+  try {
+    console.log('📝 Starting sign up for:', email, 'role:', role);
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role,
+          phone: metadata.phone || '',
+          ...(role === 'vendor' && {
+            stall_name: metadata.stall_name,
+            stall_section: metadata.stall_section,
+            stall_number: metadata.stall_number,
+            requires_approval: metadata.requires_approval,
+          })
         }
-      });
+      }
+    });
+
+    if (error) {
+      console.error('❌ Auth signup error:', error);
+      throw error;
+    }
+
+    if (!data.user) {
+      throw new Error('User creation failed');
+    }
+
+    console.log('✅ Auth user created:', data.user.id);
+
+    // ❌ REMOVE THIS ENTIRE BLOCK - The database trigger creates the profile
+    // const { error: profileError } = await supabase
+    //   .from('profiles')
+    //   .insert({
+    //     id: data.user.id,
+    //     email: email,
+    //     full_name: fullName,
+    //     phone: metadata.phone || '',
+    //     role: role,
+    //   });
+
+    // Wait a moment for the trigger to create the profile
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // If vendor, create stall record and application
+    if (role === 'vendor') {
       
-      if (error) throw error;
+      // Create stall record
+      const { error: stallError } = await supabase
+        .from('stalls')
+        .insert({
+          vendor_id: data.user.id,
+          stall_name: metadata.stall_name,
+          stall_number: metadata.stall_number,
+          section: metadata.stall_section,
+          is_active: false,
+        });
       
-      if (data?.user?.identities?.length === 0) {
-        return { 
-          success: false, 
-          error: 'Email already registered. Please login instead.' 
-        };
+      if (stallError) {
+        console.error('⚠️ Stall creation error:', stallError);
       }
       
-      return { 
-        success: true, 
-        message: 'Verification email sent! Please check your inbox.' 
-      };
-    } catch (error) {
-      console.error('Signup error:', error);
-      return { success: false, error: error.message };
-    } finally {
-      setLoading(false);
+      // Create vendor application
+      const documents = [];
+      if (metadata.valid_id_url) {
+        documents.push({ type: 'valid_id', url: metadata.valid_id_url });
+      }
+      if (metadata.business_permit_url) {
+        documents.push({ type: 'business_permit', url: metadata.business_permit_url });
+      }
+      if (metadata.barangay_clearance_url) {
+        documents.push({ type: 'barangay_clearance', url: metadata.barangay_clearance_url });
+      }
+      
+      const { error: appError } = await supabase
+        .from('vendor_applications')
+        .insert({
+          applicant_id: data.user.id,
+          business_name: metadata.stall_name,
+          category: metadata.stall_section,
+          address: `Stall ${metadata.stall_number}, ${metadata.stall_section}`,
+          documents: documents,
+          status: 'pending',
+          notes: `Stall ${metadata.stall_number} in ${metadata.stall_section} - Awaiting admin approval`,
+        });
+      
+      if (appError) {
+        console.error('⚠️ Application error:', appError);
+      } else {
+        console.log('✅ Vendor application created');
+      }
     }
-  };
+
+    console.log('🎉 Sign up completed successfully');
+    return { 
+      success: true, 
+      message: role === 'vendor' 
+        ? 'Application submitted for review! You will receive an email once approved.' 
+        : 'Account created successfully! Please check your email to verify.'
+    };
+    
+  } catch (error) {
+    console.error('❌ Sign up error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
   // ========== LOGOUT ==========
   const logout = async () => {

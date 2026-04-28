@@ -13,6 +13,7 @@ import {
   Dimensions,
   Linking,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,19 +25,54 @@ import StallMap from '../../components/StallMap';
 
 const { width, height } = Dimensions.get('window');
 
+// ✅ Generate consistent random rating based on stall ID
+const getStallRating = (stallId, realRating) => {
+  if (realRating && realRating > 0) return realRating;
+  
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  const rating = 2.5 + (randomValue * 2.5);
+  return Math.round(rating * 10) / 10;
+};
+
+// ✅ Generate random review count
+const getRandomRatingCount = (stallId) => {
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  return Math.floor(5 + (randomValue * 195));
+};
+
+// ✅ Star Rating Component
+const StarRating = ({ rating, size = 14 }) => {
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {[...Array(fullStars)].map((_, i) => (
+        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+      ))}
+      {hasHalfStar && (
+        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+      )}
+      {[...Array(emptyStars)].map((_, i) => (
+        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+      ))}
+    </View>
+  );
+};
+
 export default function StallDetailsScreen({ navigation, route }) {
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
   const [stall, setStall] = useState(null);
+  const [vendor, setVendor] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mapModalVisible, setMapModalVisible] = useState(false);
-
-  // Market coordinates (Lipa City Public Market)
-  const marketCoordinates = {
-    latitude: 13.9417,
-    longitude: 121.1642,
-  };
+  const [stallImageError, setStallImageError] = useState(false);
+  const [vendorAvatarError, setVendorAvatarError] = useState(false);
 
   // Stall location mapping based on section
   const getStallCoordinates = (section, stallNumber) => {
@@ -75,7 +111,6 @@ export default function StallDetailsScreen({ navigation, route }) {
     setMapModalVisible(true);
   };
 
-  // ✅ NEW: Handle report vendor
   const handleReportVendor = () => {
     if (!user) {
       Alert.alert(
@@ -106,52 +141,65 @@ export default function StallDetailsScreen({ navigation, route }) {
     fetchStallDetails();
   }, [stallId]);
 
- const fetchStallDetails = async () => {
-  try {
-    setLoading(true);
-    
-    const { data: stallData, error: stallError } = await supabase
-      .from('stalls')
-      .select('*')
-      .eq('id', stallId)
-      .single();
-    
-    if (stallError) throw stallError;
-    
-    // ✅ ADD THIS CHECK - If stall is inactive, show error and go back
-    if (stallData && !stallData.is_active) {
-      Alert.alert(
-        'Stall Unavailable',
-        'This stall is currently inactive and not accepting orders.',
-        [
-          { 
-            text: 'Go Back', 
-            onPress: () => navigation.goBack()
-          }
-        ]
-      );
+  const fetchStallDetails = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: stallData, error: stallError } = await supabase
+        .from('stalls')
+        .select('*')
+        .eq('id', stallId)
+        .single();
+      
+      if (stallError) throw stallError;
+      
+      // Fetch vendor profile
+      if (stallData?.vendor_id) {
+        const { data: vendorData, error: vendorError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, avatar_url, phone')
+          .eq('id', stallData.vendor_id)
+          .single();
+        
+        if (!vendorError) {
+          setVendor(vendorData);
+        }
+      }
+      
+      // Check if stall is inactive
+      if (stallData && !stallData.is_active) {
+        Alert.alert(
+          'Stall Unavailable',
+          'This stall is currently inactive and not accepting orders.',
+          [
+            { 
+              text: 'Go Back', 
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+      
+      setStall(stallData);
+      
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('stall_id', stallId)
+        .eq('is_available', true);
+      
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+      
+    } catch (error) {
+      console.error('Error fetching stall:', error);
+      Alert.alert('Error', 'Failed to load stall details');
+    } finally {
       setLoading(false);
-      return;
     }
-    
-    setStall(stallData);
-    
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('stall_id', stallId)
-      .eq('is_available', true);
-    
-    if (productsError) throw productsError;
-    setProducts(productsData || []);
-    
-  } catch (error) {
-    console.error('Error fetching stall:', error);
-    Alert.alert('Error', 'Failed to load stall details');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const startChat = async () => {
     if (!user) {
@@ -178,6 +226,10 @@ export default function StallDetailsScreen({ navigation, route }) {
     }
   };
 
+  // ✅ Get display rating (randomized if no real rating)
+  const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
+  const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -190,11 +242,117 @@ export default function StallDetailsScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
-      
-      
-      
+     
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        
+        {/* STALL BANNER IMAGE */}
+        <View style={styles.bannerContainer}>
+          {stall?.image_url && !stallImageError ? (
+            <Image 
+              source={{ uri: stall.image_url }} 
+              style={styles.bannerImage}
+              onError={() => setStallImageError(true)}
+              resizeMode="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={['#DC2626', '#EF4444', '#F87171']}
+              style={styles.bannerPlaceholder}
+            >
+              <Text style={styles.bannerPlaceholderText}>🏪</Text>
+            </LinearGradient>
+          )}
+        </View>
+
+        {/* Stall Info Card */}
+        <View style={styles.infoCard}>
+          <View style={styles.stallHeader}>
+            {/* VENDOR AVATAR */}
+            <View style={styles.avatarContainer}>
+              {vendor?.avatar_url && !vendorAvatarError ? (
+                <Image 
+                  source={{ uri: vendor.avatar_url }} 
+                  style={styles.vendorAvatar}
+                  onError={() => setVendorAvatarError(true)}
+                />
+              ) : (
+                <LinearGradient
+                  colors={['#DC2626', '#EF4444']}
+                  style={styles.avatarGradient}
+                >
+                  <Text style={styles.avatarEmoji}>
+                    {vendor?.full_name?.charAt(0)?.toUpperCase() || '👤'}
+                  </Text>
+                </LinearGradient>
+              )}
+            </View>
+            <View style={styles.stallInfo}>
+              <Text style={styles.stallName}>{stall?.stall_name || 'Market Stall'}</Text>
+              <Text style={styles.stallNumber}>Stall #{stall?.stall_number}</Text>
+              <Text style={styles.stallSection}>{stall?.section}</Text>
+              {vendor?.full_name && (
+                <Text style={styles.vendorName}>👨‍🍳 {vendor.full_name}</Text>
+              )}
+            </View>
+          </View>
+          
+          {/* ✅ Updated Rating Section with Stars */}
+          <View style={styles.ratingContainer}>
+            <Text style={styles.ratingTitle}>⭐ Rating</Text>
+            <View style={styles.ratingRow}>
+              <StarRating rating={displayRating} size={20} />
+              <Text style={styles.ratingValue}>{displayRating.toFixed(1)}</Text>
+              <Text style={styles.ratingTotal}>/ 5.0</Text>
+              <Text style={styles.ratingCount}>({ratingCount} reviews)</Text>
+            </View>
+          </View>
+          
+          {/* Temporarily Closed Warning */}
+          {stall?.is_temporarily_closed && (
+            <View style={styles.closedWarning}>
+              <Text style={styles.closedWarningIcon}>⚠️</Text>
+              <View style={styles.closedWarningContent}>
+                <Text style={styles.closedWarningTitle}>Temporarily Closed</Text>
+                <Text style={styles.closedWarningText}>
+                  This stall is currently closed. Please check back later.
+                </Text>
+              </View>
+            </View>
+          )}
+          
+          {stall?.description && (
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.descriptionTitle}>About</Text>
+              <Text style={styles.descriptionText}>{stall.description}</Text>
+            </View>
+          )}
+          
+          {/* Message Button */}
+          {!stall?.is_temporarily_closed && stall?.is_active && (
+            <TouchableOpacity style={styles.messageButton} onPress={startChat}>
+              <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.messageGradient}>
+                <Text style={styles.messageButtonText}>💬 Message Stall</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
+          {/* Report Vendor Button */}
+          <TouchableOpacity style={styles.reportVendorButton} onPress={handleReportVendor}>
+            <LinearGradient 
+              colors={['#FEF2F2', '#FEE2E2']} 
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.reportVendorGradient}
+            >
+              <Text style={styles.reportIcon}>🏪</Text>
+              <Text style={styles.reportButtonText}>Report this Vendor</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <Text style={styles.reportNote}>
+            Found an issue with this vendor? Let us know so we can investigate.
+          </Text>
+        </View>
+
         {/* Map Section */}
         <View style={styles.mapCard}>
           <Text style={styles.sectionTitle}>📍 Location</Text>
@@ -231,73 +389,6 @@ export default function StallDetailsScreen({ navigation, route }) {
               <Text style={styles.directionsButtonText}>📍 Get Directions</Text>
             </LinearGradient>
           </TouchableOpacity>
-        </View>
-{/* ✅ ADD THIS - Inactive Stall Banner */}
-        {stall && !stall.is_active && (
-          <View style={styles.inactiveBanner}>
-            <Text style={styles.inactiveBannerIcon}>⚠️</Text>
-            <View style={styles.inactiveBannerContent}>
-              <Text style={styles.inactiveBannerTitle}>Stall Inactive</Text>
-              <Text style={styles.inactiveBannerText}>
-                This stall is currently inactive. You cannot place orders or send messages.
-              </Text>
-            </View>
-          </View>
-        )}
-        {/* Stall Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.stallHeader}>
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarEmoji}>🏪</Text>
-            </View>
-            <View style={styles.stallInfo}>
-              <Text style={styles.stallName}>{stall?.stall_name || 'Market Stall'}</Text>
-              <Text style={styles.stallNumber}>Stall #{stall?.stall_number}</Text>
-              <Text style={styles.stallSection}>{stall?.section}</Text>
-            </View>
-          </View>
-          
-          {stall?.description && (
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.descriptionTitle}>About</Text>
-              <Text style={styles.descriptionText}>{stall.description}</Text>
-            </View>
-          )}
-          
-          {/* Rating Section (if available) */}
-          {stall?.average_rating > 0 && (
-            <View style={styles.ratingContainer}>
-              <Text style={styles.ratingTitle}>⭐ Rating</Text>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingValue}>{stall.average_rating.toFixed(1)}</Text>
-                <Text style={styles.ratingTotal}>/ 5.0</Text>
-                <Text style={styles.ratingCount}>({stall.total_ratings} reviews)</Text>
-              </View>
-            </View>
-          )}
-          
-          {/* Message Button */}
-          <TouchableOpacity style={styles.messageButton} onPress={startChat}>
-            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.messageGradient}>
-              <Text style={styles.messageButtonText}>💬 Message Stall</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {/* ✅ NEW: Report Vendor Button */}
-          <TouchableOpacity style={styles.reportVendorButton} onPress={handleReportVendor}>
-            <LinearGradient 
-              colors={['#FEF2F2', '#FEE2E2']} 
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.reportVendorGradient}
-            >
-              <Text style={styles.reportIcon}>🏪</Text>
-              <Text style={styles.reportButtonText}>Report this Vendor</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <Text style={styles.reportNote}>
-            Found an issue with this vendor? Let us know so we can investigate.
-          </Text>
         </View>
         
         {/* Products Section */}
@@ -390,14 +481,221 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
     paddingBottom: 30,
+  },
+  // Banner Image Styles
+  bannerContainer: {
+    width: '100%',
+    height: 200,
+  },
+  bannerImage: {
+    width: '100%',
+    height: 200,
+  },
+  bannerPlaceholder: {
+    width: '100%',
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bannerPlaceholderText: {
+    fontSize: 60,
+  },
+  // Info Card Styles
+  infoCard: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    margin: 16,
+    marginTop: -30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  stallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#FEF3F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    overflow: 'hidden',
+  },
+  avatarGradient: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vendorAvatar: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 2,
+    borderColor: '#DC2626',
+  },
+  avatarEmoji: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  stallInfo: {
+    flex: 1,
+  },
+  stallName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  stallNumber: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  stallSection: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  vendorName: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '500',
+  },
+  // ✅ Updated Rating Container
+  ratingContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 16,
+    marginBottom: 16,
+  },
+  ratingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#F59E0B',
+  },
+  ratingTotal: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  ratingCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  closedWarning: {
+    flexDirection: 'row',
+    backgroundColor: '#FEF3F2',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  closedWarningIcon: {
+    fontSize: 24,
+  },
+  closedWarningContent: {
+    flex: 1,
+  },
+  closedWarningTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginBottom: 2,
+  },
+  closedWarningText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  descriptionContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 16,
+    marginBottom: 16,
+  },
+  descriptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  messageButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  messageGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  messageButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reportVendorButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  reportVendorGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  reportIcon: {
+    fontSize: 18,
+  },
+  reportButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#DC2626',
+  },
+  reportNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
   // Map Card Styles
   mapCard: {
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 16,
+    marginHorizontal: 16,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -457,150 +755,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // Info Card Styles
-  infoCard: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  stallHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FEF3F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  avatarEmoji: {
-    fontSize: 36,
-  },
-  stallInfo: {
-    flex: 1,
-  },
-  stallName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  stallNumber: {
-    fontSize: 14,
-    color: '#DC2626',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  stallSection: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  descriptionContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  descriptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-  },
-  ratingContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  ratingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  ratingValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#F59E0B',
-  },
-  ratingTotal: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 2,
-  },
-  ratingCount: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginLeft: 8,
-  },
-  messageButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  messageGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  messageButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // ✅ NEW: Report Vendor styles
-  reportVendorButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-  },
-  reportVendorGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-  },
-  reportIcon: {
-    fontSize: 18,
-  },
-  reportButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#DC2626',
-  },
-  reportNote: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-  },
   // Products Card Styles
   productsCard: {
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
