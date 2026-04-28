@@ -41,11 +41,8 @@ export default function VendorChatDetailScreen({ navigation, route }) {
 
   // ✅ Suggested messages
   const suggestedMessages = [
-    { id: 1, text: "📋 Ask for details about the Order", emoji: "📋" },
-    { id: 2, text: "📷 Send me the QR Code", emoji: "📷" },
+  
     { id: 3, text: "✅ Confirm Payment", emoji: "✅" },
-    { id: 4, text: "❓ Ask about Availability", emoji: "❓" },
-    { id: 5, text: "💰 Ask for Total Amount", emoji: "💰" },
     { id: 6, text: "⏰ Confirm Pickup Time", emoji: "⏰" },
   ];
 
