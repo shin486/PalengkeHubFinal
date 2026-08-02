@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PalengkeHub — Lipa City Public Market Online</title>
+<meta name="description" content="Bili online, sundo sa Lipa! Order from the Lipa City Public Market then pick up sa market. Simple lang!">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Mobile menu toggle
+    const menuToggle = document.getElementById('menu-toggle');
+    const navMenu = document.getElementById('nav-menu');
+    
+    if (menuToggle && navMenu) {
+      menuToggle.addEventListener('click', function() {
+        menuToggle.classList.toggle('active');
+        navMenu.classList.toggle('active');
+      });
+    }
+
+    // Scroll animations
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-in');
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.animate-on-scroll').forEach(el => {
+      observer.observe(el);
+    });
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Back to top button
+    const backToTop = document.getElementById('back-to-top');
+    if (backToTop) {
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 400) {
+          backToTop.classList.add('visible');
+        } else {
+          backToTop.classList.remove('visible');
+        }
+      });
+      backToTop.addEventListener('click', function() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    // FAQ accordion
+    document.querySelectorAll('.faq-item').forEach(item => {
+      const question = item.querySelector('.faq-question');
+      if (question) {
+        question.addEventListener('click', function() {
+          const isOpen = item.classList.contains('open');
+          // Close all
+          document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+          // Open clicked if it was closed
+          if (!isOpen) {
+            item.classList.add('open');
+          }
+        });
+      }
+    });
+  });
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="index.html" class="logo logo-img"><img src="palengkehublogo.jpg" alt="PalengkeHub"></a>
+    <nav>
+      <ul id="nav-menu">
+        <li><a href="shop.html">Shop</a></li>
+        <li><a href="index.html#features">Why Us</a></li>
+        <li><a href="index.html#categories">Categories</a></li>
+        <li><a href="index.html#location">Location</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="sell.html">Sell</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </nav>
+    <button class="menu-btn" id="menu-toggle" aria-label="Toggle menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <a href="#download" class="nav-cta">Download App</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <span class="eyebrow">Lipa City Public Market • Online since 2026</span>
+      <h1>Ang palengke ng Lipa, <em>ngayon nasa online.</em></h1>
+      <p class="sub">Bili online, sundo sa Lipa! Order sa Lipa City Public Market, tapos pick-up mo na lang. Simple lang!</p>
+      <div class="hero-actions">
+        <a href="#download" class="btn-primary">Download App</a>
+        <a href="#features" class="link-ghost">See how it works
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+      <div class="app-badges">
+        <a href="#" class="app-badge">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.87 3.23c-1.69-.77-3.6-1.2-5.62-1.2s-3.93.43-5.62 1.2L3.37 5.67c-.18-.28-.54-.37-.83-.22-.3.16-.42.54-.26.85l1.84 3.18c-2.4 1.35-4.04 3.8-4.12 6.63h18.72c-.08-2.83-1.72-5.28-4.12-6.63zM7.5 14c-.83 0-1.5-.67-1.5-1.5S6.67 11 7.5 11s1.5.67 1.5 1.5S8.33 14 7.5 14zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+          <span>Get it on Google Play</span>
+        </a>
+        <a href="#" class="app-badge">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.96 1.07-3.11-1.05.05-2.31.71-3.06 1.54-.69.75-1.26 1.89-1.1 3 .01.01.01.02.02.02 1.12.02 2.27-.78 3.07-1.45z"/></svg>
+          <span>Download on App Store</span>
+        </a>
+      </div>
+    </div>
+    <div class="hero-art">
+      <div class="phone-mockup">
+        <div class="phone-screen">
+          <div class="phone-header">
+            <div class="phone-notch"></div>
+          </div>
+          <div class="phone-content">
+            <div class="phone-app-icon">
+              <img src="palengkehublogo.jpg" alt="PalengkeHub">
+            </div>
+            <div class="phone-app-name">PalengkeHub</div>
+            <div class="phone-rating">★★★★★ 4.9</div>
+            <div class="phone-stats">
+              <div class="phone-stat">
+                <span class="stat-num">50K+</span>
+                <span class="stat-label">Downloads</span>
+              </div>
+              <div class="phone-stat">
+                <span class="stat-num">4K+</span>
+                <span class="stat-label">Sellers</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-reflection"></div>
+      </div>
+      <div class="floating-card card-price">
+        <div class="card-icon">🛒</div>
+        <div class="card-text">Big Savings<br><b>Up to 40% off</b></div>
+      </div>
+      <div class="floating-card card-stall">
+        <div class="card-icon">✓</div>
+        <div class="card-text">Verified<br><b>Sellers Only</b></div>
+      </div>
+      <div class="floating-card card-pickup">
+        <div class="card-icon">🛍️</div>
+        <div class="card-text">Pickup Ready<br><b>Same Day</b></div>
+      </div>
+    </div>
+  </div>
+  <svg class="awning" viewBox="0 0 1200 34" preserveAspectRatio="none">
+    <path d="M0,34 L0,14 Q25,34 50,14 T100,14 T150,14 T200,14 T250,14 T300,14 T350,14 T400,14 T450,14 T500,14 T550,14 T600,14 T650,14 T700,14 T750,14 T800,14 T850,14 T900,14 T950,14 T1000,14 T1050,14 T1100,14 T1150,14 T1200,14 L1200,34 Z"/>
+  </svg>
+</section>
+
+<section class="trust animate-on-scroll">
+  <div class="wrap">
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>Secure checkout</div>
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Pickup at Lipa City Public Market</div>
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>4,000+ verified sellers</div>
+  </div>
+</section>
+
+<section class="stats animate-on-scroll">
+  <div class="wrap">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-number">50K+</div>
+        <div class="stat-label">App Downloads</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">4,000+</div>
+        <div class="stat-label">Verified Sellers</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">100K+</div>
+        <div class="stat-label">Pickups Completed</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">4.9★</div>
+        <div class="stat-label">App Rating</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features animate-on-scroll" id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Bakit PalengkeHub</span>
+      <h2>Built like a real palengke — just without the queue.</h2>
+    </div>
+    <div class="stalls animate-on-scroll">
+      <div class="stall">
+        <span class="hole"></span>
+        <span class="tag">Tinda</span>
+        <div class="stall-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10h16l-1.5 9a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7L4 10z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg>
+        </div>
+        <h3>Every stall, one app</h3>
+        <p>Browse produce, home goods, gadgets, and pasalubong from thousands of local sellers without hopping between sites.</p>
+      </div>
+      <div class="stall">
+        <span class="hole"></span>
+        <span class="tag">Bayad</span>
+        <div class="stall-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        </div>
+        <h3>Pay your way, protected</h3>
+        <p>Checkout with GCash, Maya, cards, or cash on pickup — every order is covered until you receive it at the market.</p>
+      </div>
+      <div class="stall">
+        <span class="hole"></span>
+        <span class="tag">Sundo</span>
+        <div class="stall-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M9 5V3h6v2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+        </div>
+        <h3>Order online, pickup at the market</h3>
+        <p>Place your order, then pick it up at the Lipa City Public Market when it's ready — fast and easy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="categories animate-on-scroll" id="categories">
+  <div class="wrap">
+    <div class="top">
+      <h2>Shop by category</h2>
+      <p>From wet-market staples to weekend finds — start with what you're actually looking for.</p>
+    </div>
+    <div class="chip-row animate-on-scroll">
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Fresh Produce</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home & Living</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>Fashion</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Electronics</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>Snacks & Pantry</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.74 5.88a6 6 0 0 1-8.48 8.48A6 6 0 0 1 6.26 8.57L12 2.69z"/></svg>Health & Beauty</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M14.5 9.5c0 1.38-1.12 2.5-2.5 2.5s-2.5-1.12-2.5-2.5 1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5z"/><path d="M12 7V5"/><path d="M12 17v-2"/><path d="M7 10H5"/><path d="M17 10h2"/></svg>Baby & Kids</a>
+      <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 5.172C10 3.782 8.423 2.679 6.5 3c-2.823.47-4.113 6.006-4 7 .08.703 1.725 1.722 3.656 1 1.261-.472 1.963-1.454 2.344-2.5"/><path d="M14 5.172C14 3.782 15.577 2.679 17.5 3c2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.963-1.454-2.344-2.5"/><path d="M8 14v8"/><path d="M16 14v8"/><path d="M9 20h6"/><path d="M12 14v3"/></svg>Pet Supplies</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Location / Market Info ===== -->
+<section class="location animate-on-scroll" id="location">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Saan tayo?</span>
+      <h2>Hanapin kami sa Lipa City Public Market</h2>
+      <p class="section-sub">Eto ang address at pickup point ng PalengkeHub. Madaling puntahan, madaling i-pickup!</p>
+    </div>
+    <div class="location-grid">
+      <div class="location-card">
+        <div class="loc-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <h3>Address</h3>
+        <p>Lipa City Public Market,<br>Lipa, Batangas 4217</p>
+      </div>
+      <div class="location-card">
+        <div class="loc-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h3>Pickup Hours</h3>
+        <p>Monday – Sunday<br>5:00 AM – 7:00 PM</p>
+      </div>
+      <div class="location-card">
+        <div class="loc-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Pickup Counter</h3>
+        <p>PalengkeHub Pickup Counter<br>Main Entrance, Ground Floor</p>
+      </div>
+      <div class="location-card">
+        <div class="loc-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </div>
+        <h3>Payment</h3>
+        <p>GCash, Maya, Cards<br>at Cash on Pickup</p>
+      </div>
+    </div>
+    <div class="map-wrap">
+      <iframe
+        src="https://www.google.com/maps?q=Lipa+City+Public+Market,+Lipa,+Batangas&output=embed"
+        width="100%"
+        height="380"
+        style="border:0;"
+        allowfullscreen=""
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        title="Map to Lipa City Public Market">
+      </iframe>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section class="faq animate-on-scroll" id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">FAQ</span>
+      <h2>Mga madalas itanong</h2>
+      <p class="section-sub">Wala kang makita dito? I-message mo kami sa contact page!</p>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-question" type="button">
+          <span>Saan ko susunduin ang order ko?</span>
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sa PalengkeHub Pickup Counter sa Main Entrance, Ground Floor ng Lipa City Public Market. Ipakita mo lang ang order confirmation mo sa staff.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" type="button">
+          <span>Anong oras pwede mag-pickup?</span>
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>Araw-araw, 5:00 AM hanggang 7:00 PM. I-schedule mo ang pickup mo kapag nag-order ka — may confirmation kami kapag handa na ang tinda mo.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" type="button">
+          <span>Paano ako magbabayad?</span>
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>Pwede kang magbayad online gamit ang GCash, Maya, o card. Pwede ring cash on pickup — bayad mo na lang kapag sinundo mo na ang order mo.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" type="button">
+          <span>May delivery ba kayo?</span>
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>Wala. Pickup lang talaga — kaya mas mura, walang delivery fee, at sigurado kang sariwa ang tinda mo pagdating mo sa market.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" type="button">
+          <span>Pwede bang mag-order kahit hindi taga-Lipa?</span>
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>Oo! Kahit saan ka pa, pwede kang mag-order online. Basta makarating ka lang sa Lipa City Public Market para i-pickup ang order mo.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Back to top ===== -->
+<button id="back-to-top" aria-label="Back to top">↑</button>
+
+<section class="cta-banner animate-on-scroll" id="download">
+  <div class="wrap">
+    <h2>Ready na bang mag-market online?</h2>
+    <p>I-download ang PalengkeHub app, mag-order sa mga paborito mong stalls sa Lipa City Public Market, tapos sunduin mo na lang!</p>
+    <div class="cta-buttons">
+      <a href="#" class="btn-dark">Download App</a>
+      <a href="shop.html" class="btn-outline">Browse Web</a>
+    </div>
+    <div class="app-badges-large">
+      <a href="#" class="app-badge-large">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.87 3.23c-1.69-.77-3.6-1.2-5.62-1.2s-3.93.43-5.62 1.2L3.37 5.67c-.18-.28-.54-.37-.83-.22-.3.16-.42.54-.26.85l1.84 3.18c-2.4 1.35-4.04 3.8-4.12 6.63h18.72c-.08-2.83-1.72-5.28-4.12-6.63zM7.5 14c-.83 0-1.5-.67-1.5-1.5S6.67 11 7.5 11s1.5.67 1.5 1.5S8.33 14 7.5 14zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+        <div class="badge-text">
+          <span>GET IT ON</span>
+          <strong>Google Play</strong>
+        </div>
+      </a>
+      <a href="#" class="app-badge-large">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.96 1.07-3.11-1.05.05-2.31.71-3.06 1.54-.69.75-1.26 1.89-1.1 3 .01.01.01.02.02.02 1.12.02 2.27-.78 3.07-1.45z"/></svg>
+        <div class="badge-text">
+          <span>DOWNLOAD ON THE</span>
+          <strong>App Store</strong>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="logo logo-img logo-footer"><img src="palengkehublogo.jpg" alt="PalengkeHub"></a>
+        <p>The online home of the Lipa City Public Market — order from its stalls and pick up your tinda at the market.</p>
+        <div class="social-links">
+          <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+          <a href="#" aria-label="Twitter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Shop</h4>
+        <ul>
+          <li><a href="shop.html">All Categories</a></li>
+          <li><a href="#">Deals</a></li>
+          <li><a href="#">Track Order</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Sell</h4>
+        <ul>
+          <li><a href="sell.html">Become a Seller</a></li>
+          <li><a href="#">Seller Center</a></li>
+          <li><a href="#">Fees</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="#">Returns</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 PalengkeHub. All rights reserved.</span>
+      <span>Made in the Philippines 🇵🇭</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

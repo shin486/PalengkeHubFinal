@@ -1,0 +1,75 @@
+/* ---------- Page Header ---------- */
+.page-header{
+  background:var(--navy-deep);
+  color:#fff;
+  padding:80px 0 60px;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1.5px, transparent 0);
+  background-size:26px 26px;
+}
+.page-header .wrap{
+  text-align:center;
+}
+.page-header h1{
+  font-family:var(--display);
+  font-weight:600;
+  font-size:clamp(2rem, 4vw, 3rem);
+  margin-bottom:12px;
+}
+.page-header p{
+  color:rgba(255,255,255,0.7);
+  font-size:1.1rem;
+}
+
+/* ---------- Page Content ---------- */
+.page-content{
+  padding:100px 0;
+  background:var(--cream);
+}
+.content-placeholder{
+  text-align:center;
+  padding:80px 40px;
+  background:#fff;
+  border:1px solid rgba(24,20,16,0.08);
+  border-radius:16px;
+  max-width:600px;
+  margin:0 auto;
+}
+.content-placeholder svg{
+  width:64px;
+  height:64px;
+  color:var(--mango);
+  margin:0 auto 24px;
+  opacity:0.5;
+}
+.content-placeholder h2{
+  font-family:var(--display);
+  font-weight:600;
+  font-size:1.5rem;
+  color:var(--navy-deep);
+  margin-bottom:12px;
+}
+.content-placeholder p{
+  color:rgba(24,20,16,0.6);
+  font-size:1rem;
+}
+
+/* ---------- Active Nav State ---------- */
+nav a.active{
+  color:var(--papaya);
+}
+nav a.active::after{
+  width:100%;
+}
+
+@media (max-width:860px){
+  .page-header{
+    padding:60px 0 40px;
+  }
+  .page-content{
+    padding:60px 0;
+  }
+  .content-placeholder{
+    padding:60px 24px;
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "extends": "./node_modules/expo/tsconfig.base.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "src",
+    "App.js",
+    "index.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "supabase-proxy"
+  ]
+}
