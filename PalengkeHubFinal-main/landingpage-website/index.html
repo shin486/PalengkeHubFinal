@@ -6,7 +6,7 @@
 <title>PalengkeHub — Lipa City Public Market Online</title>
 <meta name="description" content="Bili online, sundo sa Lipa! Order from the Lipa City Public Market then pick up sa market. Simple lang!">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -91,8 +91,9 @@
     <nav>
       <ul id="nav-menu">
         <li><a href="shop.html">Shop</a></li>
-        <li><a href="index.html#features">Why Us</a></li>
+        <li><a href="index.html#how-it-works">How It Works</a></li>
         <li><a href="index.html#categories">Categories</a></li>
+        <li><a href="index.html#favorites">Favorites</a></li>
         <li><a href="index.html#location">Location</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
         <li><a href="sell.html">Sell</a></li>
@@ -111,7 +112,7 @@
 
 <section class="hero">
   <div class="wrap hero-inner">
-    <div>
+    <div class="hero-content">
       <span class="eyebrow">Lipa City Public Market • Online since 2026</span>
       <h1>Ang palengke ng Lipa, <em>ngayon nasa online.</em></h1>
       <p class="sub">Bili online, sundo sa Lipa! Order sa Lipa City Public Market, tapos pick-up mo na lang. Simple lang!</p>
@@ -133,6 +134,12 @@
       </div>
     </div>
     <div class="hero-art">
+      <span class="hero-emoji emoji-1">🥭</span>
+      <span class="hero-emoji emoji-2">🍅</span>
+      <span class="hero-emoji emoji-3">🐟</span>
+      <span class="hero-emoji emoji-4">🧄</span>
+      <span class="hero-emoji emoji-5">🥬</span>
+      <span class="hero-emoji emoji-6">🛒</span>
       <div class="phone-mockup">
         <div class="phone-screen">
           <div class="phone-header">
@@ -172,8 +179,8 @@
       </div>
     </div>
   </div>
-  <svg class="awning" viewBox="0 0 1200 34" preserveAspectRatio="none">
-    <path d="M0,34 L0,14 Q25,34 50,14 T100,14 T150,14 T200,14 T250,14 T300,14 T350,14 T400,14 T450,14 T500,14 T550,14 T600,14 T650,14 T700,14 T750,14 T800,14 T850,14 T900,14 T950,14 T1000,14 T1050,14 T1100,14 T1150,14 T1200,14 L1200,34 Z"/>
+  <svg class="wave-divider" viewBox="0 0 1200 48" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,48 C150,14 350,0 600,12 C850,24 1000,44 1200,18 L1200,48 Z"/>
   </svg>
 </section>
 
@@ -208,6 +215,28 @@
   </div>
 </section>
 
+<!-- ===== Video Showcase ===== -->
+<section class="video-showcase animate-on-scroll" id="video">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Panoorin</span>
+      <h2>PalengkeHub in action</h2>
+      <p class="section-sub">Tingnan kung paano gumagana ang PalengkeHub — mula pag-order hanggang pickup sa Lipa City Public Market. Pindutin ang play at i-adjust ang volume kung gusto mo ng tunog!</p>
+    </div>
+    <div class="video-wrap">
+      <video controls preload="metadata" poster="palengkehublogo.jpg">
+        <source src="PALENGKEHUB.mp4" type="video/mp4">
+        <source src="PALENGKEHUB.mov" type="video/quicktime">
+        Sorry, your browser doesn't support embedded videos.
+      </video>
+    </div>
+  </div>
+</section>
+
+<svg class="scallop" viewBox="0 0 1200 26" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0,26 Q25,0 50,26 T100,26 T150,26 T200,26 T250,26 T300,26 T350,26 T400,26 T450,26 T500,26 T550,26 T600,26 T650,26 T700,26 T750,26 T800,26 T850,26 T900,26 T950,26 T1000,26 T1050,26 T1100,26 T1150,26 T1200,26 L1200,0 L0,0 Z"/>
+</svg>
+
 <section class="features animate-on-scroll" id="features">
   <div class="wrap">
     <div class="section-head">
@@ -230,8 +259,8 @@
         <div class="stall-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
         </div>
-        <h3>Pay your way, protected</h3>
-        <p>Checkout with GCash, Maya, cards, or cash on pickup — every order is covered until you receive it at the market.</p>
+        <h3>Pay with GCash, protected</h3>
+        <p>GCash lang ang bayad — para siguradong confirmed ang order mo at walang fake bookings. Bayad online, pick-up na lang sa stall.</p>
       </div>
       <div class="stall">
         <span class="hole"></span>
@@ -241,6 +270,42 @@
         </div>
         <h3>Order online, pickup at the market</h3>
         <p>Place your order, then pick it up at the Lipa City Public Market when it's ready — fast and easy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== How It Works ===== -->
+<section class="how-it-works animate-on-scroll" id="how-it-works">
+  <div class="wrap">
+    <div class="hanging-sign hanging-sign-how" aria-hidden="true">
+      <span class="sign-rope rope-left"></span>
+      <span class="sign-rope rope-right"></span>
+      <div class="sign-board">Sariwa!</div>
+    </div>
+    <div class="section-head">
+      <span class="kicker">Paano Gumana</span>
+      <h2>How PalengkeHub works</h2>
+      <p class="section-sub">Tatlong simpleng hakbang lang — order, bayad, sundo. Ganun kadali!</p>
+    </div>
+    <div class="steps">
+      <div class="step animate-on-scroll">
+        <div class="step-num">1</div>
+        <div class="step-icon">🛒</div>
+        <h3>Pumili at mag-order</h3>
+        <p>Browse sa categories at pumili ng mga tinda mula sa verified sellers ng Lipa City Public Market.</p>
+      </div>
+      <div class="step animate-on-scroll">
+        <div class="step-num">2</div>
+        <div class="step-icon">📱</div>
+        <h3>Bayad via GCash</h3>
+        <p>Magbayad online gamit ang GCash — secure, confirmed agad, at walang fake bookings.</p>
+      </div>
+      <div class="step animate-on-scroll">
+        <div class="step-num">3</div>
+        <div class="step-icon">🛍️</div>
+        <h3>Sunduin sa market</h3>
+        <p>Pumunta sa Lipa City Public Market at i-pickup ang order mo sa mismong stall ng vendor.</p>
       </div>
     </div>
   </div>
@@ -261,6 +326,34 @@
       <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.74 5.88a6 6 0 0 1-8.48 8.48A6 6 0 0 1 6.26 8.57L12 2.69z"/></svg>Health & Beauty</a>
       <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M14.5 9.5c0 1.38-1.12 2.5-2.5 2.5s-2.5-1.12-2.5-2.5 1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5z"/><path d="M12 7V5"/><path d="M12 17v-2"/><path d="M7 10H5"/><path d="M17 10h2"/></svg>Baby & Kids</a>
       <a href="#" class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 5.172C10 3.782 8.423 2.679 6.5 3c-2.823.47-4.113 6.006-4 7 .08.703 1.725 1.722 3.656 1 1.261-.472 1.963-1.454 2.344-2.5"/><path d="M14 5.172C14 3.782 15.577 2.679 17.5 3c2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.963-1.454-2.344-2.5"/><path d="M8 14v8"/><path d="M16 14v8"/><path d="M9 20h6"/><path d="M12 14v3"/></svg>Pet Supplies</a>
+    </div>
+  </div>
+</section>
+
+<svg class="scallop scallop-navy scallop-white" viewBox="0 0 1200 26" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0,26 Q25,0 50,26 T100,26 T150,26 T200,26 T250,26 T300,26 T350,26 T400,26 T450,26 T500,26 T550,26 T600,26 T650,26 T700,26 T750,26 T800,26 T850,26 T900,26 T950,26 T1000,26 T1050,26 T1100,26 T1150,26 T1200,26 L1200,0 L0,0 Z"/>
+</svg>
+
+<!-- ===== Lipa Favorites ===== -->
+<section class="favorites animate-on-scroll" id="favorites">
+  <div class="wrap">
+    <div class="hanging-sign hanging-sign-fav" aria-hidden="true">
+      <span class="sign-rope rope-left"></span>
+      <span class="sign-rope rope-right"></span>
+      <div class="sign-board">Bukas!</div>
+    </div>
+    <div class="top">
+      <h2>Lipa Favorites</h2>
+      <a href="shop.html" class="favorites-link"><span>Browse all</span> →</a>
+    </div>
+    <div class="favorites-scroll">
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🥭</span><span class="fav-name">Mangga</span><span class="fav-price">₱120/kg</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🍅</span><span class="fav-name">Kamatis</span><span class="fav-price">₱80/kg</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🐟</span><span class="fav-name">Bangus</span><span class="fav-price">₱220/kg</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🥬</span><span class="fav-name">Pechay</span><span class="fav-price">₱60/bunch</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🧄</span><span class="fav-name">Bawang</span><span class="fav-price">₱140/kg</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🦐</span><span class="fav-name">Hipon</span><span class="fav-price">₱380/kg</span></a>
+      <a href="shop.html" class="fav-card"><span class="fav-emoji">🥥</span><span class="fav-name">Niyog</span><span class="fav-price">₱35/pc</span></a>
     </div>
   </div>
 </section>
@@ -292,15 +385,15 @@
         <div class="loc-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <h3>Pickup Counter</h3>
-        <p>PalengkeHub Pickup Counter<br>Main Entrance, Ground Floor</p>
+        <h3>Pickup Point</h3>
+        <p>Sa mismong stall ng vendor<br>sa loob ng Lipa City Public Market</p>
       </div>
       <div class="location-card">
         <div class="loc-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         </div>
         <h3>Payment</h3>
-        <p>GCash, Maya, Cards<br>at Cash on Pickup</p>
+        <p>GCash lang<br>— secure, walang fake bookings</p>
       </div>
     </div>
     <div class="map-wrap">
@@ -333,7 +426,7 @@
           <span class="faq-icon">+</span>
         </button>
         <div class="faq-answer">
-          <p>Sa PalengkeHub Pickup Counter sa Main Entrance, Ground Floor ng Lipa City Public Market. Ipakita mo lang ang order confirmation mo sa staff.</p>
+          <p>Diretso sa stall ng vendor mismo. Ipakita mo lang ang order confirmation mo sa vendor, at ibibigay na nila sa iyo ang tinda mo.</p>
         </div>
       </div>
       <div class="faq-item">
@@ -351,7 +444,7 @@
           <span class="faq-icon">+</span>
         </button>
         <div class="faq-answer">
-          <p>Pwede kang magbayad online gamit ang GCash, Maya, o card. Pwede ring cash on pickup — bayad mo na lang kapag sinundo mo na ang order mo.</p>
+          <p>GCash lang ang tinatanggap namin. Magbayad online bago mo i-pickup ang order mo — para siguradong confirmed at maiiwasan ang fake bookings.</p>
         </div>
       </div>
       <div class="faq-item">
@@ -371,6 +464,63 @@
         <div class="faq-answer">
           <p>Oo! Kahit saan ka pa, pwede kang mag-order online. Basta makarating ka lang sa Lipa City Public Market para i-pickup ang order mo.</p>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<svg class="scallop scallop-navy" viewBox="0 0 1200 26" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0,26 Q25,0 50,26 T100,26 T150,26 T200,26 T250,26 T300,26 T350,26 T400,26 T450,26 T500,26 T550,26 T600,26 T650,26 T700,26 T750,26 T800,26 T850,26 T900,26 T950,26 T1000,26 T1050,26 T1100,26 T1150,26 T1200,26 L1200,0 L0,0 Z"/>
+</svg>
+
+<!-- ===== Team ===== -->
+<section class="team animate-on-scroll" id="team">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Ang Koponan</span>
+      <h2>Meet the team behind PalengkeHub</h2>
+      <p class="section-sub">Apat na magkakasama na nagtayo ng PalengkeHub — ang online home ng Lipa City Public Market.</p>
+    </div>
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar">JV</div>
+        <span class="team-position">Project Manager</span>
+        <h3>Adajar, Jhay-Vy R.</h3>
+        <p class="team-roles">UI/UX Designer</p>
+        <a href="https://github.com/haziaintsht" class="team-github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+          @haziaintsht
+        </a>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">RA</div>
+        <span class="team-position">Database Administrator</span>
+        <h3>Liman, Richard Allen</h3>
+        <p class="team-roles">Backend Developer</p>
+        <a href="https://github.com/shin486" class="team-github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+          @shin486
+        </a>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">RK</div>
+        <span class="team-position">Frontend Developer</span>
+        <h3>Endaya, Rhon Kelly</h3>
+        <p class="team-roles">UI Designer</p>
+        <a href="https://github.com/EndayaRK" class="team-github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+          @EndayaRK
+        </a>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">LR</div>
+        <span class="team-position">QA Tester</span>
+        <h3>Olarte, Ludwig Rex</h3>
+        <p class="team-roles">Mobile Developer</p>
+        <a href="https://github.com/Lordwig" class="team-github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+          @Lordwig
+        </a>
       </div>
     </div>
   </div>

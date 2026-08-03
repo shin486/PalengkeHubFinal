@@ -20,7 +20,8 @@ Update the landing page so it is:
 - [x] 11. Add Market info + Location section (with Google Map)
 - [x] 12. Add FAQ accordion section
 - [x] 13. Add back-to-top button + UX polish
-
+- [x] 14. Payment changed to GCash-only (remove Maya/cards/cash on pickup)
+- [x] 15. Pickup changed to vendor's stall only (remove pickup counter)
 
 
 
