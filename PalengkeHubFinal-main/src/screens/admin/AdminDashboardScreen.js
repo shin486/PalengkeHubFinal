@@ -32,6 +32,32 @@ const { width, height } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 const isTablet = width >= 768 && width < 1024;
 
+// Modern Color Palette
+const MODERN_COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  secondary: '#F59E0B',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  info: '#3B82F6',
+  background: '#F8F9FA',
+  surface: '#FFFFFF',
+  text: {
+    primary: '#111827',
+    secondary: '#374151',
+    tertiary: '#6B7280',
+    muted: '#9CA3AF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
+  gradientStart: '#DC2626',
+  gradientEnd: '#EF4444',
+};
+
 // ============================================================
 // PAGE DROPDOWN FILTER COMPONENT
 // ============================================================
@@ -152,11 +178,28 @@ const StatsCard = ({
   darkMode,
   color = '#C62828'
 }) => {
+  // Animated value for card entrance
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    Animated.spring(animatedValue, {
+      toValue: 1,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const scale = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1],
+  });
+
   return (
-    <View style={[styles.statCard, darkMode && styles.statCardDark]}>
+    <Animated.View style={[styles.statCard, darkMode && styles.statCardDark, { transform: [{ scale }] }]}>
       <View style={styles.statCardHeader}>
-        <View style={[styles.statCardIcon, { backgroundColor: color + '15' }]}>
-          <MaterialIcons name={iconName} size={22} color={color} />
+        <View style={[styles.statCardIcon, { backgroundColor: color + '20' }]}>
+          <MaterialIcons name={iconName} size={24} color={color} />
         </View>
       </View>
       <Text style={[styles.statCardValue, darkMode && styles.statCardValueDark]} numberOfLines={1}>
@@ -165,7 +208,7 @@ const StatsCard = ({
       <Text style={[styles.statCardTitle, darkMode && styles.statCardTitleDark]} numberOfLines={1}>
         {title}
       </Text>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -298,7 +341,7 @@ const DashboardOverview = ({
         </View>
       </View>
 
-      {/* Stats Grid */}
+      {/* Stats Grid with staggered animation */}
       <View style={styles.statsGrid}>
         {statsData.map((stat, index) => (
           <StatsCard
@@ -315,9 +358,12 @@ const DashboardOverview = ({
       {/* Pending Actions */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>
-            Pending Actions
-          </Text>
+          <View style={styles.sectionTitleContainer}>
+            <MaterialIcons name="notifications-active" size={24} color="#C62828" />
+            <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>
+              Pending Actions
+            </Text>
+          </View>
           <Text style={[styles.sectionSubtitle, darkMode && styles.sectionSubtitleDark]}>
             Items requiring your attention
           </Text>
@@ -335,23 +381,31 @@ const DashboardOverview = ({
             onPress={() => setActiveSection(item.section)}
             onMouseEnter={() => setHoveredPriority(index)}
             onMouseLeave={() => setHoveredPriority(null)}
+            activeOpacity={0.7}
           >
             <View style={styles.priorityContent}>
               <View style={styles.priorityLeft}>
                 <View style={[styles.priorityIconContainer, { backgroundColor: item.bgColor }]}>
-                  <MaterialIcons name={item.icon} size={18} color={item.color} />
+                  <MaterialIcons name={item.icon} size={22} color={item.color} />
                 </View>
-                <View>
+                <View style={styles.priorityTextContainer}>
                   <Text style={[styles.priorityLabel, darkMode && styles.priorityLabelDark]}>
                     {item.label}
                   </Text>
-                  <Text style={[styles.priorityCount, { color: item.color }]}>
-                    {item.count} {item.count === 1 ? 'item' : 'items'}
-                  </Text>
+                  <View style={styles.priorityCountContainer}>
+                    <View style={[styles.priorityCountBadge, { backgroundColor: item.color + '20' }]}>
+                      <Text style={[styles.priorityCount, { color: item.color }]}>
+                        {item.count}
+                      </Text>
+                    </View>
+                    <Text style={[styles.priorityCountLabel, darkMode && styles.priorityCountLabelDark]}>
+                      {item.count === 1 ? 'item' : 'items'} pending
+                    </Text>
+                  </View>
                 </View>
               </View>
               <View style={[styles.priorityAction, { backgroundColor: item.color }]}>
-                <Text style={styles.priorityActionText}>Review →</Text>
+                <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
               </View>
             </View>
           </TouchableOpacity>
@@ -361,12 +415,16 @@ const DashboardOverview = ({
       {/* Recent Activity */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>
-            Recent Activity
-          </Text>
+          <View style={styles.sectionTitleContainer}>
+            <MaterialIcons name="history" size={24} color="#C62828" />
+            <Text style={[styles.sectionTitle, darkMode && styles.sectionTitleDark]}>
+              Recent Activity
+            </Text>
+          </View>
           {recentActivity.length > 0 && (
-            <TouchableOpacity onPress={() => setActiveSection('orders')}>
-              <Text style={styles.viewAllText}>View All →</Text>
+            <TouchableOpacity onPress={() => setActiveSection('orders')} style={styles.viewAllButton}>
+              <Text style={styles.viewAllText}>View All</Text>
+              <MaterialIcons name="arrow-forward" size={16} color="#C62828" />
             </TouchableOpacity>
           )}
         </View>
@@ -387,19 +445,24 @@ const DashboardOverview = ({
                   onMouseEnter={() => setHoveredActivity(index)}
                   onMouseLeave={() => setHoveredActivity(null)}
                 >
-                  <View style={styles.activityDot}>
-                    <View style={[styles.activityDotInner, isHovered && styles.activityDotActive]} />
+                  <View style={styles.activityIconContainer}>
+                    <View style={[styles.activityDot, isHovered && styles.activityDotActive]}>
+                      <View style={[styles.activityDotInner, isHovered && styles.activityDotInnerActive]} />
+                    </View>
                   </View>
                   <View style={styles.activityContent}>
                     <View style={styles.activityHeader}>
                       <Text style={[styles.activityUser, darkMode && styles.activityUserDark]} numberOfLines={1}>
                         {activity.user}
                       </Text>
-                      <Text style={[styles.activityTime, darkMode && styles.activityTimeDark]}>
-                        {activity.time}
-                      </Text>
+                      <View style={[styles.activityTimeContainer, darkMode && styles.activityTimeContainerDark]}>
+                        <MaterialIcons name="access-time" size={12} color="#9CA3AF" />
+                        <Text style={[styles.activityTime, darkMode && styles.activityTimeDark]}>
+                          {activity.time}
+                        </Text>
+                      </View>
                     </View>
-                    <Text style={[styles.activityAction, darkMode && styles.activityActionDark]} numberOfLines={1}>
+                    <Text style={[styles.activityAction, darkMode && styles.activityActionDark]} numberOfLines={2}>
                       {activity.action}
                     </Text>
                     {activity.status && (
@@ -407,6 +470,11 @@ const DashboardOverview = ({
                         styles.activityStatus,
                         activity.status === 'pending' ? styles.statusPending : styles.statusCompleted
                       ]}>
+                        <MaterialIcons 
+                          name={activity.status === 'pending' ? 'schedule' : 'check-circle'} 
+                          size={12} 
+                          color="#FFFFFF" 
+                        />
                         <Text style={styles.activityStatusText}>{activity.status}</Text>
                       </View>
                     )}
@@ -437,9 +505,12 @@ const DashboardOverview = ({
             })
           ) : (
             <View style={styles.emptyState}>
-              <MaterialIcons name="inbox" size={40} color="#CCCCCC" />
+              <MaterialIcons name="inbox" size={48} color="#D1D5DB" />
               <Text style={[styles.emptyStateText, darkMode && styles.emptyStateTextDark]}>
                 No recent activity
+              </Text>
+              <Text style={[styles.emptyStateSubtext, darkMode && styles.emptyStateSubtextDark]}>
+                Activity will appear here as actions are taken
               </Text>
             </View>
           )}
@@ -448,11 +519,14 @@ const DashboardOverview = ({
 
       {/* Footer */}
       <View style={[styles.overviewFooter, darkMode && styles.overviewFooterDark]}>
-        <Text style={[styles.overviewFooterText, darkMode && styles.overviewFooterTextDark]}>
-          © 2026 PalengkeHub • Lipa City Public Market
-        </Text>
+        <View style={styles.footerContent}>
+          <MaterialIcons name="store" size={16} color="#C62828" />
+          <Text style={[styles.overviewFooterText, darkMode && styles.overviewFooterTextDark]}>
+            © 2026 PalengkeHub • Lipa City Public Market
+          </Text>
+        </View>
         <Text style={[styles.overviewFooterVersion, darkMode && styles.overviewFooterVersionDark]}>
-          v2.0.0
+          Version 2.0.0
         </Text>
       </View>
     </ScrollView>

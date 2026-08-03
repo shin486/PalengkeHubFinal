@@ -13,6 +13,31 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 
+const COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  accent: '#F87171',
+  accentLight: '#FEE2E2',
+  accentSoft: '#FEF2F2',
+  background: '#F8F9FA',
+  surface: '#FFFFFF',
+  text: {
+    dark: '#111827',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
+    white: '#FFFFFF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
+};
+
 export default function CartScreen({ navigation }) {
   const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
   const [refreshing, setRefreshing] = useState(false);
@@ -144,7 +169,9 @@ export default function CartScreen({ navigation }) {
       >
         {hasClosedStall && (
           <View style={styles.closedWarningBanner}>
-            <Text style={styles.closedWarningIcon}>⚠️</Text>
+            <View style={styles.closedWarningIconWrap}>
+              <Text style={styles.closedWarningIcon}>⚠️</Text>
+            </View>
             <View style={styles.closedWarningContent}>
               <Text style={styles.closedWarningTitle}>Some stalls are closed</Text>
               <Text style={styles.closedWarningText}>
@@ -158,20 +185,26 @@ export default function CartScreen({ navigation }) {
           <View key={stallId} style={[styles.stallSection, data.isClosed && styles.closedStallSection]}>
             <View style={styles.stallHeader}>
               <View style={styles.stallHeaderLeft}>
-                <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
-                {data.isClosed && (
-                  <View style={styles.closedBadge}>
-                    <Text style={styles.closedBadgeText}>Closed</Text>
-                  </View>
-                )}
+                <View style={styles.stallIconWrap}>
+                  <Text style={styles.stallIcon}>🏪</Text>
+                </View>
+                <View style={styles.stallHeaderText}>
+                  <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
+                  <Text style={styles.stallMeta}>Stall #{data.stall?.stall_number} • {data.stall?.section}</Text>
+                </View>
               </View>
+              {data.isClosed && (
+                <View style={styles.closedBadge}>
+                  <Text style={styles.closedBadgeText}>Closed</Text>
+                </View>
+              )}
             </View>
             
             {data.items.map((item) => (
               <View key={item.product_id} style={styles.cartItem}>
                 <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>₱{item.price} / {item.unit}</Text>
+                  <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
                 </View>
                 
                 <View style={styles.itemRightSection}>
@@ -180,19 +213,23 @@ export default function CartScreen({ navigation }) {
                       <TouchableOpacity 
                         style={styles.quantityButton}
                         onPress={() => updateItemQuantity(item, -1)}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.quantityButtonText}>-</Text>
+                        <Text style={styles.quantityButtonText}>−</Text>
                       </TouchableOpacity>
                       <Text style={styles.quantityText}>{item.quantity || 1}</Text>
                       <TouchableOpacity 
                         style={styles.quantityButton}
                         onPress={() => updateItemQuantity(item, 1)}
+                        activeOpacity={0.7}
                       >
                         <Text style={styles.quantityButtonText}>+</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <Text style={styles.closedItemLabel}>Closed</Text>
+                    <View style={styles.closedItemBadge}>
+                      <Text style={styles.closedItemLabel}>Closed</Text>
+                    </View>
                   )}
                   <Text style={styles.itemTotal}>
                     ₱{((item.quantity || 1) * item.price).toFixed(2)}
@@ -207,7 +244,10 @@ export default function CartScreen({ navigation }) {
       {/* Footer - Single location for totals and checkout */}
       <View style={styles.footer}>
         <View style={styles.footerRow}>
-          <Text style={styles.footerTotalLabel}>Total</Text>
+          <View style={styles.footerTotalLeft}>
+            <Text style={styles.footerTotalLabel}>Total</Text>
+            <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
+          </View>
           <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
         </View>
         
@@ -227,9 +267,10 @@ export default function CartScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.checkoutButton}
             onPress={() => navigation.navigate('Checkout', { cart, cartTotal })}
+            activeOpacity={0.85}
           >
-            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.checkoutGradient}>
-              <Text style={styles.checkoutButtonText}>Proceed to Checkout </Text>
+            <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
+              <Text style={styles.checkoutButtonText}>Proceed to Checkout →</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -241,43 +282,62 @@ export default function CartScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+  },
+  emptyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   emptyIcon: {
-    fontSize: 60,
-    marginBottom: 20,
+    fontSize: 56,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text.dark,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 15,
+    color: COLORS.text.medium,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
+    lineHeight: 22,
   },
   shopButton: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   shopGradient: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 36,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
   shopButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
@@ -288,96 +348,139 @@ const styles = StyleSheet.create({
   },
   closedWarningBanner: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3F2',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 16,
+    padding: 14,
     marginBottom: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: COLORS.accentLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  closedWarningIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.accentLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   closedWarningIcon: {
     fontSize: 20,
-    marginRight: 12,
   },
   closedWarningContent: {
     flex: 1,
   },
   closedWarningTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#EF4444',
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.error,
     marginBottom: 2,
   },
   closedWarningText: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
+    color: COLORS.text.medium,
+    lineHeight: 18,
   },
   stallSection: {
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
     marginBottom: 16,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingTop: 14,
+    paddingBottom: 10,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   closedStallSection: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: COLORS.accentLight,
+    opacity: 0.8,
   },
   stallHeader: {
     marginBottom: 12,
-    paddingBottom: 8,
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.borderLight,
   },
   stallHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  stallIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stallIcon: {
+    fontSize: 20,
+  },
+  stallHeaderText: {
+    flex: 1,
   },
   stallName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+    marginBottom: 2,
+  },
+  stallMeta: {
+    fontSize: 12,
+    color: COLORS.text.light,
   },
   closedBadge: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   closedBadgeText: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: 'white',
   },
   cartItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.borderLight,
   },
   itemInfo: {
     flex: 2,
+    paddingRight: 12,
   },
   itemName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginBottom: 4,
+    lineHeight: 20,
   },
   itemPrice: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    fontSize: 13,
+    color: COLORS.text.medium,
   },
   itemRightSection: {
     flexDirection: 'row',
@@ -387,99 +490,127 @@ const styles = StyleSheet.create({
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   quantityButton: {
-    width: 30,
-    height: 30,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   quantityButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#DC2626',
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   quantityText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
-    minWidth: 25,
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+    minWidth: 28,
     textAlign: 'center',
   },
+  closedItemBadge: {
+    backgroundColor: COLORS.accentLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
   closedItemLabel: {
-    fontSize: 11,
-    color: '#EF4444',
-    fontWeight: '500',
+    fontSize: 12,
+    color: COLORS.error,
+    fontWeight: '600',
   },
   itemTotal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#DC2626',
-    minWidth: 65,
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
+    minWidth: 70,
     textAlign: 'right',
   },
   footer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 5,
+    borderTopColor: COLORS.border,
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+  },
+  footerTotalLeft: {
+    flex: 1,
   },
   footerTotalLabel: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '700',
+    color: COLORS.text.dark,
+    marginBottom: 2,
+  },
+  footerTotalItems: {
+    fontSize: 13,
+    color: COLORS.text.light,
   },
   footerTotalAmount: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#DC2626',
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
   checkoutButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   checkoutGradient: {
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
   },
   checkoutButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
   },
   checkoutDisabledArea: {
     gap: 10,
   },
   disabledCheckoutButton: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.borderLight,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
   },
   disabledCheckoutText: {
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
     fontSize: 16,
     fontWeight: '600',
   },
   removeClosedButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
   },
   removeClosedButtonText: {

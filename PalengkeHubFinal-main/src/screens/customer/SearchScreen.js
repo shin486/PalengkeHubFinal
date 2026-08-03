@@ -18,6 +18,31 @@ import { supabase } from '../../../lib/supabase';
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
 
+const COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  accent: '#F87171',
+  accentLight: '#FEE2E2',
+  accentSoft: '#FEF2F2',
+  background: '#F8F9FA',
+  surface: '#FFFFFF',
+  text: {
+    dark: '#111827',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
+    white: '#FFFFFF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
+};
+
 // Generate a stable pseudo-random rating seeded by stall id
 // This ensures the same stall always gets the same "random" rating
 const getStallRating = (stallId, realRating) => {
@@ -538,7 +563,7 @@ export default function SearchScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -629,13 +654,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.borderLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   recentItemContent: {
     flexDirection: 'row',
@@ -688,13 +718,15 @@ const styles = StyleSheet.create({
   resultCard: {
     marginBottom: 12,
     borderRadius: 16,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   stallIcon: {
     width: 50,
@@ -804,18 +836,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   comparisonCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     marginBottom: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.borderLight,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   bestDealBadge: {
     position: 'absolute',

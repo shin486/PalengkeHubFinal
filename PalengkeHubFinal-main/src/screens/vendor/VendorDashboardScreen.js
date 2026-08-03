@@ -38,6 +38,33 @@ const { width } = Dimensions.get('window');
 
 const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
 
+const COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  accent: '#F87171',
+  accentLight: '#FEE2E2',
+  accentSoft: '#FEF2F2',
+  background: '#0F0F1E',
+  surface: '#FFFFFF',
+  text: {
+    dark: '#111827',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
+    white: '#FFFFFF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
+  glassBackground: 'rgba(255, 255, 255, 0.95)',
+  glassBorder: 'rgba(255, 255, 255, 0.3)',
+};
+
 // Helper for status colors
 const getStatusColor = (status) => {
   switch (status) {
@@ -166,6 +193,10 @@ const [submittingProposal, setSubmittingProposal] = useState(false);
         .single();
       if (error && error.code !== 'PGRST116') throw error;
       setStall(data);
+      // ✅ Sync isPaused with the actual database value
+      if (data) {
+        setIsPaused(data.is_temporarily_closed || false);
+      }
     } catch (error) {
       console.error('Error fetching stall:', error);
     } finally {
@@ -2343,7 +2374,7 @@ const renderContent = () => {
 // ---- Styles ----
 const styles = StyleSheet.create({
 
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   contentArea: { flex: 1 },
   loadingText: { marginTop: 12, color: '#6B7280' },
@@ -2498,16 +2529,18 @@ const styles = StyleSheet.create({
 
   // Sections
   section: {
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.glassBackground,
     marginHorizontal: 16,
     marginBottom: 16,
     padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 24,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.glassBorder,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -3221,26 +3254,31 @@ profileAvatarContainer: {
   position: 'relative',
   marginBottom: 12,
 },
-profileAvatarImage: {
-  width: 100,
-  height: 100,
-  borderRadius: 50,
-  borderWidth: 3,
-  borderColor: '#DC2626',
-},
-editAvatarBadge: {
-  position: 'absolute',
-  bottom: 0,
-  right: 0,
-  backgroundColor: '#DC2626',
-  width: 28,
-  height: 28,
-  borderRadius: 14,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderWidth: 2,
-  borderColor: 'white',
-},
+  profileAvatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: COLORS.primary,
+  },
+  editAvatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
 editAvatarBadgeText: {
   fontSize: 14,
 },
@@ -3254,28 +3292,28 @@ stallImageLabel: {
   color: '#374151',
   marginBottom: 12,
 },
-stallImageContainer: {
-  borderRadius: 16,
-  overflow: 'hidden',
-  backgroundColor: '#F3F4F6',
-  height: 150,
-},
-stallImage: {
-  width: '100%',
-  height: 150,
-  borderRadius: 16,
-},
-stallImagePlaceholder: {
-  width: '100%',
-  height: 150,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#F3F4F6',
-  borderWidth: 1,
-  borderColor: '#E5E7EB',
-  borderStyle: 'dashed',
-  borderRadius: 16,
-},
+  stallImageContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: COLORS.borderLight,
+    height: 150,
+  },
+  stallImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 16,
+  },
+  stallImagePlaceholder: {
+    width: '100%',
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.borderLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+  },
 stallImageEmoji: {
   fontSize: 48,
   marginBottom: 8,
@@ -3284,17 +3322,17 @@ stallImagePlaceholderText: {
   fontSize: 12,
   color: '#6B7280',
 },
-stallImageUploading: {
-  width: '100%',
-  height: 150,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#F3F4F6',
-  borderRadius: 16,
-},
-stallImageUploadingText: {
-  fontSize: 12,
-  color: '#DC2626',
-  marginTop: 8,
-},
+  stallImageUploading: {
+    width: '100%',
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.borderLight,
+    borderRadius: 16,
+  },
+  stallImageUploadingText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    marginTop: 8,
+  },
 });

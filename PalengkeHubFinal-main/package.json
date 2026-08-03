@@ -9,6 +9,9 @@
     "web": "expo start --web --port 8082"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
@@ -47,6 +50,7 @@
   },
   "private": true,
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@types/react": "~19.1.10",
     "expo-module-scripts": "^56.0.3",
     "typescript": "~5.9.2"

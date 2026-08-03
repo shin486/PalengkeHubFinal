@@ -24,19 +24,24 @@ const COLORS = {
   primaryDark: '#B91C1C',
   accent: '#F87171',
   accentLight: '#FEE2E2',
-  background: '#FFFFFF',
+  accentSoft: '#FEF2F2',
+  background: '#F8F9FA',
   surface: '#FFFFFF',
   card: '#FFFFFF',
   text: {
-    dark: '#1F2937',
-    medium: '#4B5563',
-    light: '#9CA3AF',
+    dark: '#111827',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
     white: '#FFFFFF',
   },
-  border: '#F3F4F6',
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
   success: '#10B981',
   error: '#DC2626',
   warning: '#F59E0B',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
 };
 
 // ✅ Generate consistent random rating based on stall ID
@@ -363,9 +368,12 @@ export default function HomeScreen({ isGuest = false, navigation }) {
     <TouchableOpacity 
       style={styles.categoryItem}
       onPress={() => navigation.navigate('CategoryProducts', { categoryName: category.name, categoryIcon: category.icon })}
-      activeOpacity={0.7}
+      activeOpacity={0.85}
     >
-      <LinearGradient colors={category.gradient} style={styles.categoryIconWrapper}>
+      <LinearGradient
+        colors={category.gradient}
+        style={styles.categoryIconWrapper}
+      >
         <Text style={styles.categoryIcon}>{category.icon}</Text>
       </LinearGradient>
       <Text style={styles.categoryName}>{category.name}</Text>
@@ -532,43 +540,59 @@ export default function HomeScreen({ isGuest = false, navigation }) {
   const StallCard = ({ stall }) => {
     const displayRating = getStallRating(stall.id, stall.average_rating);
     const ratingCount = getRandomRatingCount(stall.id);
+    const isClosed = stall.is_temporarily_closed;
     
     return (
       <TouchableOpacity 
-        style={styles.stallCard} 
+        style={[styles.stallCard, isClosed && styles.stallCardClosed]} 
         onPress={() => {
-          if (stall.is_temporarily_closed) {
+          if (isClosed) {
             Alert.alert('Store Closed', 'This stall is temporarily closed. Please check back later.');
             return;
           }
           navigation.navigate('StallDetails', { stallId: stall.id });
         }}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
       >
         <View style={styles.stallCardContent}>
-          <LinearGradient
-            colors={['#FEF2F2', '#FEE2E2']}
-            style={styles.stallAvatar}
-          >
-            <Text style={styles.stallAvatarEmoji}>🏪</Text>
-          </LinearGradient>
+          <View style={styles.stallAvatarContainer}>
+            {stall.image_url ? (
+              <Image 
+                source={{ uri: stall.image_url }} 
+                style={styles.stallAvatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <LinearGradient
+                colors={isClosed ? ['#F3F4F6', '#E5E7EB'] : ['#FEF2F2', '#FEE2E2']}
+                style={styles.stallAvatar}
+              >
+                <Text style={styles.stallAvatarEmoji}>🏪</Text>
+              </LinearGradient>
+            )}
+            {isClosed && (
+              <View style={styles.stallClosedOverlay}>
+                <Text style={styles.stallClosedText}>CLOSED</Text>
+              </View>
+            )}
+          </View>
           <View style={styles.stallInfo}>
             <View style={styles.stallNameRow}>
-              <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
-              {stall.is_temporarily_closed && (
-                <View style={styles.closedBadge}>
-                  <Text style={styles.closedBadgeText}>Closed</Text>
-                </View>
-              )}
+              <Text style={styles.stallName} numberOfLines={1}>{stall.stall_name || 'Market Stall'}</Text>
             </View>
-            <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
-            <Text style={styles.stallSection}>{stall.section}</Text>
-            {/* ✅ Updated Rating Section with Stars */}
+            <View style={styles.stallMetaRow}>
+              <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
+              <Text style={styles.stallDot}>•</Text>
+              <Text style={styles.stallSection}>{stall.section}</Text>
+            </View>
             <View style={styles.stallRatingRow}>
-              <StarRating rating={displayRating} size={10} />
+              <StarRating rating={displayRating} size={12} />
               <Text style={styles.stallRatingText}>{displayRating.toFixed(1)}</Text>
-              <Text style={styles.stallRatingCount}>({ratingCount} reviews)</Text>
+              <Text style={styles.stallRatingCount}>({ratingCount})</Text>
             </View>
+          </View>
+          <View style={styles.stallArrow}>
+            <Text style={styles.stallArrowText}>→</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -579,46 +603,70 @@ export default function HomeScreen({ isGuest = false, navigation }) {
     <ScrollView 
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
     >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       
+      {/* Guest Banner */}
       {isGuest && (
-        <View style={styles.guestContainer}>
-          <Text style={styles.guestIcon}>👋</Text>
-          <View style={styles.guestContent}>
-            <Text style={styles.guestTitle}>Guest Mode</Text>
-            <Text style={styles.guestText}>Sign in for a better experience</Text>
-          </View>
-          <TouchableOpacity style={styles.guestSignInBtn} onPress={() => navigation.navigate('Login')}>
-            <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.guestSignInGradient}>
-              <Text style={styles.guestSignInText}>Sign In</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+        <View style={styles.guestBanner}>
+          <LinearGradient
+            colors={[COLORS.accentSoft, '#FFFFFF']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.guestBannerGradient}
+          >
+            <View style={styles.guestIconWrap}>
+              <Text style={styles.guestIcon}>👋</Text>
+            </View>
+            <View style={styles.guestContent}>
+              <Text style={styles.guestTitle}>Welcome to PalengkeHub!</Text>
+              <Text style={styles.guestText}>Sign in to order from Lipa City Public Market</Text>
+            </View>
+            <TouchableOpacity style={styles.guestSignInBtn} onPress={() => navigation.navigate('Login')}>
+              <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.guestSignInGradient}>
+                <Text style={styles.guestSignInText}>Sign In</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </LinearGradient>
         </View>
       )}
 
+      {/* Search Bar */}
+      <View style={styles.searchBarContainer}>
+        <TouchableOpacity 
+          style={styles.searchBar}
+          onPress={() => navigation.navigate('Search')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchPlaceholder}>Search for products, stalls...</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Categories */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Browse Categories</Text>
-        </View>
+        <Text style={styles.sectionTitle}>Shop by Category</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesContainer}>
           {categories.map(category => <CategoryItem key={category.id} category={category} />)}
         </ScrollView>
       </View>
 
+      {/* Today's Promos */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>🎉 Today's Promos</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'promos' })}>
-            <Text style={styles.sectionLink}>View All →</Text>
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>🎉 Today's Deals</Text>
+          {promoProducts.length > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'promos' })}>
+              <Text style={styles.sectionLink}>See All →</Text>
+            </TouchableOpacity>
+          )}
         </View>
         {promoProducts.length === 0 ? (
-          <View style={styles.emptyPromosContainer}>
-            <Text style={styles.emptyPromosEmoji}>🏷️</Text>
-            <Text style={styles.emptyPromosTitle}>No active promotions right now</Text>
-            <Text style={styles.emptyPromosText}>Check back later for discounts and deals!</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>🏷️</Text>
+            <Text style={styles.emptyStateTitle}>No deals right now</Text>
+            <Text style={styles.emptyStateText}>Check back later for discounts!</Text>
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productsContainer}>
@@ -627,14 +675,15 @@ export default function HomeScreen({ isGuest = false, navigation }) {
         )}
       </View>
 
+      {/* Order Again & Price Drops */}
       {!isGuest && user && (
         <>
           {recentOrderItems.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>🔄 Order Again</Text>
+                <Text style={styles.sectionTitle}>🔄 Buy Again</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Orders')}>
-                  <Text style={styles.sectionLink}>View All →</Text>
+                  <Text style={styles.sectionLink}>See All →</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productsContainer}>
@@ -646,7 +695,7 @@ export default function HomeScreen({ isGuest = false, navigation }) {
           {priceDropItems.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>📉 Price Dropped</Text>
+                <Text style={styles.sectionTitle}>📉 Price Drop Alert</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'products' })}>
                   <Text style={styles.sectionLink}>See All →</Text>
                 </TouchableOpacity>
@@ -659,26 +708,33 @@ export default function HomeScreen({ isGuest = false, navigation }) {
         </>
       )}
 
+      {/* Market Stalls */}
       <View style={[styles.section, styles.lastSection]}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🏪 Market Stalls</Text>
           <TouchableOpacity onPress={() => navigation.navigate('StallsDirectory')}>
-            <Text style={styles.sectionLink}>View All →</Text>
+            <Text style={styles.sectionLink}>See All →</Text>
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContainer}>
           {sections.map((section, index) => (
-            <TouchableOpacity key={index} style={[styles.filterChip, selectedSection === section && styles.filterChipActive]} onPress={() => setSelectedSection(section)}>
+            <TouchableOpacity 
+              key={index} 
+              style={[styles.filterChip, selectedSection === section && styles.filterChipActive]} 
+              onPress={() => setSelectedSection(section)}
+            >
               <Text style={[styles.filterChipText, selectedSection === section && styles.filterChipTextActive]}>{section}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
         <View style={styles.stallsContainer}>
-          {filteredStalls.slice(0, 4).map(stall => <StallCard key={stall.id} stall={stall} />)}
+          {filteredStalls.slice(0, 6).map(stall => <StallCard key={stall.id} stall={stall} />)}
         </View>
-        {filteredStalls.length > 4 && (
+        {filteredStalls.length > 6 && (
           <TouchableOpacity style={styles.browseAllBtn} onPress={() => navigation.navigate('StallsDirectory')}>
             <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.browseAllGradient}>
+              <Text style={styles.browseAllText}>Browse All Stalls</Text>
+              <Text style={styles.browseAllArrow}>→</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -689,91 +745,115 @@ export default function HomeScreen({ isGuest = false, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  guestContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, margin: 16, padding: 14, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 2 },
-  guestIcon: { fontSize: 28, marginRight: 12 },
+  
+  // ── Guest Banner ──
+  guestBanner: { margin: 16, borderRadius: 20, overflow: 'hidden', shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 4 },
+  guestBannerGradient: { flexDirection: 'row', alignItems: 'center', padding: 18, borderWidth: 1, borderColor: COLORS.accentLight },
+  guestIconWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.accentLight, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  guestIcon: { fontSize: 26 },
   guestContent: { flex: 1 },
-  guestTitle: { fontSize: 14, fontWeight: '600', color: COLORS.text.dark },
-  guestText: { fontSize: 12, color: COLORS.text.light, marginTop: 2 },
-  guestSignInBtn: { borderRadius: 20, overflow: 'hidden' },
-  guestSignInGradient: { paddingHorizontal: 18, paddingVertical: 8 },
-  guestSignInText: { fontSize: 12, fontWeight: '600', color: COLORS.text.white },
+  guestTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text.dark },
+  guestText: { fontSize: 13, color: COLORS.text.light, marginTop: 3 },
+  guestSignInBtn: { borderRadius: 24, overflow: 'hidden' },
+  guestSignInGradient: { paddingHorizontal: 22, paddingVertical: 12 },
+  guestSignInText: { fontSize: 14, fontWeight: '700', color: COLORS.text.white },
+
+  // ── Search Bar ──
+  searchBarContainer: { paddingHorizontal: 16, paddingTop: 16 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 18, borderWidth: 1, borderColor: COLORS.borderLight, shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 2 },
+  searchIcon: { fontSize: 20, marginRight: 12 },
+  searchPlaceholder: { fontSize: 15, color: COLORS.text.lighter },
+
+  // ── Sections ──
   section: { paddingHorizontal: 16, paddingVertical: 20 },
-  lastSection: { paddingBottom: 40 },
+  lastSection: { paddingBottom: 60 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text.dark },
-  sectionLink: { fontSize: 13, color: COLORS.primary, fontWeight: '500' },
-  categoriesContainer: { paddingRight: 16, gap: 16 },
-  categoryItem: { alignItems: 'center', width: 70 },
-  categoryIconWrapper: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  categoryIcon: { fontSize: 28 },
-  categoryName: { fontSize: 12, fontWeight: '500', color: COLORS.text.medium },
-  productsContainer: { paddingRight: 16, gap: 14 },
-  promoCard: { width: width * 0.42, backgroundColor: COLORS.surface, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, position: 'relative' },
-  promoImageWrapper: { padding: 16, backgroundColor: '#F8F8F8', position: 'relative' },
-  productImage: { width: '100%', height: 120, backgroundColor: '#F8F8F8', borderRadius: 8 },
-  productImagePlaceholder: { height: 100, justifyContent: 'center', alignItems: 'center' },
-  productImageEmoji: { fontSize: 44 },
-  discountBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: COLORS.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  discountBadgeText: { fontSize: 10, fontWeight: 'bold', color: COLORS.text.white },
-  productDetails: { padding: 12, backgroundColor: COLORS.surface },
-  productName: { fontSize: 14, fontWeight: '600', color: COLORS.text.dark, marginBottom: 4 },
+  sectionTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text.dark, letterSpacing: -0.5 },
+  sectionLink: { fontSize: 14, color: COLORS.primary, fontWeight: '700' },
+
+  // ── Categories ──
+  categoriesContainer: { paddingRight: 16, gap: 20 },
+  categoryItem: { alignItems: 'center', width: 80 },
+  categoryIconWrapper: { width: 68, height: 68, borderRadius: 34, justifyContent: 'center', alignItems: 'center', marginBottom: 12, shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 8, elevation: 5 },
+  categoryIcon: { fontSize: 32 },
+  categoryName: { fontSize: 13, fontWeight: '600', color: COLORS.text.medium },
+
+  // ── Product Cards ──
+  productsContainer: { paddingRight: 16, gap: 16 },
+  promoCard: { width: width * 0.46, backgroundColor: COLORS.surface, borderRadius: 20, overflow: 'hidden', shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 4, position: 'relative' },
+  promoImageWrapper: { padding: 14, backgroundColor: '#FAFAFA', position: 'relative' },
+  productImage: { width: '100%', height: 140, backgroundColor: '#FAFAFA', borderRadius: 14 },
+  productImagePlaceholder: { height: 120, justifyContent: 'center', alignItems: 'center' },
+  productImageEmoji: { fontSize: 52 },
+  discountBadge: { position: 'absolute', top: 12, left: 12, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 4, elevation: 3 },
+  discountBadgeText: { fontSize: 11, fontWeight: '800', color: COLORS.text.white },
+  productDetails: { padding: 14, backgroundColor: COLORS.surface },
+  productName: { fontSize: 15, fontWeight: '700', color: COLORS.text.dark, marginBottom: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 4 },
-  originalPrice: { fontSize: 12, color: COLORS.text.light, textDecorationLine: 'line-through' },
-  discountedPrice: { fontSize: 18, fontWeight: '700', color: COLORS.primary },
-  productUnit: { fontSize: 11, color: COLORS.text.light, marginBottom: 8 },
+  originalPrice: { fontSize: 13, color: COLORS.text.lighter, textDecorationLine: 'line-through' },
+  discountedPrice: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
+  productUnit: { fontSize: 12, color: COLORS.text.light, marginBottom: 10 },
   productFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productVendor: { fontSize: 10, color: COLORS.text.light },
-  addToCartBtn: { position: 'absolute', bottom: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, overflow: 'hidden' },
-  addToCartText: { fontSize: 18, fontWeight: '600', color: COLORS.text.white },
-  addToCartGradient: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  productPrice: { fontSize: 18, fontWeight: '700', color: '#DC2626' },
-  productQuantity: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
+  productVendor: { fontSize: 11, color: COLORS.text.light },
+  addToCartBtn: { position: 'absolute', bottom: 14, right: 14, width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 6, elevation: 5, overflow: 'hidden' },
+  addToCartText: { fontSize: 22, fontWeight: '700', color: COLORS.text.white },
+  addToCartGradient: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  productPrice: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
+  productQuantity: { fontSize: 13, color: COLORS.text.light, marginBottom: 4 },
   lastPaidRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  lastPaidLabel: { fontSize: 11, color: '#6B7280', marginRight: 6 },
-  lastPaidPrice: { fontSize: 13, color: '#9CA3AF', textDecorationLine: 'line-through' },
-  savingsBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  savingsBadgeText: { fontSize: 10, fontWeight: 'bold', color: 'white' },
-  promoMiniBadge: { alignSelf: 'flex-start', backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  promoMiniText: { fontSize: 9, fontWeight: '500', color: '#DC2626' },
-  filterContainer: { paddingRight: 16, gap: 8, marginBottom: 16 },
-  filterChip: { paddingHorizontal: 18, paddingVertical: 8, backgroundColor: COLORS.surface, borderRadius: 24, borderWidth: 1, borderColor: COLORS.border },
-  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterChipText: { fontSize: 13, fontWeight: '500', color: COLORS.text.medium },
-  filterChipTextActive: { color: COLORS.text.white },
-  stallsContainer: { gap: 12 },
-  stallCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 2 },
+  lastPaidLabel: { fontSize: 12, color: COLORS.text.light, marginRight: 6 },
+  lastPaidPrice: { fontSize: 14, color: COLORS.text.lighter, textDecorationLine: 'line-through' },
+  savingsBadge: { position: 'absolute', top: 12, left: 12, backgroundColor: COLORS.success, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 4, elevation: 3 },
+  savingsBadgeText: { fontSize: 11, fontWeight: '800', color: 'white' },
+  promoMiniBadge: { alignSelf: 'flex-start', backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  promoMiniText: { fontSize: 10, fontWeight: '700', color: COLORS.primary },
+
+  // ── Filter Chips ──
+  filterContainer: { paddingRight: 16, gap: 10, marginBottom: 20 },
+  filterChip: { paddingHorizontal: 22, paddingVertical: 12, backgroundColor: COLORS.surface, borderRadius: 28, borderWidth: 1, borderColor: COLORS.border, shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 1, shadowRadius: 4, elevation: 1 },
+  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  filterChipText: { fontSize: 14, fontWeight: '600', color: COLORS.text.medium },
+  filterChipTextActive: { color: COLORS.text.white, fontWeight: '700' },
+
+  // ── Stall Cards ──
+  stallsContainer: { gap: 14 },
+  stallCard: { backgroundColor: COLORS.surface, borderRadius: 20, padding: 16, shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 10, elevation: 3, borderWidth: 1, borderColor: COLORS.borderLight },
+  stallCardClosed: { opacity: 0.7 },
   stallCardContent: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  stallAvatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  stallAvatarEmoji: { fontSize: 26 },
+  stallAvatarContainer: { position: 'relative' },
+  stallAvatar: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  stallAvatarImage: { width: 60, height: 60, borderRadius: 30, backgroundColor: COLORS.borderLight },
+  stallAvatarEmoji: { fontSize: 30 },
+  stallClosedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  stallClosedText: { fontSize: 9, fontWeight: '800', color: 'white' },
   stallInfo: { flex: 1 },
-  stallName: { fontSize: 16, fontWeight: '600', color: COLORS.text.dark, marginBottom: 2 },
-  stallNumber: { fontSize: 12, color: COLORS.primary, fontWeight: '500', marginBottom: 4 },
-  stallSection: { fontSize: 11, color: COLORS.text.light, marginBottom: 4 },
+  stallName: { fontSize: 18, fontWeight: '700', color: COLORS.text.dark, marginBottom: 4 },
+  stallMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  stallNumber: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  stallDot: { fontSize: 13, color: COLORS.text.lighter },
+  stallSection: { fontSize: 13, color: COLORS.text.light },
   stallNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  closedBadge: { backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  closedBadgeText: { fontSize: 9, fontWeight: '600', color: 'white' },
-  // ✅ New Rating Styles
-  stallRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  stallRatingText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#F59E0B',
-  },
-  stallRatingCount: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  browseAllBtn: { marginTop: 16, borderRadius: 12, overflow: 'hidden' },
-  browseAllGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  browseAllText: { fontSize: 14, fontWeight: '600', color: COLORS.text.white },
-  browseAllArrow: { fontSize: 16, color: COLORS.text.white },
-  emptyPromosContainer: { alignItems: 'center', paddingVertical: 40, backgroundColor: COLORS.accentLight, borderRadius: 20, marginVertical: 10 },
-  emptyPromosEmoji: { fontSize: 48, marginBottom: 12, opacity: 0.6 },
-  emptyPromosTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text.dark, marginBottom: 4 },
-  emptyPromosText: { fontSize: 13, color: COLORS.text.medium },
+  stallRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stallRatingText: { fontSize: 13, fontWeight: '700', color: COLORS.warning },
+  stallRatingCount: { fontSize: 11, color: COLORS.text.lighter },
+  stallArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.accentSoft, justifyContent: 'center', alignItems: 'center' },
+  stallArrowText: { fontSize: 18, color: COLORS.primary, fontWeight: '700' },
+
+  // ── Browse All Button ──
+  browseAllBtn: { marginTop: 20, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 8, elevation: 4 },
+  browseAllGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16 },
+  browseAllText: { fontSize: 16, fontWeight: '700', color: COLORS.text.white },
+  browseAllArrow: { fontSize: 18, color: COLORS.text.white },
+
+  // ── Empty States ──
+  emptyState: { alignItems: 'center', paddingVertical: 48, backgroundColor: COLORS.accentSoft, borderRadius: 20, marginVertical: 8 },
+  emptyStateIcon: { fontSize: 56, marginBottom: 16, opacity: 0.4 },
+  emptyStateTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text.dark, marginBottom: 6 },
+  emptyStateText: { fontSize: 14, color: COLORS.text.medium, textAlign: 'center' },
+  
+  // Legacy empty state styles (kept for compatibility)
+  emptyPromosContainer: { alignItems: 'center', paddingVertical: 48, backgroundColor: COLORS.accentSoft, borderRadius: 20, marginVertical: 8 },
+  emptyPromosEmoji: { fontSize: 56, marginBottom: 16, opacity: 0.4 },
+  emptyPromosTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text.dark, marginBottom: 6 },
+  emptyPromosText: { fontSize: 14, color: COLORS.text.medium, textAlign: 'center' },
 });

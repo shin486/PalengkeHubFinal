@@ -10,13 +10,14 @@ EMAILJS_PUBLIC_KEY = "kGh0qAHDD8McuJl23"
 # NOTE: Secrets are NOT stored here for security.
 # For local dev: create a gitignored `.dev.vars` file with:
 #   IPROG_API_TOKEN=your_token
+#   SEMAPHORE_API_KEY=your_key
 #   PAYMONGO_SECRET_KEY=your_key
 #   RESEND_API_KEY=your_key
 #   EMAILJS_SERVICE_ID=your_id
 #   EMAILJS_TEMPLATE_ID=your_id
 #   EMAILJS_PUBLIC_KEY=your_key
 #   EMAILJS_PRIVATE_KEY=your_key
-# For production: run `npx wrangler secret put IPROG_API_TOKEN` (and PAYMONGO_SECRET_KEY, RESEND_API_KEY, EMAILJS_PRIVATE_KEY, etc.)
+# For production: run `npx wrangler secret put IPROG_API_TOKEN` (and SEMAPHORE_API_KEY, PAYMONGO_SECRET_KEY, RESEND_API_KEY, EMAILJS_PRIVATE_KEY, etc.)
 
 # No KV or D1 bindings needed — config is hardcoded for single-project use.
 # If you need analytics, uncomment below and create the dataset in the dashboard:

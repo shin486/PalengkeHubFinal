@@ -45,8 +45,8 @@ export default {
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       paymongoProxyUrl: process.env.EXPO_PUBLIC_PAYMONGO_PROXY_URL || process.env.PAYMONGO_PROXY_URL || '',
       authProxyUrl: process.env.EXPO_PUBLIC_AUTH_PROXY_URL || process.env.AUTH_PROXY_URL || '',
-      paymongoSuccessUrl: process.env.EXPO_PUBLIC_PAYMONGO_SUCCESS_URL || process.env.PAYMONGO_SUCCESS_URL || 'palengkehub://paymongo/success',
-      paymongoFailedUrl: process.env.EXPO_PUBLIC_PAYMONGO_FAILED_URL || process.env.PAYMONGO_FAILED_URL || 'palengkehub://paymongo/failed',
+      paymongoSuccessUrl: process.env.EXPO_PUBLIC_PAYMONGO_SUCCESS_URL || process.env.PAYMONGO_SUCCESS_URL || 'https://supabase-proxy.jhayvy.workers.dev/paymongo/success',
+      paymongoFailedUrl: process.env.EXPO_PUBLIC_PAYMONGO_FAILED_URL || process.env.PAYMONGO_FAILED_URL || 'https://supabase-proxy.jhayvy.workers.dev/paymongo/failed',
     },
   },
 };

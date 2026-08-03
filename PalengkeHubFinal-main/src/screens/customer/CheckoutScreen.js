@@ -1,4 +1,4 @@
-  import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect, useRef } from 'react';
   import {
     View,
     Text,
@@ -11,7 +11,9 @@
     Linking,
     Modal,
     Dimensions,
+    Image,
   } from 'react-native';
+  import * as ImagePicker from 'expo-image-picker';
   import Constants from 'expo-constants';
   import { LinearGradient } from 'expo-linear-gradient';
   import DateTimePicker from '@react-native-community/datetimepicker';
@@ -39,6 +41,16 @@
     const [mapModalVisible, setMapModalVisible] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [paymongoType, setPaymongoType] = useState('gcash');
+    
+    // GCash direct payment states
+    const [gcashModalVisible, setGcashModalVisible] = useState(false);
+    const [gcashCountdown, setGcashCountdown] = useState(600); // 10 minutes in seconds
+    const [gcashReferenceNumber, setGcashReferenceNumber] = useState('');
+    const [gcashSubmitting, setGcashSubmitting] = useState(false);
+    const [gcashOrderIds, setGcashOrderIds] = useState([]);
+    const [gcashReceiptUri, setGcashReceiptUri] = useState(null);
+    const [gcashReceiptUploading, setGcashReceiptUploading] = useState(false);
+    const gcashTimerRef = useRef(null);
 
     const extra = Constants.manifest?.extra || Constants.expoConfig?.extra || {};
     const paymongoProxyUrl = extra.paymongoProxyUrl || '';
@@ -225,6 +237,8 @@
             status: 'pending',
             pickup_time: pickupTime.toISOString(),
             special_instructions: specialInstructions || null,
+            payment_method: paymentMethod === 'gcash' ? 'gcash' : paymentMethod === 'paymongo' ? 'paymongo' : 'cash',
+            payment_status: paymentMethod === 'gcash' ? 'awaiting_payment' : paymentMethod === 'paymongo' ? 'pending' : 'cash_on_pickup',
           };
           
           console.log('📦 Placing order:', orderData);
@@ -245,6 +259,30 @@
         }
         
         clearCart();
+        
+        // If GCash payment, show the 5-minute payment modal
+        if (paymentMethod === 'gcash') {
+          setGcashOrderIds(ordersPlaced.map(o => o.id));
+          setGcashModalVisible(true);
+          setGcashCountdown(600);
+          setGcashReferenceNumber('');
+          
+          // Start countdown timer
+          if (gcashTimerRef.current) clearInterval(gcashTimerRef.current);
+          gcashTimerRef.current = setInterval(() => {
+            setGcashCountdown(prev => {
+              if (prev <= 1) {
+                clearInterval(gcashTimerRef.current);
+                // Auto-cancel orders when timer expires
+                handleGcashTimeout(ordersPlaced.map(o => o.id));
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+          
+          return;
+        }
         
         Alert.alert(
           '✅ Order Placed! 🎉',
@@ -267,6 +305,157 @@
       } finally {
         setLoading(false);
       }
+    };
+
+    // Handle GCash payment timeout - cancel orders
+    const handleGcashTimeout = async (orderIds) => {
+      if (!orderIds || orderIds.length === 0) return;
+      
+      try {
+        const { error } = await supabase
+          .from('orders')
+          .update({ status: 'cancelled', payment_status: 'expired' })
+          .in('id', orderIds);
+        
+        if (error) console.error('Error cancelling expired orders:', error);
+        
+        Alert.alert(
+          '⏰ Payment Time Expired',
+          'Your payment window of 10 minutes has expired. Your order has been cancelled. Please place a new order if you still want to proceed.',
+          [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
+        );
+      } catch (error) {
+        console.error('GCash timeout error:', error);
+      }
+    };
+
+    // Pick GCash receipt image
+    const pickGcashReceipt = async () => {
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+          return;
+        }
+        
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaType.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.7,
+        });
+        
+        if (!result.canceled && result.assets && result.assets[0]) {
+          setGcashReceiptUri(result.assets[0].uri);
+        }
+      } catch (error) {
+        console.error('Error picking receipt:', error);
+        Alert.alert('Error', 'Failed to select receipt image.');
+      }
+    };
+
+    // Upload GCash receipt to Supabase storage
+    const uploadGcashReceipt = async (uri) => {
+      if (!uri) return null;
+      
+      setGcashReceiptUploading(true);
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const fileName = `receipt_${Date.now()}.jpg`;
+        const folder = `gcash_receipts/${user.id}`;
+        
+        const { data, error } = await supabase.storage
+          .from('vendor_documents')
+          .upload(`${folder}/${fileName}`, blob, {
+            cacheControl: '3600',
+            contentType: 'image/jpeg',
+          });
+        
+        if (error) throw error;
+        
+        const { data: urlData } = supabase.storage
+          .from('vendor_documents')
+          .getPublicUrl(data.path);
+        
+        return urlData?.publicUrl || null;
+      } catch (error) {
+        console.error('Error uploading receipt:', error);
+        Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
+        return null;
+      } finally {
+        setGcashReceiptUploading(false);
+      }
+    };
+
+    // Submit GCash reference number + receipt
+    const handleGcashSubmit = async () => {
+      const refNumber = gcashReferenceNumber.trim();
+      if (!refNumber) {
+        Alert.alert('Missing Reference Number', 'Please enter the GCash reference number from your payment.');
+        return;
+      }
+      
+      if (refNumber.length < 6) {
+        Alert.alert('Invalid Reference Number', 'The GCash reference number should be at least 6 characters.');
+        return;
+      }
+      
+      if (!gcashReceiptUri) {
+        Alert.alert('Missing Receipt', 'Please upload a screenshot of your GCash receipt.');
+        return;
+      }
+      
+      setGcashSubmitting(true);
+      try {
+        // Upload receipt first
+        const receiptUrl = await uploadGcashReceipt(gcashReceiptUri);
+        if (!receiptUrl) {
+          setGcashSubmitting(false);
+          return;
+        }
+        
+        // Update all orders with the reference number and receipt
+        const { error } = await supabase
+          .from('orders')
+          .update({ 
+            payment_status: 'paid',
+            payment_reference: refNumber,
+            payment_receipt_url: receiptUrl,
+            paid_at: new Date().toISOString(),
+          })
+          .in('id', gcashOrderIds);
+        
+        if (error) throw error;
+        
+        // Stop the timer
+        if (gcashTimerRef.current) clearInterval(gcashTimerRef.current);
+        
+        setGcashModalVisible(false);
+        
+        Alert.alert(
+          '✅ Payment Submitted! 🎉',
+          'Your GCash reference number and receipt have been submitted. The vendor will verify your payment and confirm your order.',
+          [
+            { 
+              text: 'View Orders', 
+              onPress: () => navigation.navigate('Orders')
+            }
+          ]
+        );
+      } catch (error) {
+        console.error('Error submitting GCash reference:', error);
+        Alert.alert('Error', 'Failed to submit payment reference. Please try again.');
+      } finally {
+        setGcashSubmitting(false);
+      }
+    };
+
+    // Format countdown as MM:SS
+    const formatCountdown = (seconds) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
     const onDateChange = (event, selectedDate) => {
@@ -448,6 +637,13 @@
               <Text style={[styles.paymentOptionLabel, paymentMethod === 'cash' && styles.paymentOptionLabelActive]}>Cash on Pickup</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.paymentOption, paymentMethod === 'gcash' && styles.paymentOptionActive]}
+              onPress={() => setPaymentMethod('gcash')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.paymentOptionLabel, paymentMethod === 'gcash' && styles.paymentOptionLabelActive]}>GCash</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.paymentOption, paymentMethod === 'paymongo' && styles.paymentOptionActive]}
               onPress={() => setPaymentMethod('paymongo')}
               activeOpacity={0.8}
@@ -455,6 +651,15 @@
               <Text style={[styles.paymentOptionLabel, paymentMethod === 'paymongo' && styles.paymentOptionLabelActive]}>PayMongo</Text>
             </TouchableOpacity>
           </View>
+
+          {paymentMethod === 'gcash' && (
+            <View style={styles.paymentTypeSection}>
+              <Text style={styles.paymentTypeLabel}>💳 GCash Direct Payment</Text>
+              <Text style={styles.paymentHint}>
+                Pay directly to the vendor's GCash. You will have 10 minutes to complete the payment and enter your GCash reference number.
+              </Text>
+            </View>
+          )}
 
           {paymentMethod === 'paymongo' && (
             <View style={styles.paymentTypeSection}>
@@ -511,6 +716,25 @@
               )}
             </LinearGradient>
           </TouchableOpacity>
+        ) : paymentMethod === 'gcash' ? (
+          <TouchableOpacity 
+            style={styles.placeOrderButton}
+            onPress={placeOrder}
+            disabled={loading}
+          >
+            <LinearGradient
+              colors={['#007DFE', '#005BB5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.placeOrderGradient}
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.placeOrderText}>Place Order & Pay via GCash</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity 
             style={styles.placeOrderButton}
@@ -538,6 +762,102 @@
             Use the map to find the stall location when you arrive at the market.
           </Text>
         </View>
+
+        {/* GCash Payment Modal with 5-minute countdown */}
+        <Modal
+          visible={gcashModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => {}}
+        >
+          <View style={styles.gcashModalOverlay}>
+            <View style={styles.gcashModalContent}>
+              <View style={styles.gcashModalHeader}>
+                <Text style={styles.gcashModalTitle}>💳 GCash Payment</Text>
+                <Text style={styles.gcashModalSubtitle}>Pay directly to the vendor</Text>
+              </View>
+
+              <View style={styles.gcashTimerSection}>
+                <Text style={styles.gcashTimerLabel}>⏰ Time Remaining</Text>
+                <Text style={[styles.gcashTimerValue, gcashCountdown <= 60 && styles.gcashTimerUrgent]}>
+                  {formatCountdown(gcashCountdown)}
+                </Text>
+                <Text style={styles.gcashTimerHint}>
+                  Complete your payment within 10 minutes or your order will be cancelled.
+                </Text>
+              </View>
+
+              <View style={styles.gcashStepsSection}>
+                <Text style={styles.gcashStepsTitle}>How to pay:</Text>
+                <Text style={styles.gcashStep}>1. Open your GCash app</Text>
+                <Text style={styles.gcashStep}>2. Send the total amount to the vendor's GCash</Text>
+                <Text style={styles.gcashStep}>3. Copy the reference number from your GCash receipt</Text>
+                <Text style={styles.gcashStep}>4. Enter it below to confirm your payment</Text>
+              </View>
+
+              <View style={styles.gcashInputSection}>
+                <Text style={styles.gcashInputLabel}>GCash Reference Number</Text>
+                <TextInput
+                  style={styles.gcashInput}
+                  placeholder="e.g. 1234 5678 9012"
+                  placeholderTextColor="#9CA3AF"
+                  value={gcashReferenceNumber}
+                  onChangeText={setGcashReferenceNumber}
+                  keyboardType="numeric"
+                  maxLength={20}
+                />
+                <Text style={styles.gcashInputHint}>
+                  You can find this in your GCash app under Transaction History.
+                </Text>
+              </View>
+
+              <View style={styles.gcashReceiptSection}>
+                <Text style={styles.gcashInputLabel}>📸 GCash Receipt Screenshot</Text>
+                <TouchableOpacity
+                  style={styles.gcashReceiptButton}
+                  onPress={pickGcashReceipt}
+                  disabled={gcashReceiptUploading}
+                >
+                  {gcashReceiptUri ? (
+                    <View style={styles.gcashReceiptPreviewContainer}>
+                      <Image source={{ uri: gcashReceiptUri }} style={styles.gcashReceiptPreview} />
+                      <Text style={styles.gcashReceiptChangeText}>Tap to change receipt</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.gcashReceiptPlaceholder}>
+                      <Text style={styles.gcashReceiptIcon}>🖼️</Text>
+                      <Text style={styles.gcashReceiptText}>
+                        {gcashReceiptUploading ? 'Uploading...' : 'Upload Receipt Screenshot'}
+                      </Text>
+                      <Text style={styles.gcashReceiptHint}>
+                        Take a screenshot of your GCash payment receipt
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.gcashSubmitButton}
+                onPress={handleGcashSubmit}
+                disabled={gcashSubmitting}
+              >
+                <LinearGradient
+                  colors={['#007DFE', '#005BB5']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gcashSubmitGradient}
+                >
+                  {gcashSubmitting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.gcashSubmitText}>✅ Confirm Payment</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <Modal
           visible={mapModalVisible}
@@ -944,5 +1264,158 @@
       color: 'white',
       fontSize: 16,
       fontWeight: '600',
+    },
+    // GCash modal styles
+    gcashModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    gcashModalContent: {
+      backgroundColor: 'white',
+      borderRadius: 20,
+      width: '100%',
+      maxWidth: 400,
+      padding: 20,
+      maxHeight: '90%',
+    },
+    gcashModalHeader: {
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    gcashModalTitle: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#007DFE',
+    },
+    gcashModalSubtitle: {
+      fontSize: 14,
+      color: '#6B7280',
+      marginTop: 4,
+    },
+    gcashTimerSection: {
+      backgroundColor: '#F0F9FF',
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    gcashTimerLabel: {
+      fontSize: 12,
+      color: '#6B7280',
+      fontWeight: '600',
+    },
+    gcashTimerValue: {
+      fontSize: 40,
+      fontWeight: 'bold',
+      color: '#007DFE',
+      marginVertical: 4,
+    },
+    gcashTimerUrgent: {
+      color: '#EF4444',
+    },
+    gcashTimerHint: {
+      fontSize: 12,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
+    gcashStepsSection: {
+      marginBottom: 16,
+    },
+    gcashStepsTitle: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#111827',
+      marginBottom: 8,
+    },
+    gcashStep: {
+      fontSize: 13,
+      color: '#4B5563',
+      marginBottom: 4,
+      lineHeight: 20,
+    },
+    gcashInputSection: {
+      marginBottom: 16,
+    },
+    gcashInputLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#111827',
+      marginBottom: 8,
+    },
+    gcashInput: {
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      borderRadius: 12,
+      padding: 12,
+      fontSize: 16,
+      color: '#111827',
+      backgroundColor: '#F9FAFB',
+      marginBottom: 8,
+    },
+    gcashInputHint: {
+      fontSize: 12,
+      color: '#6B7280',
+    },
+    gcashReceiptSection: {
+      marginBottom: 16,
+    },
+    gcashReceiptButton: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      backgroundColor: '#F9FAFB',
+    },
+    gcashReceiptPlaceholder: {
+      padding: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gcashReceiptIcon: {
+      fontSize: 32,
+      marginBottom: 8,
+    },
+    gcashReceiptText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#007DFE',
+      marginBottom: 4,
+    },
+    gcashReceiptHint: {
+      fontSize: 12,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
+    gcashReceiptPreviewContainer: {
+      alignItems: 'center',
+      padding: 8,
+    },
+    gcashReceiptPreview: {
+      width: '100%',
+      height: 150,
+      borderRadius: 8,
+      resizeMode: 'cover',
+    },
+    gcashReceiptChangeText: {
+      fontSize: 12,
+      color: '#007DFE',
+      marginTop: 8,
+      fontWeight: '600',
+    },
+    gcashSubmitButton: {
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    gcashSubmitGradient: {
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    gcashSubmitText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: 'bold',
     },
   });

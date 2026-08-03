@@ -118,11 +118,42 @@ async function handlePaymongoCreateSource(request: Request, env: any): Promise<R
   }
 }
 
+// Philippine mobile network prefix detection
+// Smart/TNT/Sun prefixes (iProgSMS has poor delivery to these networks)
+const SMART_TNT_SUN_PREFIXES = new Set([
+  '813', '907', '908', '909', '910', '912', '913', '914', '918', '919',
+  '920', '921', '928', '929', '930', '938', '939', '940', '946', '947',
+  '948', '949', '950', '951', '961', '963', '968', '969', '970', '981',
+  '982', '983', '984', '985', '986', '987', '988', '989', '992', '993',
+  '994', '995', '996', '997', '998', '999',
+  '903', '904', '905', '906', '911', '923', '924', '925', '926', '927',
+  '931', '932', '933', '934', '935', '936', '937', '941', '942', '943',
+  '944', '945', '952', '953', '954', '955', '956', '957', '958', '959',
+  '960', '962', '964', '965', '966', '967', '971', '972', '973', '974',
+  '975', '976', '977', '978', '979', '980', '990', '991',
+  '922', // Sun
+]);
+
+function isSmartTntSunNumber(phone: string): boolean {
+  // Normalize: remove +, spaces, dashes
+  const normalized = phone.replace(/[+\s-]/g, '');
+  // PH numbers are 12 digits: 63XXXXXXXXXX
+  if (normalized.length === 12 && normalized.startsWith('63')) {
+    const prefix = normalized.slice(2, 5); // 3-digit prefix after 63
+    return SMART_TNT_SUN_PREFIXES.has(prefix);
+  }
+  // Local format: 0XXXXXXXXXX (11 digits)
+  if (normalized.length === 11 && normalized.startsWith('0')) {
+    const prefix = normalized.slice(1, 4);
+    return SMART_TNT_SUN_PREFIXES.has(prefix);
+  }
+  return false;
+}
+
 async function handleIprogSendAuthenticatorSms(request: Request, env: any): Promise<Response> {
   const apiToken = env.IPROG_API_TOKEN || '';
-  if (!apiToken) {
-    return Response.json({ error: 'IPROG_API_TOKEN not configured' }, { status: 500 });
-  }
+  const semaphoreApiKey = env.SEMAPHORE_API_KEY || '';
+  const semaphoreSenderName = env.SEMAPHORE_SENDER_NAME || '';
 
   try {
     const body = await request.json() as IprogSmsPayload;
@@ -133,41 +164,180 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const message = `Palengkehub Authentication\nPhone number: ${phone_number}\nCode: ${code}\n\nThis code will be valid only for 5 minutes. Do not share this code with anyone. If you did not request this, please ignore this message.`;
-
-    // Keep the SMS concise (single segment) so carriers deliver it faster.
-    // Multi-segment (concatenated) SMS often takes longer to arrive.
     const shortMessage = `PalengkeHub OTP: ${code}. Valid for 5 minutes. Do not share this code.`;
 
-    const params = new URLSearchParams();
-    params.append('api_token', apiToken);
-    params.append('phone_number', phone_number);
-    params.append('message', shortMessage);
-    params.append('sender_name', sender_name || 'PalengkeHub');
-
-    const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    });
-
-    const data = await response.json() as Record<string, unknown>;
     const responseHeaders = new Headers();
     addCorsHeaders(responseHeaders, request);
     responseHeaders.set('Content-Type', 'application/json');
 
+    // ── Network detection ──────────────────────────────────────────────────
+    // iProgSMS has poor/zero delivery to Smart/TNT/Sun numbers.
+    // Route those directly to Semaphore (supports ALL PH networks).
+    const isSmartTnt = isSmartTntSunNumber(phone_number);
+    console.log(`📱 Phone ${phone_number} → ${isSmartTnt ? 'Smart/TNT/Sun (Semaphore)' : 'Globe/TM (iProgSMS)'}`);
+
+    // ── 1) Smart/TNT/Sun → Semaphore directly ──────────────────────────────
+    if (isSmartTnt && semaphoreApiKey) {
+      try {
+        const semaphoreParams = new URLSearchParams();
+        semaphoreParams.append('apikey', semaphoreApiKey);
+        semaphoreParams.append('number', phone_number);
+        semaphoreParams.append('message', shortMessage);
+        // Only include sendername if configured in env (Semaphore requires a registered sender name)
+        if (semaphoreSenderName) {
+          semaphoreParams.append('sendername', semaphoreSenderName.slice(0, 11));
+        }
+
+        const response = await fetch('https://api.semaphore.co/api/v4/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: semaphoreParams.toString(),
+        });
+
+        const data = await response.json() as Record<string, unknown>;
+
+        if (response.ok) {
+          return new Response(JSON.stringify({
+            provider: 'semaphore',
+            ...data,
+            verification_code: code,
+            expires_in_minutes: 5,
+          }), {
+            status: 200,
+            headers: responseHeaders,
+          });
+        }
+
+        console.error('Semaphore failed for Smart/TNT number:', data);
+        return new Response(JSON.stringify({
+          error: 'SMS delivery failed via Semaphore',
+          details: data,
+          verification_code: code,
+          expires_in_minutes: 5,
+        }), {
+          status: 502,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        console.error('Semaphore error for Smart/TNT number:', error);
+        return new Response(JSON.stringify({
+          error: 'SMS delivery failed: Semaphore error',
+          verification_code: code,
+          expires_in_minutes: 5,
+        }), {
+          status: 502,
+          headers: responseHeaders,
+        });
+      }
+    }
+
+    // ── 2) Globe/TM → iProgSMS first, fallback to Semaphore ────────────────
+    if (apiToken) {
+      try {
+        const params = new URLSearchParams();
+        params.append('api_token', apiToken);
+        params.append('phone_number', phone_number);
+        params.append('message', shortMessage);
+        params.append('sender_name', sender_name || 'PalengkeHub');
+
+        const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+
+        const data = await response.json() as Record<string, unknown>;
+
+        if (response.ok) {
+          return new Response(JSON.stringify({
+            provider: 'iprogsms',
+            ...data,
+            verification_code: code,
+            expires_in_minutes: 5,
+          }), {
+            status: 200,
+            headers: responseHeaders,
+          });
+        }
+
+        console.warn('iProgSMS rejected, falling back to Semaphore:', data);
+      } catch (error) {
+        console.warn('iProgSMS error, falling back to Semaphore:', error);
+      }
+    }
+
+    // ── 3) Fallback: Semaphore (for Globe/TM if iProgSMS fails) ────────────
+    if (semaphoreApiKey) {
+      try {
+        const semaphoreParams = new URLSearchParams();
+        semaphoreParams.append('apikey', semaphoreApiKey);
+        semaphoreParams.append('number', phone_number);
+        semaphoreParams.append('message', shortMessage);
+        // Only include sendername if configured in env (Semaphore requires a registered sender name)
+        if (semaphoreSenderName) {
+          semaphoreParams.append('sendername', semaphoreSenderName.slice(0, 11));
+        }
+
+        const response = await fetch('https://api.semaphore.co/api/v4/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: semaphoreParams.toString(),
+        });
+
+        const data = await response.json() as Record<string, unknown>;
+
+        if (response.ok) {
+          return new Response(JSON.stringify({
+            provider: 'semaphore',
+            ...data,
+            verification_code: code,
+            expires_in_minutes: 5,
+          }), {
+            status: 200,
+            headers: responseHeaders,
+          });
+        }
+
+        console.error('Semaphore also failed:', data);
+        return new Response(JSON.stringify({
+          error: 'SMS delivery failed via both providers',
+          details: data,
+          verification_code: code,
+          expires_in_minutes: 5,
+        }), {
+          status: 502,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        console.error('Semaphore error:', error);
+        return new Response(JSON.stringify({
+          error: 'SMS delivery failed: Semaphore error',
+          verification_code: code,
+          expires_in_minutes: 5,
+        }), {
+          status: 502,
+          headers: responseHeaders,
+        });
+      }
+    }
+
+    // No provider configured
     return new Response(JSON.stringify({
-      ...data,
+      error: 'No SMS provider configured (need IPROG_API_TOKEN or SEMAPHORE_API_KEY)',
       verification_code: code,
       expires_in_minutes: 5,
     }), {
-      status: response.status,
+      status: 500,
       headers: responseHeaders,
     });
   } catch (error) {
-    console.error('iPROG Authenticator SMS send error:', error);
+    console.error('Authenticator SMS send error:', error);
     return Response.json({ error: 'Failed to send authenticator SMS' }, { status: 502 });
   }
 }
@@ -450,6 +620,15 @@ export default {
 
     if (url.pathname === '/paymongo/create-source' && request.method === 'POST') {
       return handlePaymongoCreateSource(request, env);
+    }
+
+    // PayMongo redirect endpoints — redirect back to the app's deep link
+    if (url.pathname === '/paymongo/success') {
+      return Response.redirect('palengkehub://paymongo/success', 302);
+    }
+
+    if (url.pathname === '/paymongo/failed') {
+      return Response.redirect('palengkehub://paymongo/failed', 302);
     }
 
     if (url.pathname === '/iprog/send-authenticator-sms' && request.method === 'POST') {

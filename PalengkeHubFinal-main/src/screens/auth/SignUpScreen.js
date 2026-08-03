@@ -27,6 +27,31 @@ import * as DocumentPicker from 'expo-document-picker';
 
 const { width, height } = Dimensions.get('window');
 
+const COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  accent: '#F87171',
+  accentLight: '#FEE2E2',
+  accentSoft: '#FEF2F2',
+  background: '#F8F9FA',
+  surface: '#FFFFFF',
+  text: {
+    dark: '#111827',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
+    white: '#FFFFFF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.12)',
+};
+
 // Stall sections available in the market
 const STALL_SECTIONS = [
   'Meat Section',
@@ -1536,7 +1561,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.background,
   },
   background: {
     position: 'absolute',
@@ -1635,13 +1660,13 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   input: {
-    flex: 1,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: '#111827',
-  },
-  inputText: {
-    color: '#111827',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    color: COLORS.text.dark,
+    backgroundColor: COLORS.background,
   },
   placeholderText: {
     color: '#9CA3AF',
@@ -1798,21 +1823,21 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   sectionOption: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.borderLight,
   },
   sectionOptionActive: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
   },
   sectionOptionText: {
     fontSize: 14,
-    color: '#374151',
+    color: COLORS.text.medium,
   },
   sectionOptionTextActive: {
-    color: '#DC2626',
-    fontWeight: '600',
+    color: COLORS.primary,
+    fontWeight: '700',
   },
   documentsSection: {
     marginTop: 16,
@@ -1846,16 +1871,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: COLORS.border,
+    borderRadius: 14,
     padding: 14,
     borderStyle: 'dashed',
   },
   uploadButtonSuccess: {
     backgroundColor: '#F0FDF4',
-    borderColor: '#10B981',
+    borderColor: COLORS.success,
     borderStyle: 'solid',
   },
   uploadIcon: {
@@ -1923,7 +1948,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#DC2626',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -2100,27 +2125,27 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   otpBox: {
-    width: 48,
-    height: 48,
+    width: 50,
+    height: 50,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: COLORS.border,
+    borderRadius: 14,
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: COLORS.text.dark,
+    backgroundColor: COLORS.surface,
     padding: 0,
     textAlign: 'center',
-    shadowColor: '#000',
+    shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 1,
     shadowRadius: 4,
     elevation: 2,
   },
   otpBoxFilled: {
-    borderColor: '#DC2626',
-    backgroundColor: '#FEF3F2',
-    shadowColor: '#DC2626',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.accentSoft,
+    shadowColor: COLORS.primary,
     shadowOpacity: 0.15,
     elevation: 3,
   },
