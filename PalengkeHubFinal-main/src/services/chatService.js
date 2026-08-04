@@ -234,6 +234,20 @@ export const chatService = {
       .neq('sender_role', normalizedReaderRole);
   },
 
+  async getAllConversations() {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        customer:customer_id (id, full_name, email),
+        stall:stall_id (id, stall_number, stall_name, section, vendor_id)
+      `)
+      .order('updated_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
   subscribeToMessages(conversationId, onNewMessage) {
     const channel = supabase
       .channel(`messages:${conversationId}`)

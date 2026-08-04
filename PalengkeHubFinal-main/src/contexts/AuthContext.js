@@ -269,6 +269,17 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (matched.length === 1) {
+          // ── Admin access control: admins can only log in via the web portal ──
+          if (matched[0].role === 'admin') {
+            await supabase.auth.signOut();
+            setUser(null);
+            setProfile(null);
+            return {
+              success: false,
+              adminWebOnly: true,
+              error: 'Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.',
+            };
+          }
           console.log('✅ Login successful (single account):', matched[0].authEmail);
           await checkUser();
           return { success: true, account: matched[0] };
@@ -307,6 +318,24 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         console.log('❌ Login error:', error);
         throw error;
+      }
+      
+      // ── Admin access control: block admin login on the app ──
+      const { data: loginProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (loginProfile?.role === 'admin') {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        return {
+          success: false,
+          adminWebOnly: true,
+          error: 'Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.',
+        };
       }
       
       console.log('✅ Login successful:', data.user?.email);

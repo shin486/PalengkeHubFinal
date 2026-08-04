@@ -1387,7 +1387,10 @@ const WelcomeHeader = () => {
         <View style={styles.greetingContainer}>
           <Text style={styles.welcomeGreeting}>{timeGreeting},</Text>
           <Text style={styles.welcomeName}>{vendorName}!</Text>
-          <Text style={styles.welcomeSubtext}>Here's your store performance</Text>
+          <View style={styles.welcomeRoleRow}>
+            <Text style={styles.welcomeRoleBadge}>🏪 Vendor</Text>
+            <Text style={styles.welcomeSubtext}>Here's your store performance</Text>
+          </View>
         </View>
         
         <View style={styles.welcomeBadge}>
@@ -2542,6 +2545,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
     marginTop: 2,
+  },
+  welcomeRoleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  welcomeRoleBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#DC2626',
+    backgroundColor: '#FEF3F2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   welcomeBadge: {
     backgroundColor: '#FEF3F2',

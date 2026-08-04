@@ -638,6 +638,9 @@ export default function HomeScreen({ isGuest = false, navigation }) {
               <Text style={styles.welcomeName}>
                 {isGuest ? 'Welcome to PalengkeHub' : (user?.email?.split('@')[0] || 'Kabayan')}
               </Text>
+              {!isGuest && (
+                <Text style={styles.welcomeRoleBadge}>🛍️ Customer</Text>
+              )}
             </View>
             <View style={styles.marketStatusBadge}>
               <View style={[styles.marketStatusDot, { backgroundColor: isMarketOpen ? COLORS.success : COLORS.text.lighter }]} />
@@ -800,6 +803,7 @@ const styles = StyleSheet.create({
   welcomeTextWrap: { flex: 1 },
   welcomeGreeting: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginBottom: 4 },
   welcomeName: { fontSize: 24, fontWeight: '800', color: COLORS.text.white, letterSpacing: -0.5 },
+  welcomeRoleBadge: { alignSelf: 'flex-start', fontSize: 11, fontWeight: '700', color: COLORS.text.white, backgroundColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 6, overflow: 'hidden' },
   marketStatusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8 },
   marketStatusDot: { width: 8, height: 8, borderRadius: 4 },
   marketStatusText: { fontSize: 12, fontWeight: '700', color: COLORS.text.white },

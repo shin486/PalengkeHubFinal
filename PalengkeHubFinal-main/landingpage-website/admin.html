@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — PalengkeHub</title>
+<link rel="icon" type="image/jpeg" href="palengkehublogo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="pages.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://jjpgmpufwpbgqjzqymvj.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage,
+    },
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const menuToggle = document.getElementById('menu-toggle');
+    const navMenu = document.getElementById('nav-menu');
+    if (menuToggle && navMenu) {
+      menuToggle.addEventListener('click', function() {
+        menuToggle.classList.toggle('active');
+        navMenu.classList.toggle('active');
+      });
+    }
+
+    const logoutBtn = document.getElementById('logout-btn');
+    const adminNameEl = document.getElementById('admin-name');
+    const adminBadgeEl = document.getElementById('admin-badge');
+
+    // ── Authentication guard ──
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = 'admin-login.html';
+        return null;
+      }
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error || !profile || profile.role !== 'admin') {
+        await supabase.auth.signOut();
+        window.location.href = 'admin-login.html';
+        return null;
+      }
+
+      return { session, profile };
+    };
+
+    // ── Fetch dashboard stats ──
+    const fetchStats = async () => {
+      try {
+        // Vendors count
+        const { count: vendorCount } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'vendor');
+
+        // Customers count
+        const { count: customerCount } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'consumer');
+
+        // Stalls count
+        const { count: stallCount } = await supabase
+          .from('stalls')
+          .select('id', { count: 'exact', head: true });
+
+        // Orders count
+        const { count: orderCount } = await supabase
+          .from('orders')
+          .select('id', { count: 'exact', head: true });
+
+        // Pending vendor applications
+        const { count: pendingApps } = await supabase
+          .from('vendor_applications')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending');
+
+        document.getElementById('stat-vendors').textContent = vendorCount || 0;
+        document.getElementById('stat-customers').textContent = customerCount || 0;
+        document.getElementById('stat-stalls').textContent = stallCount || 0;
+        document.getElementById('stat-orders').textContent = orderCount || 0;
+        document.getElementById('stat-pending').textContent = pendingApps || 0;
+
+        return { vendorCount, customerCount, stallCount, orderCount, pendingApps };
+      } catch (err) {
+        console.error('Error fetching stats:', err);
+        return null;
+      }
+    };
+
+    // ── Fetch recent orders ──
+    const fetchRecentOrders = async (limit = 5) => {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, created_at, status, total, items, stall_id, consumer_id')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('recent-orders-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="admin-empty">No orders yet</td></tr>';
+          return;
+        }
+
+        for (const order of data) {
+          const tr = document.createElement('tr');
+          let stallName = '—';
+          let itemsCount = 0;
+
+          if (order.stall_id) {
+            const { data: stall } = await supabase
+              .from('stalls')
+              .select('stall_name, stall_number')
+              .eq('id', order.stall_id)
+              .single();
+            if (stall) stallName = stall.stall_name || `Stall #${stall.stall_number}`;
+          }
+
+          if (order.items && Array.isArray(order.items)) {
+            itemsCount = order.items.reduce((sum, it) => sum + (it.quantity || 0), 0);
+          }
+
+          const statusMap = {
+            pending: { label: 'Pending', cls: 'status-pending' },
+            confirmed: { label: 'Confirmed', cls: 'status-confirmed' },
+            preparing: { label: 'Preparing', cls: 'status-preparing' },
+            ready: { label: 'Ready', cls: 'status-ready' },
+            completed: { label: 'Completed', cls: 'status-completed' },
+            cancelled: { label: 'Cancelled', cls: 'status-cancelled' },
+          };
+          const st = statusMap[order.status] || { label: order.status, cls: 'status-pending' };
+
+          const date = new Date(order.created_at).toLocaleDateString('en-PH', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          });
+
+          tr.innerHTML = `
+            <td>#${String(order.id).slice(-6)}</td>
+            <td>${stallName}</td>
+            <td>${itemsCount} item(s)</td>
+            <td>₱${parseFloat(order.total).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td><span class="admin-status ${st.cls}">${st.label}</span></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching orders:', err);
+      }
+    };
+
+    // ── Fetch pending vendor applications ──
+    const fetchPendingApplications = async (limit = 5) => {
+      try {
+        const { data, error } = await supabase
+          .from('vendor_applications')
+          .select('id, business_name, category, status, created_at, applicant_id')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('applications-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="admin-empty">No pending applications</td></tr>';
+          return;
+        }
+
+        for (const app of data) {
+          const tr = document.createElement('tr');
+          let applicantName = '—';
+          if (app.applicant_id) {
+            const { data: applicant } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', app.applicant_id)
+              .single();
+            if (applicant) applicantName = applicant.full_name;
+          }
+
+          const date = new Date(app.created_at).toLocaleDateString('en-PH', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          });
+
+          tr.innerHTML = `
+            <td>${applicantName}</td>
+            <td>${app.business_name}</td>
+            <td>${app.category || '—'}</td>
+            <td><span class="admin-status status-pending">Pending Review</span></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching applications:', err);
+      }
+    };
+
+    // ── Fetch recent vendors ──
+    const fetchRecentVendors = async (limit = 5) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, created_at, email')
+          .eq('role', 'vendor')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('vendors-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="admin-empty">No vendors yet</td></tr>';
+          return;
+        }
+
+        for (const vendor of data) {
+          const tr = document.createElement('tr');
+          let stallInfo = '—';
+          const { data: stall } = await supabase
+            .from('stalls')
+            .select('stall_name, stall_number, is_active')
+            .eq('vendor_id', vendor.id)
+            .single();
+          if (stall) {
+            stallInfo = stall.is_active
+              ? `<span class="admin-status status-active">Active</span>`
+              : `<span class="admin-status status-inactive">Inactive</span>`;
+          }
+
+          const date = new Date(vendor.created_at).toLocaleDateString('en-PH', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          });
+
+          tr.innerHTML = `
+            <td>${vendor.full_name}</td>
+            <td>${vendor.email || '—'}</td>
+            <td>${stallInfo}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching vendors:', err);
+      }
+    };
+
+    // ── Logout ──
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async function() {
+        await supabase.auth.signOut();
+        window.location.href = 'admin-login.html';
+      });
+    }
+
+    // ── Export CSV for orders ──
+    const exportBtn = document.getElementById('export-orders-btn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async function() {
+        try {
+          const { data, error } = await supabase
+            .from('orders')
+            .select('id, created_at, status, total, consumer_id, stall_id')
+            .order('created_at', { ascending: false })
+            .limit(100);
+          if (error) throw error;
+
+          let csv = 'Order ID,Created At,Status,Total\n';
+          for (const row of data) {
+            csv += `"${row.id}","${row.created_at}","${row.status}","${row.total}"\n`;
+          }
+
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'palengkehub-orders.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error('Export error:', err);
+          alert('Could not export orders.');
+        }
+      });
+    }
+
+    // ── Init ──
+    const init = async () => {
+      const auth = await checkSession();
+      if (!auth) return;
+
+      const { profile } = auth;
+      adminNameEl.textContent = profile.full_name || 'Admin';
+      adminBadgeEl.textContent = '👨‍💼 Admin';
+      document.title = `Dashboard — ${profile.full_name || 'Admin'} | PalengkeHub`;
+
+      await fetchStats();
+      await fetchRecentOrders();
+      await fetchPendingApplications();
+      await fetchRecentVendors();
+    };
+
+    init();
+  });
+</script>
+</head>
+<body>
+
+<header class="admin-header">
+  <div class="wrap">
+    <a href="index.html" class="logo logo-img"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
+    <nav>
+      <ul id="nav-menu">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><span id="admin-badge" class="admin-header-badge">👨‍💼 Admin</span></li>
+        <li><button id="logout-btn" class="admin-logout-btn">Logout</button></li>
+      </ul>
+    </nav>
+    <button class="menu-btn" id="menu-toggle" aria-label="Toggle menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+</header>
+
+<section class="page-header admin-dash-header">
+  <div class="wrap">
+    <span class="page-kicker">Admin Portal</span>
+    <h1>Welcome, <span id="admin-name">Admin</span> 👋</h1>
+    <p>Lipa City Public Market Management Information System</p>
+  </div>
+</section>
+
+<section class="page-content admin-dash-content">
+  <div class="wrap">
+
+    <!-- Stats Cards -->
+    <div class="admin-stats-grid">
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon">🏪</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-vendors">0</span>
+          <span class="admin-stat-label">Vendors</span>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon">🛍️</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-customers">0</span>
+          <span class="admin-stat-label">Customers</span>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon">🏬</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-stalls">0</span>
+          <span class="admin-stat-label">Stalls</span>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="admin-stat-icon">📋</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-orders">0</span>
+          <span class="admin-stat-label">Orders</span>
+        </div>
+      </div>
+      <div class="admin-stat-card admin-stat-pending">
+        <div class="admin-stat-icon">⏳</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-pending">0</span>
+          <span class="admin-stat-label">Pending Applications</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Orders -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Recent Orders</h2>
+          <p>Latest orders from customers</p>
+        </div>
+        <button id="export-orders-btn" class="admin-export-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Stall</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="recent-orders-body">
+            <tr><td colspan="5" class="admin-empty">Loading orders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Vendor Applications -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Pending Vendor Applications</h2>
+          <p>Awaiting approval</p>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Applicant</th>
+              <th>Business</th>
+              <th>Category</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="applications-body">
+            <tr><td colspan="4" class="admin-empty">Loading applications...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recent Vendors -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Recent Vendors</h2>
+          <p>Newest vendor accounts</p>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Vendor Name</th>
+              <th>Email</th>
+              <th>Stall Status</th>
+            </tr>
+          </thead>
+          <tbody id="vendors-body">
+            <tr><td colspan="3" class="admin-empty">Loading vendors...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="logo logo-img logo-footer"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
+        <p>The online home of the Lipa City Public Market — order from its stalls and pick up your tinda at the market.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="index.html#team">Our Team</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="index.html#faq">FAQ</a></li>
+          <li><a href="contact.html">Help Center</a></li>
+          <li><a href="admin-login.html">Admin Login</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 PalengkeHub. All rights reserved.</span>
+      <span>Made in the Philippines 🇵🇭</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

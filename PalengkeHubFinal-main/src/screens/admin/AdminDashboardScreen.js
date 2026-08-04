@@ -573,6 +573,7 @@ const Sidebar = ({
     { id: 'announcements', label: 'Announcements', icon: 'campaign' },
     { id: 'violations', label: 'Violations', icon: 'warning' },
     { id: 'complaints', label: 'Complaints', icon: 'chat-bubble-outline' },
+    { id: 'chats', label: 'Chats', icon: 'chat' },
     { id: 'reports', label: 'Reports', icon: 'analytics' },
   ];
 
@@ -814,6 +815,14 @@ export default function AdminDashboardScreen({ navigation }) {
   const [allProducts, setAllProducts] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+
+  // Chat state
+  const [conversations, setConversations] = useState([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [messageText, setMessageText] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
   
   const [announcementModal, setAnnouncementModal] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState('');
@@ -2121,6 +2130,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
   useEffect(() => {
     fetchAllData();
+    fetchAllConversations();
   }, []);
 
   const onRefresh = async () => {
@@ -2874,6 +2884,119 @@ export default function AdminDashboardScreen({ navigation }) {
   );
 
   // ============================================================
+  // ADMIN CHAT FUNCTIONS
+  const fetchAllConversations = async () => {
+    setLoadingChats(true);
+    try {
+      const data = await chatService.getAllConversations();
+      setConversations(data || []);
+    } catch (error) {
+      console.error('Error fetching all conversations:', error);
+    } finally {
+      setLoadingChats(false);
+    }
+  };
+
+  const handleOpenChat = (conv) => {
+    setSelectedConversation(conv);
+    chatService.getMessages(conv.id).then(setMessages);
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !selectedConversation) return;
+    setSendingMessage(true);
+    try {
+      await chatService.sendMessage(selectedConversation.id, user.id, 'admin', messageText.trim());
+      setMessageText('');
+      const updated = await chatService.getMessages(selectedConversation.id);
+      setMessages(updated);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  // RENDER CHATS
+  const renderChats = () => {
+    if (selectedConversation) {
+      return (
+        <View style={[styles.tableCard, darkMode && styles.tableCardDark]}>
+          <View style={[styles.tableHeader, darkMode && styles.tableHeaderDark]}>
+            <TouchableOpacity onPress={() => { setSelectedConversation(null); setMessages([]); }}>
+              <MaterialIcons name="arrow-back" size={24} color={darkMode ? '#FFFFFF' : '#1A1A1A'} />
+            </TouchableOpacity>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={[styles.tableTitle, darkMode && styles.tableTitleDark]}>
+                {selectedConversation.customer?.full_name || 'Customer'} ↔ {selectedConversation.stall?.stall_name || 'Vendor'}
+              </Text>
+              <Text style={[styles.tableSubtitle, darkMode && styles.tableSubtitleDark]}>
+                Stall #{selectedConversation.stall?.stall_number || 'N/A'}
+              </Text>
+            </View>
+          </View>
+          <FlatList
+            data={messages}
+            keyExtractor={(item) => item.id.toString()}
+            style={{ maxHeight: 400 }}
+            renderItem={({ item }) => (
+              <View style={[styles.chatBubble, item.sender_role === 'admin' ? styles.chatBubbleAdmin : styles.chatBubbleOther]}>
+                <Text style={styles.chatSender}>{item.sender_role === 'admin' ? 'Admin' : item.sender_role}</Text>
+                <Text style={styles.chatMessageText}>{item.message}</Text>
+                <Text style={styles.chatTime}>{new Date(item.created_at).toLocaleTimeString()}</Text>
+              </View>
+            )}
+          />
+          <View style={styles.chatInputRow}>
+            <TextInput
+              style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+              placeholder="Type a message..."
+              value={messageText}
+              onChangeText={setMessageText}
+              onSubmitEditing={handleSendMessage}
+            />
+            <TouchableOpacity style={styles.chatSendBtn} onPress={handleSendMessage} disabled={sendingMessage}>
+              <Text style={styles.chatSendBtnText}>{sendingMessage ? '...' : 'Send'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.tableCard, darkMode && styles.tableCardDark]}>
+        <View style={[styles.tableHeader, darkMode && styles.tableHeaderDark]}>
+          <Text style={[styles.tableTitle, darkMode && styles.tableTitleDark]}>All Conversations</Text>
+          <TouchableOpacity onPress={fetchAllConversations}>
+            <MaterialIcons name="refresh" size={20} color={darkMode ? '#888888' : '#666666'} />
+          </TouchableOpacity>
+        </View>
+        {loadingChats ? (
+          <ActivityIndicator size="large" color="#C62828" style={{ padding: 30 }} />
+        ) : conversations.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="chat-bubble-outline" size={40} color="#CCCCCC" />
+            <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>No conversations yet</Text>
+          </View>
+        ) : (
+          conversations.map((conv) => (
+            <TouchableOpacity key={conv.id} style={[styles.tableRow, darkMode && styles.tableRowDark]} onPress={() => handleOpenChat(conv)}>
+              <View style={styles.userInfoCell}>
+                <Text style={[styles.tableCell, darkMode && styles.tableCellDark]} numberOfLines={1}>
+                  {conv.customer?.full_name || 'Customer'} ↔ {conv.stall?.stall_name || 'Vendor'}
+                </Text>
+                <Text style={[styles.tableCellSub, darkMode && styles.tableCellSubDark]} numberOfLines={1}>
+                  {conv.last_message || 'No messages'}
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color="#CCCCCC" />
+            </TouchableOpacity>
+          ))
+        )}
+      </View>
+    );
+  };
+
   // RENDER REPORTS
   // ============================================================
   const renderReports = () => {
@@ -3078,6 +3201,8 @@ export default function AdminDashboardScreen({ navigation }) {
         return renderViolations();
       case 'complaints':
         return renderComplaints();
+      case 'chats':
+        return renderChats();
       case 'reports':
         return renderReports();
       default:
@@ -3137,6 +3262,7 @@ export default function AdminDashboardScreen({ navigation }) {
                  activeSection === 'announcements' ? 'Announcements' :
                  activeSection === 'violations' ? 'Violations' :
                  activeSection === 'complaints' ? 'Complaints' :
+                 activeSection === 'chats' ? 'Chats' :
                  activeSection === 'reports' ? 'Reports' : 'Dashboard'}
               </Text>
             </View>
@@ -5769,6 +5895,58 @@ const styles = StyleSheet.create({
   },
   roleOptionTextActive: {
     color: '#FFFFFF',
+  },
+
+  // Chat Styles
+  chatBubble: {
+    padding: 10,
+    marginVertical: 4,
+    marginHorizontal: 12,
+    borderRadius: 10,
+    maxWidth: '80%',
+  },
+  chatBubbleAdmin: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#C62828',
+  },
+  chatBubbleOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F0F0F0',
+  },
+  chatSender: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#999',
+    marginBottom: 2,
+  },
+  chatMessageText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  chatTime: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  chatInputRow: {
+    flexDirection: 'row',
+    padding: 10,
+    gap: 8,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  chatSendBtn: {
+    backgroundColor: '#C62828',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  chatSendBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
 
   // Logout Modal

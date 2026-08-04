@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login — PalengkeHub</title>
+<link rel="icon" type="image/jpeg" href="palengkehublogo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="pages.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Supabase configuration (mirrors lib/supabase.js)
+  const SUPABASE_URL = 'https://jjpgmpufwpbgqjzqymvj.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage,
+    },
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Mobile menu toggle
+    const menuToggle = document.getElementById('menu-toggle');
+    const navMenu = document.getElementById('nav-menu');
+    if (menuToggle && navMenu) {
+      menuToggle.addEventListener('click', function() {
+        menuToggle.classList.toggle('active');
+        navMenu.classList.toggle('active');
+      });
+    }
+
+    // ── Show / Hide password ──
+    const togglePassword = document.getElementById('toggle-password');
+    const passwordInput = document.getElementById('password');
+    if (togglePassword && passwordInput) {
+      togglePassword.addEventListener('click', function() {
+        const show = passwordInput.type === 'password';
+        passwordInput.type = show ? 'text' : 'password';
+        togglePassword.textContent = show ? 'Hide' : 'Show';
+      });
+    }
+
+    const form = document.getElementById('admin-login-form');
+    const emailInput = document.getElementById('email');
+    const statusBox = document.getElementById('status-box');
+    const loginBtn = document.getElementById('login-btn');
+    const loginBtnText = document.getElementById('login-btn-text');
+    const loginSpinner = document.getElementById('login-spinner');
+
+    // ── Forgot password elements ──
+    const forgotLink = document.getElementById('forgot-password-link');
+    const resetOverlay = document.getElementById('reset-overlay');
+    const closeReset = document.getElementById('close-reset');
+    const resetForm = document.getElementById('reset-form');
+    const resetEmailInput = document.getElementById('reset-email');
+    const resetBtn = document.getElementById('reset-btn');
+    const resetBtnText = document.getElementById('reset-btn-text');
+    const resetSpinner = document.getElementById('reset-spinner');
+    const resetStatus = document.getElementById('reset-status');
+    const resetSentBox = document.getElementById('reset-sent');
+
+    const showStatus = (msg, type) => {
+      statusBox.classList.remove('hidden', 'form-status-error', 'form-status-success');
+      statusBox.classList.add('form-status-' + type);
+      statusBox.innerHTML = msg;
+      statusBox.classList.remove('hidden');
+    };
+
+    const showResetStatus = (msg, type) => {
+      resetStatus.classList.remove('hidden', 'form-status-error', 'form-status-success');
+      resetStatus.classList.add('form-status-' + type);
+      resetStatus.textContent = msg;
+      resetStatus.classList.remove('hidden');
+    };
+
+    const setLoginLoading = (loading) => {
+      loginBtn.disabled = loading;
+      loginBtnText.textContent = loading ? 'Signing in...' : 'Sign In as Admin';
+      loginSpinner.style.display = loading ? 'inline-block' : 'none';
+    };
+
+    const setResetLoading = (loading) => {
+      resetBtn.disabled = loading;
+      resetBtnText.textContent = loading ? 'Sending...' : 'Send Reset Link';
+      resetSpinner.style.display = loading ? 'inline-block' : 'none';
+    };
+
+    // ── Check if already logged in as admin ──
+    const checkAdminSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, full_name')
+          .eq('id', session.user.id)
+          .single();
+        if (profile && profile.role === 'admin') {
+          window.location.href = 'admin.html';
+        }
+      }
+    };
+    checkAdminSession();
+
+    // ── Login handler ──
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      statusBox.classList.add('hidden');
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!email || !password) {
+        showStatus('⚠️ Please enter both email and password.', 'error');
+        return;
+      }
+
+      setLoginLoading(true);
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password,
+        });
+
+        if (error) throw error;
+
+        if (!data.user) {
+          throw new Error('No user found with these credentials.');
+        }
+
+        // Verify role is admin
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, full_name')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        if (!profile || profile.role !== 'admin') {
+          // Not an admin — sign out (admin can only login on web, others only on app)
+          await supabase.auth.signOut();
+          showStatus('⛔ Access denied. Admin accounts can only log in through the web portal. If you are a customer or vendor, please use the PalengkeHub app.', 'error');
+          return;
+        }
+
+        // Success — redirect to admin dashboard
+        const adminName = profile.full_name || 'Admin';
+        sessionStorage.setItem('palengkehub_admin_name', adminName);
+        showStatus('✅ Welcome, <strong>' + adminName + '</strong>! Redirecting to dashboard...', 'success');
+        setTimeout(() => {
+          window.location.href = 'admin.html';
+        }, 600);
+
+      } catch (err) {
+        console.error('Admin login error:', err);
+        let msg = 'Login failed. Please try again.';
+        const raw = (err.message || '').toLowerCase();
+        if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found')) {
+          msg = 'Wrong email or password. Double-check and try again.';
+        } else if (raw.includes('email not confirmed')) {
+          msg = 'Please verify your email first.';
+        } else if (raw.includes('rate limit') || raw.includes('too many requests')) {
+          msg = 'Too many attempts. Please wait a moment and try again.';
+        } else if (raw.includes('network') || raw.includes('fetch')) {
+          msg = 'No connection. Check your internet and try again.';
+        }
+        showStatus('⚠️ ' + msg, 'error');
+      } finally {
+        setLoginLoading(false);
+      }
+    });
+
+    // ── Forgot password ──
+    forgotLink.addEventListener('click', function() {
+      resetOverlay.classList.remove('hidden');
+      resetEmailInput.value = emailInput.value || '';
+      resetSentBox.classList.add('hidden');
+      resetStatus.classList.add('hidden');
+    });
+
+    closeReset.addEventListener('click', function() {
+      resetOverlay.classList.add('hidden');
+    });
+
+    resetOverlay.addEventListener('click', function(e) {
+      if (e.target === resetOverlay) {
+        resetOverlay.classList.add('hidden');
+      }
+    });
+
+    resetForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      resetStatus.classList.add('hidden');
+
+      const resetEmail = resetEmailInput.value.trim();
+      if (!resetEmail) {
+        showResetStatus('⚠️ Enter your email address first.', 'error');
+        return;
+      }
+
+      setResetLoading(true);
+
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+          redirectTo: window.location.origin + window.location.pathname.replace('admin-login.html', 'admin-reset.html'),
+        });
+        if (error) throw error;
+        resetSentBox.classList.remove('hidden');
+        resetForm.classList.add('hidden');
+      } catch (err) {
+        let msg = 'Could not send reset email. Try again.';
+        if (err.message && err.message.toLowerCase().includes('not found')) {
+          msg = 'No account found with that email.';
+        }
+        showResetStatus('⚠️ ' + msg, 'error');
+      } finally {
+        setResetLoading(false);
+      }
+    });
+  });
+</script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="index.html" class="logo logo-img"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
+    <nav>
+      <ul id="nav-menu">
+        <li><a href="index.html#how-it-works">How It Works</a></li>
+        <li><a href="index.html#location">Location</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="contact.html">Contact</a></li>
+      </ul>
+    </nav>
+    <button class="menu-btn" id="menu-toggle" aria-label="Toggle menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+</header>
+
+<section class="page-header admin-login-header">
+  <div class="wrap">
+    <span class="page-kicker">Admin Portal</span>
+    <h1>PalengkeHub Admin Login</h1>
+    <p>Sign in to manage the Lipa City Public Market Management Information System</p>
+  </div>
+</section>
+
+<section class="page-content admin-login-content">
+  <div class="wrap">
+    <div class="admin-login-wrap">
+      <div class="admin-login-card">
+        <div class="admin-login-brand">
+          <img src="palengkehublogo.jpg" alt="PalengkeHub Admin" class="admin-login-logo">
+          <div class="admin-role-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+            Admin Access
+          </div>
+        </div>
+
+        <div class="admin-login-title">
+          <h2>Welcome, Admin 👋</h2>
+          <p>Sign in to manage vendors, stalls, orders, and reports.</p>
+        </div>
+
+        <form id="admin-login-form" class="admin-form" autocomplete="on">
+          <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" placeholder="admin@palengkehub.com" required>
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="admin-password-row">
+              <input type="password" id="password" name="password" placeholder="Enter your password" required>
+              <button type="button" id="toggle-password" class="admin-toggle-password">Show</button>
+            </div>
+          </div>
+
+          <div class="admin-options-row">
+            <div class="admin-forgot">
+              <a href="#" id="forgot-password-link">Forgot password?</a>
+            </div>
+          </div>
+
+          <div id="status-box" class="form-status hidden"></div>
+
+          <button type="submit" id="login-btn" class="btn-primary admin-login-btn">
+            <span id="login-spinner" class="admin-spinner" style="display:none;"></span>
+            <span id="login-btn-text">Sign In as Admin</span>
+          </button>
+        </form>
+
+        <div class="admin-login-info">
+          <div class="admin-login-info-icon">🔒</div>
+          <p><strong>Restricted Access:</strong> This portal is for <strong>administrators only</strong>. Customers and vendors should use the PalengkeHub mobile app to log in.</p>
+        </div>
+
+        <div class="admin-login-back">
+          <a href="index.html">← Back to Home</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Forgot Password Modal -->
+<div id="reset-overlay" class="admin-reset-overlay hidden">
+  <div class="admin-reset-modal">
+    <div class="admin-reset-header">
+      <h3>Reset Password</h3>
+      <button type="button" id="close-reset" class="admin-reset-close">✕</button>
+    </div>
+    <p class="admin-reset-sub">Enter your admin email and we'll send you a link to create a new password.</p>
+
+    <div id="reset-sent" class="admin-reset-sent hidden">
+      <div class="admin-reset-sent-icon">📬</div>
+      <p>Password reset link sent! Check your inbox.</p>
+    </div>
+
+    <form id="reset-form" class="admin-reset-form">
+      <div class="form-group">
+        <label for="reset-email">Email Address</label>
+        <input type="email" id="reset-email" name="reset-email" placeholder="admin@palengkehub.com" required>
+      </div>
+      <div id="reset-status" class="form-status hidden"></div>
+      <button type="submit" id="reset-btn" class="btn-primary admin-login-btn">
+        <span id="reset-spinner" class="admin-spinner" style="display:none;"></span>
+        <span id="reset-btn-text">Send Reset Link</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="index.html" class="logo logo-img logo-footer"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
+        <p>The online home of the Lipa City Public Market — order from its stalls and pick up your tinda at the market.</p>
+        <div class="social-links">
+          <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+          <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+          <a href="#" aria-label="Twitter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="index.html#team">Our Team</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="index.html#faq">FAQ</a></li>
+          <li><a href="contact.html">Help Center</a></li>
+          <li><a href="admin-login.html">Admin Login</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 PalengkeHub. All rights reserved.</span>
+      <span>Made in the Philippines 🇵🇭</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

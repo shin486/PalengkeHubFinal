@@ -260,7 +260,9 @@ export const LoginScreen = ({ setIsGuest }) => {
         shake();
         const raw = result.error?.toLowerCase() || '';
         let msg = 'Login failed. Please try again.';
-        if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found'))
+        if (result.adminWebOnly) {
+          msg = '⛔ Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.';
+        } else if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found'))
           msg = 'Wrong email or password. Double-check and try again.';
         else if (raw.includes('email not confirmed'))
           msg = 'Please verify your email first. Check your inbox.';
@@ -573,7 +575,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 <View style={styles.pickerAccountInfo}>
                   <Text style={styles.pickerAccountName}>{account.full_name || 'Unnamed account'}</Text>
                   <Text style={styles.pickerAccountMeta}>
-                    {account.role === 'vendor' ? '🏪 Vendor' : '🛍️ Customer'}
+                    {account.role === 'vendor' ? '🏪 Vendor' : account.role === 'admin' ? '👨‍💼 Admin' : '🛍️ Customer'}
                   </Text>
                 </View>
                 <Text style={styles.pickerArrow}>›</Text>
