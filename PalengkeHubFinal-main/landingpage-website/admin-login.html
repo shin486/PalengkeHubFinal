@@ -16,8 +16,8 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
   // Detect if running locally (file://) or on deployed site
   const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  // After login, redirect to admin dashboard — stays on same subdomain when deployed
-  const REDIRECT_URL = isLocal ? 'admin.html' : '/admin.html';
+  // After login, redirect to admin dashboard on the admin subdomain
+  const REDIRECT_URL = isLocal ? 'admin.html' : 'https://admin.palengkehub.site/admin.html';
 
   // IMPORTANT: Only init supabase if the CDN loaded successfully
   // If window.supabase is undefined, the form still works with method="post" fallback
