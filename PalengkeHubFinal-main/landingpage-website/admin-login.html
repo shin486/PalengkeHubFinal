@@ -18,14 +18,19 @@
   const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const REDIRECT_URL = isLocal ? 'admin.html' : 'https://palengkehub.site/admin.html';
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-      storage: window.localStorage,
-    },
-  });
+  // IMPORTANT: Only init supabase if the CDN loaded successfully
+  // If window.supabase is undefined, the form still works with method="post" fallback
+  let supabase = null;
+  if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+        storage: window.localStorage,
+      },
+    });
+  }
 
   document.addEventListener('DOMContentLoaded', function() {
     // Mobile menu toggle
@@ -96,6 +101,7 @@
 
     // ── Check if already logged in as admin ──
     const checkAdminSession = async () => {
+      if (!supabase) return;
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { data: profile } = await supabase
@@ -124,6 +130,11 @@
       }
 
       setLoginLoading(true);
+
+      if (!supabase) {
+        showStatus('⚠️ Authentication service unavailable. Please refresh the page and try again.', 'error');
+        return;
+      }
 
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -273,7 +284,7 @@
           <p>Sign in to manage vendors, stalls, orders, and reports.</p>
         </div>
 
-        <form id="admin-login-form" class="admin-form" autocomplete="on">
+        <form id="admin-login-form" class="admin-form" autocomplete="on" method="post" action="#">
           <div class="form-group">
             <label for="email">Email Address</label>
             <input type="email" id="email" name="email" placeholder="admin@palengkehub.com" required>

@@ -1,0 +1,7 @@
+name = "palengkehub-admin"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+routes = [
+  { pattern = "admin.palengkehub.site", zone_id = "490f87871de86b139a72ba5bf52dda2e" }
+]
