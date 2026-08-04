@@ -179,8 +179,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
   const [validIdName, setValidIdName] = useState('');
   const [businessPermit, setBusinessPermit] = useState(null);
   const [businessPermitName, setBusinessPermitName] = useState('');
-  const [barangayClearance, setBarangayClearance] = useState(null);
-  const [barangayClearanceName, setBarangayClearanceName] = useState('');
   
   const [uploading, setUploading] = useState(false);
   const [showSectionPicker, setShowSectionPicker] = useState(false);
@@ -784,7 +782,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
       const performSignUp = async () => {
         let validIdUrl = null;
         let businessPermitUrl = null;
-        let barangayClearanceUrl = null;
         
         if (role === 'vendor') {
           const timestamp = Date.now();
@@ -792,9 +789,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
           
           validIdUrl = await uploadDocument(validId, `valid_ids/${userId}`);
           businessPermitUrl = await uploadDocument(businessPermit, `business_permits/${userId}`);
-          if (barangayClearance) {
-            barangayClearanceUrl = await uploadDocument(barangayClearance, `clearances/${userId}`);
-          }
         }
         
         const metadata = role === 'vendor' ? {
@@ -805,7 +799,6 @@ export const SignUpScreen = ({ setIsGuest }) => {
           verificationMethod,
           valid_id_url: validIdUrl,
           business_permit_url: businessPermitUrl,
-          barangay_clearance_url: barangayClearanceUrl,
           requires_approval: true,
           terms_accepted: true,
           terms_accepted_at: new Date().toISOString(),
@@ -1165,26 +1158,16 @@ export const SignUpScreen = ({ setIsGuest }) => {
             onUpload={() => pickDocument('business_permit', setBusinessPermit, setBusinessPermitName)}
           />
           
-          {/* Barangay Clearance (Optional but recommended) */}
-          <DocumentUpload
-            label="Barangay Clearance"
-            icon="🏘️"
-            required={false}
-            fileName={barangayClearanceName}
-            file={barangayClearance}
-            onUpload={() => pickDocument('clearance', setBarangayClearance, setBarangayClearanceName)}
-          />
         </View>
-        
+
         <View style={styles.requirementsNote}>
-          <Text style={styles.requirementsNoteIcon}>📋</Text>
+          <Text style={styles.requirementsNoteIcon}>ðŸ“‹</Text>
           <View style={styles.requirementsNoteContent}>
             <Text style={styles.requirementsNoteTitle}>Document Requirements</Text>
             <Text style={styles.requirementsNoteText}>
-              • Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
-              • Business Permit or Mayor's Permit{'\n'}
-              • Barangay Clearance (Recommended for faster approval){'\n'}
-              • Photo of your stall (to be submitted after approval)
+              â€¢ Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
+              â€¢ Business Permit or Mayor's Permit{'\n'}
+              â€¢ Photo of your stall (to be submitted after approval)
             </Text>
           </View>
         </View>

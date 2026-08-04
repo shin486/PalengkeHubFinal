@@ -103,8 +103,9 @@ export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();
   const [stall, setStall] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-const [uploadingStallImage, setUploadingStallImage] = useState(false);
-const [stallImageError, setStallImageError] = useState(false);
+  const [uploadingStallImage, setUploadingStallImage] = useState(false);
+  const [stallImageError, setStallImageError] = useState(false);
+  const [uploadingGcashQr, setUploadingGcashQr] = useState(false);
   const [loadingStall, setLoadingStall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -332,6 +333,68 @@ const uploadVendorAvatar = async () => {
     }
   }
 };
+
+  // GCash QR Code Upload using ImgBB
+  const uploadGcashQr = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant gallery permissions to upload your GCash QR code');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setUploadingGcashQr(true);
+      try {
+        const uri = result.assets[0].uri;
+
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64String = reader.result.split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        const formData = new FormData();
+        formData.append('image', base64);
+
+        const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
+          params: { key: IMGBB_API_KEY },
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        const gcashQrUrl = uploadResponse.data.data.url;
+        console.log('✅ GCash QR uploaded:', gcashQrUrl);
+
+        const { error } = await supabase
+          .from('stalls')
+          .update({ gcash_qr_url: gcashQrUrl })
+          .eq('id', stall.id);
+
+        if (error) throw error;
+
+        await fetchStall();
+        Alert.alert('Success', 'GCash QR code updated! Customers can now scan it to pay you.');
+      } catch (error) {
+        console.error('GCash QR upload error:', error);
+        Alert.alert('Error', 'Failed to upload GCash QR code');
+      } finally {
+        setUploadingGcashQr(false);
+      }
+    }
+  };
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
@@ -1894,6 +1957,46 @@ const renderProfile = () => {
           <Text style={styles.infoLabel}>Total Orders</Text>
           <Text style={styles.infoValue}>{salesSummary.ordersMonth}</Text>
         </View>
+
+        {/* GCash QR Code Section */}
+        <View style={styles.gcashQrSection}>
+          <Text style={styles.gcashQrLabel}>📱 GCash QR Code</Text>
+          <Text style={styles.gcashQrSubtitle}>
+            Upload your GCash QR code so customers can scan and pay you directly
+          </Text>
+          <TouchableOpacity
+            onPress={uploadGcashQr}
+            disabled={uploadingGcashQr}
+            style={styles.gcashQrContainer}
+          >
+            {uploadingGcashQr ? (
+              <View style={styles.gcashQrUploading}>
+                <ActivityIndicator size="large" color="#0F7B3A" />
+                <Text style={styles.gcashQrUploadingText}>Uploading...</Text>
+              </View>
+            ) : stall?.gcash_qr_url ? (
+              <Image
+                source={{ uri: stall.gcash_qr_url }}
+                style={styles.gcashQrImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.gcashQrPlaceholder}>
+                <Text style={styles.gcashQrEmoji}>📱</Text>
+                <Text style={styles.gcashQrPlaceholderText}>Tap to upload your GCash QR code</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {stall?.gcash_qr_url && (
+            <TouchableOpacity
+              style={styles.gcashQrChangeBtn}
+              onPress={uploadGcashQr}
+              disabled={uploadingGcashQr}
+            >
+              <Text style={styles.gcashQrChangeBtnText}>Change QR Code</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         
         {Platform.OS === 'web' ? (
           <button onClick={async () => { if (window.confirm('Logout?')) { await supabase.auth.signOut(); window.location.href = '/'; } }} style={{ backgroundColor: '#DC2626', color: 'white', padding: 14, borderRadius: 12, border: 'none', cursor: 'pointer', width: '100%', fontSize: 16, fontWeight: '600', marginTop: 20 }}>🚪 Logout</button>
@@ -3334,5 +3437,86 @@ stallImagePlaceholderText: {
     fontSize: 12,
     color: COLORS.primary,
     marginTop: 8,
+  },
+  // GCash QR Code Styles
+  gcashQrSection: {
+    marginTop: 20,
+    marginBottom: 20,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  gcashQrLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0F7B3A',
+    marginBottom: 4,
+  },
+  gcashQrSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  gcashQrContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  gcashQrImage: {
+    width: 180,
+    height: 180,
+    borderRadius: 12,
+  },
+  gcashQrPlaceholder: {
+    width: '100%',
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+  },
+  gcashQrEmoji: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  gcashQrPlaceholderText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  gcashQrUploading: {
+    width: '100%',
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 16,
+  },
+  gcashQrUploadingText: {
+    fontSize: 12,
+    color: '#0F7B3A',
+    marginTop: 8,
+  },
+  gcashQrChangeBtn: {
+    marginTop: 12,
+    backgroundColor: '#0F7B3A',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  gcashQrChangeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

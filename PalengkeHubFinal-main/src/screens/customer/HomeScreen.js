@@ -90,10 +90,27 @@ export default function HomeScreen({ isGuest = false, navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
-  const [imageErrors, setImageErrors] = useState({}); // Track image errors
+  const [imageErrors, setImageErrors] = useState({});
+  const [greeting, setGreeting] = useState('');
   
   const { user, setIsGuest } = useAuth();
   const { addToCart } = useCart();
+
+  // ✅ Get time-based greeting
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting('Good morning');
+    else if (hour < 17) setGreeting('Good afternoon');
+    else setGreeting('Good evening');
+  }, []);
+
+  // ✅ Get market status (open/closed)
+  const getMarketStatus = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    return hour >= 5 && hour < 19; // Market hours: 5 AM - 7 PM
+  };
+  const isMarketOpen = getMarketStatus();
 
   const categories = [
     { id: 1, name: 'Vegetables', icon: '🥬', gradient: ['#10B981', '#34D399'] },
@@ -607,6 +624,36 @@ export default function HomeScreen({ isGuest = false, navigation }) {
     >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       
+      {/* ✅ Welcome Header with Market Status */}
+      <View style={styles.welcomeHeader}>
+        <LinearGradient
+          colors={[COLORS.primary, COLORS.primaryDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.welcomeHeaderGradient}
+        >
+          <View style={styles.welcomeContent}>
+            <View style={styles.welcomeTextWrap}>
+              <Text style={styles.welcomeGreeting}>{greeting}! 👋</Text>
+              <Text style={styles.welcomeName}>
+                {isGuest ? 'Welcome to PalengkeHub' : (user?.email?.split('@')[0] || 'Kabayan')}
+              </Text>
+            </View>
+            <View style={styles.marketStatusBadge}>
+              <View style={[styles.marketStatusDot, { backgroundColor: isMarketOpen ? COLORS.success : COLORS.text.lighter }]} />
+              <Text style={styles.marketStatusText}>
+                {isMarketOpen ? 'Market Open' : 'Market Closed'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.welcomeSubtext}>
+            {isMarketOpen 
+              ? '🛒 Order now, pick up at Lipa City Public Market' 
+              : '⏰ Market opens at 5:00 AM tomorrow'}
+          </Text>
+        </LinearGradient>
+      </View>
+
       {/* Guest Banner */}
       {isGuest && (
         <View style={styles.guestBanner}>
@@ -746,6 +793,18 @@ export default function HomeScreen({ isGuest = false, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   
+  // ── Welcome Header ──
+  welcomeHeader: { marginHorizontal: 16, marginTop: 16, borderRadius: 24, overflow: 'hidden', shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16, elevation: 6 },
+  welcomeHeaderGradient: { padding: 24, borderRadius: 24 },
+  welcomeContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  welcomeTextWrap: { flex: 1 },
+  welcomeGreeting: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginBottom: 4 },
+  welcomeName: { fontSize: 24, fontWeight: '800', color: COLORS.text.white, letterSpacing: -0.5 },
+  marketStatusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 8 },
+  marketStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  marketStatusText: { fontSize: 12, fontWeight: '700', color: COLORS.text.white },
+  welcomeSubtext: { fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 20 },
+
   // ── Guest Banner ──
   guestBanner: { margin: 16, borderRadius: 20, overflow: 'hidden', shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 4 },
   guestBannerGradient: { flexDirection: 'row', alignItems: 'center', padding: 18, borderWidth: 1, borderColor: COLORS.accentLight },

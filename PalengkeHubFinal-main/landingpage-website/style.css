@@ -1296,12 +1296,21 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.75);padding:64px 0 3
 }
 
 @media (max-width:860px){
+  /* Video & section padding adjustments */
   .video-showcase{padding:70px 0 60px;}
-  .hero-inner{grid-template-columns:1fr;text-align:center;gap:40px;}
+  .features{padding:80px 0 70px;}
+  .location{padding:80px 0 70px;}
+  .faq{padding:80px 0 70px;}
+
+  /* Hero: stack to single column */
+  .hero{padding:90px 0 0;}
+  .hero-inner{grid-template-columns:1fr;text-align:center;gap:40px;padding-bottom:70px;}
   .hero-content{align-items:center;}
-  .hero-art{margin-top:20px;height:400px;}
-  .hero-actions{justify-content:center;}
+  .hero-art{margin-top:10px;height:auto;aspect-ratio:auto;min-height:460px;}
+  .hero-actions{justify-content:center;flex-wrap:wrap;}
   .app-badges{justify-content:center;}
+
+  /* Phone mockup: fit within container */
   .phone-mockup{width:220px;height:440px;}
   .floating-card{display:none;}
   .hero-emoji{font-size:1.6rem;}
@@ -1311,7 +1320,9 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.75);padding:64px 0 3
   .emoji-4{display:none;}
   .emoji-5{bottom:6%;right:6%;}
   .emoji-6{display:none;}
-  .stalls{grid-template-columns:1fr;}
+
+  /* Grid layouts: collapse to fewer columns */
+  .stalls{grid-template-columns:1fr;max-width:480px;margin:0 auto;}
   .steps{grid-template-columns:1fr;max-width:420px;margin:0 auto;}
   .step{margin-bottom:8px;}
   .how-it-works{padding:70px 0 80px;}
@@ -1323,6 +1334,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.75);padding:64px 0 3
   .team-grid{grid-template-columns:repeat(2,1fr);}
   .team{padding:70px 0 60px;}
   .footer-grid{grid-template-columns:1fr 1fr;}
+
+  /* Mobile navigation menu */
   nav ul{
     display:none;
     position:absolute;
@@ -1332,49 +1345,222 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.75);padding:64px 0 3
     background:var(--cream);
     flex-direction:column;
     padding:20px 32px;
-    gap:20px;
+    gap:16px;
     border-bottom:1px solid rgba(24,20,16,0.08);
     box-shadow:0 10px 30px -10px rgba(0,0,0,0.1);
   }
   nav ul.active{display:flex;}
+  nav ul li{width:100%;}
+  nav ul a{display:block;padding:10px 0;font-size:1rem;}
   .menu-btn{display:block;}
   .nav-cta{display:none;}
+
+  /* Show download CTA inside mobile menu */
+  .nav-cta-mobile-item{
+    display:none;
+  }
+  nav ul.active .nav-cta-mobile-item{
+    display:list-item;
+    margin-top:8px;
+  }
+  .nav-cta-mobile{
+    display:block;
+    background:var(--navy);
+    color:#fff;
+    padding:12px 24px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:0.95rem;
+    text-decoration:none;
+    text-align:center;
+    transition:background .2s ease;
+  }
+  .nav-cta-mobile:hover{
+    background:var(--mango);
+    color:var(--navy-deep);
+  }
+
   .trust .wrap{justify-content:flex-start;}
   .app-badges-large{flex-direction:column;align-items:center;}
   .app-badge-large{width:100%;max-width:280px;}
+
+  /* Map height adjustment */
+  .map-wrap iframe{height:300px;}
+}
+
+@media (max-width:600px){
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:20px;}
+  .location-grid{grid-template-columns:1fr;}
+  .team-grid{grid-template-columns:1fr;max-width:360px;margin:0 auto;}
+  .footer-grid{grid-template-columns:1fr;gap:28px;}
+  .features{padding:60px 0 50px;}
+  .how-it-works{padding:60px 0 70px;}
+  .favorites{padding:50px 0 60px;}
+  .location{padding:60px 0 50px;}
+  .faq{padding:60px 0 50px;}
+  .video-showcase{padding:60px 0 50px;}
+  .stats{padding:50px 0;}
+  .trust .wrap{padding:36px 24px;}
+  .section-head{margin-bottom:40px;}
+  .hero-art{min-height:380px;}
+  .phone-mockup{width:200px;height:400px;}
+  .map-wrap iframe{height:260px;}
 }
 
 @media (max-width:480px){
-  .video-showcase{padding:60px 0 50px;}
-  .video-wrap{border-radius:14px;}
+  /* Layout & spacing */
   .wrap{padding:0 20px;}
+  .video-showcase{padding:50px 0 40px;}
+  .video-wrap{border-radius:14px;}
   .hero{padding:70px 0 0;}
-  .hero h1{font-size:2rem;}
-  .hero p.sub{font-size:0.95rem;}
+  .hero-inner{padding-bottom:50px;gap:30px;}
+  .hero-art{min-height:320px;}
+  .phone-mockup{width:170px;height:340px;}
+  .phone-content{padding:16px 12px;}
+  .phone-app-icon{width:56px;height:56px;}
+  .phone-app-icon svg{width:28px;height:28px;}
+  .phone-app-icon img{border-radius:14px;}
+  .phone-app-name{font-size:1.05rem;}
+  .phone-rating{font-size:0.8rem;}
+  .phone-stats{gap:18px;}
+  .stat-num{font-size:1.05rem;}
+
+  /* Hero text */
+  .eyebrow{font-size:0.7rem;padding:6px 12px;margin-bottom:20px;}
+  .hero h1{font-size:1.8rem;line-height:1.15;}
+  .hero p.sub{font-size:0.9rem;margin-top:20px;}
   .hero-actions{flex-direction:column;gap:16px;width:100%;}
   .hero-actions .btn-primary{width:100%;text-align:center;}
-  .app-badges{flex-direction:column;width:100%;}
+  .hero-actions .link-ghost{justify-content:center;}
+  .app-badges{flex-direction:column;width:100%;gap:10px;}
   .app-badge{width:100%;justify-content:center;}
-  .phone-mockup{width:180px;height:360px;}
-  .phone-content{padding:16px 12px;}
-  .phone-app-icon{width:60px;height:60px;}
-  .phone-app-icon svg{width:30px;height:30px;}
-  .phone-app-name{font-size:1.1rem;}
-  .stat-num{font-size:1.1rem;}
+
+  /* Section headings */
+  .section-head h2{font-size:1.5rem;}
+  .section-head .kicker{font-size:0.7rem;}
+
+  /* Cards & grids */
+  .stalls{grid-template-columns:1fr;max-width:100%;}
   .stall{padding:24px 20px;}
-  .trust .wrap{padding:38px 20px;}
-  .stats{padding:60px 0;}
+  .stall h3{font-size:1.1rem;}
+  .stall p{font-size:0.88rem;}
+  .step{padding:32px 22px 26px;}
+  .step h3{font-size:1.05rem;}
+  .step p{font-size:0.88rem;}
+  .stats{padding:50px 0;}
   .stats-grid{grid-template-columns:1fr;gap:20px;}
+  .stat-number{font-size:1.8rem;}
+  .stat-label{font-size:0.68rem;}
   .location-grid{grid-template-columns:1fr;}
-  .team-grid{grid-template-columns:1fr;}
-  .team{padding:70px 0 60px;}
-  .location{padding:70px 0 60px;}
-  .map-wrap iframe{height:260px;}
-  .faq{padding:70px 0 60px;}
+  .location-card{padding:22px 18px;}
+  .location-card h3{font-size:1rem;}
+  .location-card p{font-size:0.85rem;}
+  .team-grid{grid-template-columns:1fr;max-width:320px;margin:0 auto;}
+  .team{padding:60px 0 50px;}
+  .team-avatar{width:64px;height:64px;font-size:1.2rem;}
+  .team-card{padding:24px 18px;}
+  .team-card h3{font-size:1rem;}
+  .team-roles{font-size:0.82rem;}
+  .location{padding:50px 0 40px;}
+  .map-wrap iframe{height:240px;}
+  .map-wrap{border-radius:14px;}
+
+  /* FAQ */
+  .faq{padding:50px 0 40px;}
   .faq-question{padding:16px 18px;font-size:0.95rem;}
-  .faq-answer p{padding:0 18px 16px;}
+  .faq-answer p{padding:0 18px 16px;font-size:0.9rem;}
+
+  /* Favorites */
+  .fav-emoji{font-size:2.2rem;}
+  .fav-name{font-size:0.88rem;}
+  .fav-price{font-size:0.72rem;}
+  .favorites-scroll{grid-auto-columns:140px;gap:14px;}
+
+  /* Trust */
+  .trust .wrap{padding:34px 20px;}
+  .trust-item{font-size:0.72rem;padding:8px 14px;}
+  .trust-item svg{width:14px;height:14px;}
+
+  /* Categories chips */
+  .chip{padding:10px 16px;font-size:0.78rem;}
+  .chip svg{width:14px;height:14px;}
+
+  /* CTA banner */
+  .cta-banner{padding:50px 0;}
+  .cta-banner h2{font-size:1.5rem;}
+  .cta-banner p{font-size:1rem;}
+  .cta-buttons{flex-direction:column;width:100%;}
+  .cta-buttons .btn-dark,.cta-buttons .btn-outline{width:100%;text-align:center;}
+  .app-badge-large{min-width:auto;padding:12px 16px;}
+  .badge-text strong{font-size:0.9rem;}
+  .badge-text span{font-size:0.6rem;}
+
+  /* Footer */
+  .footer-grid{grid-template-columns:1fr;gap:24px;}
+  .footer-bottom{flex-direction:column;text-align:center;gap:8px;}
+  .social-links a{width:36px;height:36px;}
+  .social-links svg{width:16px;height:16px;}
+  .footer-col h4{font-size:0.68rem;}
+  .footer-col a{font-size:0.85rem;}
+  .footer-brand p{font-size:0.85rem;}
+
+  /* Header & nav */
+  .logo-img img{height:38px;}
+  .logo-footer img{height:34px;}
+  header .wrap{height:64px;}
+  nav ul{top:64px;padding:16px 20px;}
+  .menu-btn span{width:22px;}
+
+  /* Back to top */
   #back-to-top{bottom:20px;right:20px;width:44px;height:44px;}
-  .cta-banner{padding:60px 0;}
-  .cta-banner h2{font-size:1.6rem;}
-  .footer-grid{grid-template-columns:1fr;}
+
+  /* Dividers */
+  .scallop,.wave-divider{height:20px;}
+
+  /* Video */
+  .video-wrap video{aspect-ratio:4/3;}
+}
+
+/* Extra small mobile (360px and below) */
+@media (max-width:360px){
+  .wrap{padding:0 16px;}
+  .hero h1{font-size:1.6rem;}
+  .hero p.sub{font-size:0.85rem;}
+  .eyebrow{font-size:0.65rem;padding:5px 10px;}
+  .section-head h2{font-size:1.35rem;}
+  .stat-number{font-size:1.5rem;}
+  .phone-mockup{width:150px;height:300px;}
+  .phone-app-icon{width:48px;height:48px;}
+  .phone-app-icon svg{width:24px;height:24px;}
+  .phone-app-name{font-size:0.95rem;}
+  .phone-rating{font-size:0.75rem;}
+  .phone-stats{gap:14px;}
+  .stat-num{font-size:0.95rem;}
+  .step{padding:28px 18px 22px;}
+  .step h3{font-size:0.98rem;}
+  .step p{font-size:0.82rem;}
+  .stall{padding:20px 16px;}
+  .stall h3{font-size:1rem;}
+  .stall p{font-size:0.82rem;}
+  .fav-card{padding:16px 12px;}
+  .fav-emoji{font-size:2rem;}
+  .location-card{padding:20px 16px;}
+  .team-card{padding:20px 14px;}
+  .team-avatar{width:56px;height:56px;font-size:1.05rem;}
+  .cta-banner h2{font-size:1.4rem;}
+  .cta-banner p{font-size:0.95rem;}
+  .btn-dark,.btn-outline,.btn-primary{padding:13px 24px;font-size:0.9rem;}
+  .app-badge-large{padding:10px 14px;}
+  .badge-text strong{font-size:0.85rem;}
+  .footer-col a{font-size:0.82rem;}
+  .footer-brand p{font-size:0.82rem;}
+  .trust-item{font-size:0.68rem;padding:7px 12px;}
+  .favorites-scroll{grid-auto-columns:130px;gap:12px;}
+  .chip{padding:9px 14px;font-size:0.75rem;}
+  .faq-question{padding:14px 16px;font-size:0.9rem;}
+  .faq-answer p{padding:0 16px 14px;font-size:0.88rem;}
+  #back-to-top{bottom:16px;right:16px;width:40px;height:40px;font-size:1.2rem;}
+  .video-wrap video{aspect-ratio:16/10;}
+  .map-wrap iframe{height:220px;}
+  .scallop,.wave-divider{height:16px;}
 }

@@ -73,3 +73,61 @@ nav a.active::after{
     padding:60px 24px;
   }
 }
+
+@media (max-width:600px){
+  .page-header{
+    padding:50px 0 30px;
+  }
+  .page-header h1{
+    font-size:1.8rem;
+  }
+  .page-header p{
+    font-size:0.95rem;
+  }
+  .page-content{
+    padding:50px 0;
+  }
+  .content-placeholder{
+    padding:50px 20px;
+  }
+  .content-placeholder svg{
+    width:48px;
+    height:48px;
+    margin-bottom:18px;
+  }
+  .content-placeholder h2{
+    font-size:1.3rem;
+  }
+  .content-placeholder p{
+    font-size:0.9rem;
+  }
+}
+
+@media (max-width:480px){
+  .page-header{
+    padding:40px 0 24px;
+  }
+  .page-header h1{
+    font-size:1.5rem;
+  }
+  .page-header p{
+    font-size:0.88rem;
+  }
+  .page-content{
+    padding:40px 0;
+  }
+  .content-placeholder{
+    padding:40px 16px;
+  }
+  .content-placeholder svg{
+    width:40px;
+    height:40px;
+    margin-bottom:14px;
+  }
+  .content-placeholder h2{
+    font-size:1.15rem;
+  }
+  .content-placeholder p{
+    font-size:0.85rem;
+  }
+}
