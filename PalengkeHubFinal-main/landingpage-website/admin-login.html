@@ -100,7 +100,7 @@
           .eq('id', session.user.id)
           .single();
         if (profile && profile.role === 'admin') {
-          window.location.href = 'admin.html';
+          window.location.href = 'https://palengkehub.site/admin.html';
         }
       }
     };
@@ -154,7 +154,7 @@
         sessionStorage.setItem('palengkehub_admin_name', adminName);
         showStatus('✅ Welcome, <strong>' + adminName + '</strong>! Redirecting to dashboard...', 'success');
         setTimeout(() => {
-          window.location.href = 'admin.html';
+          window.location.href = 'https://palengkehub.site/admin.html';
         }, 600);
 
       } catch (err) {
