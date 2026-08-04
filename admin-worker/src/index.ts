@@ -1,6 +1,13 @@
 // Cloudflare Worker for admin.palengkehub.site
-// Fetches admin-login.html from the main site and rewrites asset paths
-// so CSS/images load correctly on the subdomain.
+// Proxies the admin login and dashboard from the main site (palengkehub.site)
+// and rewrites asset paths so CSS/images load correctly on the subdomain.
+
+// Map of local paths → main-site pages to serve
+const PAGE_MAP: Record<string, string> = {
+  '/': 'admin-login.html',
+  '/admin-login.html': 'admin-login.html',
+  '/admin.html': 'admin.html',
+};
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -12,8 +19,15 @@ export default {
       return Response.redirect(url.origin + url.pathname, 302);
     }
 
-    // Fetch the actual admin-login.html from the main site
-    const response = await fetch('https://palengkehub.site/admin-login.html', {
+    // Determine which page to serve
+    const page = PAGE_MAP[url.pathname];
+    if (!page) {
+      // Unknown path — redirect to admin login
+      return Response.redirect('https://admin.palengkehub.site/', 302);
+    }
+
+    // Fetch the actual page from the main site
+    const response = await fetch(`https://palengkehub.site/${page}`, {
       headers: { 'User-Agent': 'Cloudflare-Admin-Worker/1.0' },
     });
 
