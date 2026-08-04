@@ -14,6 +14,10 @@
   // Supabase configuration (mirrors lib/supabase.js)
   const SUPABASE_URL = 'https://jjpgmpufwpbgqjzqymvj.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
+  // Detect if running locally (file://) or on deployed site
+  const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const REDIRECT_URL = isLocal ? 'admin.html' : 'https://palengkehub.site/admin.html';
+
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       autoRefreshToken: true,
@@ -100,7 +104,7 @@
           .eq('id', session.user.id)
           .single();
         if (profile && profile.role === 'admin') {
-          window.location.href = 'https://palengkehub.site/admin.html';
+          window.location.href = REDIRECT_URL;
         }
       }
     };
@@ -154,7 +158,7 @@
         sessionStorage.setItem('palengkehub_admin_name', adminName);
         showStatus('✅ Welcome, <strong>' + adminName + '</strong>! Redirecting to dashboard...', 'success');
         setTimeout(() => {
-          window.location.href = 'https://palengkehub.site/admin.html';
+          window.location.href = REDIRECT_URL;
         }, 600);
 
       } catch (err) {
