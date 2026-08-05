@@ -1,26 +1,36 @@
 import { Platform, Alert } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { supabase } from '../../lib/supabase';
 
-// Configure how notifications appear when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldVibrate: true,
-  }),
-});
+// expo-notifications is only available on native — dynamic require avoids web build errors
+const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+let Notifications = null;
+if (isNative) {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (e) {
+    console.log('🔕 expo-notifications could not be loaded');
+  }
+}
+
+// Configure how notifications appear when app is in foreground (native only)
+if (isNative && Notifications && Notifications.setNotificationHandler) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldVibrate: true,
+    }),
+  });
+}
 
 // --- Helper: Play a sound when a notification arrives while the app is open ---
-// (Expo's setNotificationHandler above handles the visual part; sound on
-//  Android foreground may need explicit play depending on device.)
 export const handleForegroundSound = async () => {
   if (Platform.OS === 'android') {
     try {
       const { Audio } = require('expo-av');
       const { sound } = await Audio.Sound.createAsync(
-        require('../../assets/notification.mp3'),
+        { uri: 'https://example.com/notification.mp3' },
         { shouldPlay: true }
       );
       await sound.playAsync();
@@ -32,32 +42,37 @@ export const handleForegroundSound = async () => {
 
 // --- Request notification permissions ---
 export const requestNotificationPermission = async () => {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let finalStatus = existing;
+  if (!isNative || !Notifications) return null;
 
-  if (existing !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
 
-  if (finalStatus !== 'granted') {
-    Alert.alert(
-      'Notifications Disabled',
-      'Enable push notifications in your device settings to receive order updates, promotions, and chat messages.',
-    );
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      Alert.alert(
+        'Notifications Disabled',
+        'Enable push notifications in your device settings to receive order updates, promotions, and chat messages.',
+      );
+      return null;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    return tokenData.data;
+  } catch (e) {
+    console.warn('Error requesting notification permission:', e);
     return null;
   }
-
-  // Get Expo push token
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId: process.env.EXPO_PUBLIC_PROJECT_ID || require('../../app.config').expo?.extra?.expoProjectId,
-  });
-
-  return tokenData.data;
 };
 
 // --- Register push token with Supabase ---
 export const registerPushToken = async (userId) => {
+  if (!isNative) return null;
+
   try {
     const token = await requestNotificationPermission();
     if (!token || !userId) return;
@@ -79,7 +94,6 @@ export const registerPushToken = async (userId) => {
 // --- Send notification to a specific user ---
 export const sendPushNotification = async (userId, title, body, data = {}) => {
   try {
-    // Get the user's push token
     const { data: profile } = await supabase
       .from('profiles')
       .select('expo_push_token')
@@ -93,9 +107,7 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
 
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: profile.expo_push_token,
         sound: 'default',
@@ -117,7 +129,6 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
       is_read: false,
       created_at: new Date().toISOString(),
     });
-
   } catch (e) {
     console.warn('Error sending push notification:', e);
   }
@@ -162,27 +173,32 @@ export const notifyOrderUpdate = async (customerId, orderNumber, newStatus) => {
 
 // --- Send promotion notification ---
 export const notifyNewPromotion = async (stallId, productName, discount) => {
-  // Get all customers who favorited this stall
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id')
-    .filter('favorites->stalls', 'cs', JSON.stringify([{ id: stallId }]));
+  try {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id')
+      .filter('favorites->stalls', 'cs', JSON.stringify([{ id: stallId }]));
 
-  if (!profiles?.length) return;
+    if (!profiles?.length) return;
 
-  const title = '🏷️ New Deal!';
-  const body = `${productName} is now ${discount} OFF at your favorite stall!`;
+    const title = '🏷️ New Deal!';
+    const body = `${productName} is now ${discount} OFF at your favorite stall!`;
 
-  for (const profile of profiles) {
-    await sendPushNotification(profile.id, title, body, {
-      type: 'promotion',
-      stallId,
-    });
+    for (const profile of profiles) {
+      await sendPushNotification(profile.id, title, body, {
+        type: 'promotion',
+        stallId,
+      });
+    }
+  } catch (e) {
+    console.warn('Error notifying promotion:', e);
   }
 };
 
 // --- Setup notification listeners ---
 export const setupNotificationListeners = (onNotificationReceived, onNotificationResponse) => {
+  if (!isNative || !Notifications) return () => {};
+
   const receivedListener = Notifications.addNotificationReceivedListener(notification => {
     if (onNotificationReceived) onNotificationReceived(notification);
   });
@@ -192,8 +208,10 @@ export const setupNotificationListeners = (onNotificationReceived, onNotificatio
   });
 
   return () => {
-    Notifications.removeNotificationSubscription(receivedListener);
-    Notifications.removeNotificationSubscription(responseListener);
+    try {
+      Notifications.removeNotificationSubscription(receivedListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    } catch (e) {}
   };
 };
 

@@ -1,0 +1,18 @@
+# Exclude Capacitor native projects from EAS cloud builds
+# EAS generates its own iOS/Android projects from Expo config
+android/
+ios/
+
+# Exclude landing page (not needed for app build)
+landingpage-website/
+
+# Exclude other projects in the monorepo
+admin-worker/
+web/
+supabase-proxy/
+c
+
+# Exclude large assets not needed
+node_modules/.cache/
+.expo/
+*.apk
