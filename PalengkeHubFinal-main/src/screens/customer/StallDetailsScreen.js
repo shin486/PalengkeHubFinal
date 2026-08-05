@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFavorites } from '../../hooks/useFavorites';
 import { chatService } from '../../services/chatService';
 import { Header } from '../../components/Header';
 import StallMap from '../../components/StallMap';
@@ -91,6 +92,7 @@ const StarRating = ({ rating, size = 14 }) => {
 export default function StallDetailsScreen({ navigation, route }) {
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
+  const { isStallFavorite, toggleStallFavorite } = useFavorites();
   const [stall, setStall] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [products, setProducts] = useState([]);
@@ -312,8 +314,13 @@ export default function StallDetailsScreen({ navigation, route }) {
               )}
             </View>
             <View style={styles.stallInfo}>
-              <Text style={styles.stallName}>{stall?.stall_name || 'Market Stall'}</Text>
-              <Text style={styles.stallNumber}>Stall #{stall?.stall_number}</Text>
+          <View style={styles.stallNameRow}>
+            <Text style={styles.stallName}>{stall?.stall_name || 'Market Stall'}</Text>
+            <TouchableOpacity onPress={() => toggleStallFavorite(stall)} style={styles.favBtn}>
+              <Text style={styles.favIcon}>{isStallFavorite(stall?.id) ? '❤️' : '🤍'}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.stallNumber}>Stall #{stall?.stall_number}</Text>
               <Text style={styles.stallSection}>{stall?.section}</Text>
               {vendor?.full_name && (
                 <Text style={styles.vendorName}>👨‍🍳 {vendor.full_name}</Text>
@@ -576,12 +583,20 @@ const styles = StyleSheet.create({
   stallInfo: {
     flex: 1,
   },
+  stallNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   stallName: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 4,
+    flex: 1,
   },
+  favBtn: { padding: 6 },
+  favIcon: { fontSize: 22 },
   stallNumber: {
     fontSize: 14,
     color: '#DC2626',

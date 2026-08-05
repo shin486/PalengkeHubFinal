@@ -15,6 +15,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { CartProvider } from './src/contexts/CartContext';
+import { I18nProvider } from './src/contexts/i18nContext';
+import { ThemeProvider } from './src/contexts/ThemeContext';
+import { registerPushToken, setupNotificationListeners } from './src/services/notificationService';
 import { Header } from './src/components/Header'; 
 import { LoadingSpinner } from './src/components/LoadingSpinner';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
@@ -32,6 +35,7 @@ import CartScreen from './src/screens/customer/CartScreen';
 import SearchScreen from './src/screens/customer/SearchScreen';
 import OrdersScreen from './src/screens/customer/OrdersScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
+import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import ChatListScreen from './src/screens/customer/ChatListScreen';
@@ -138,6 +142,7 @@ function AppStack({ isGuest }) {
   const { cartCount } = useCart();
   const navigation = useNavigation();
   const currentRoute = useCurrentRoute();
+  const { user } = useAuth();
   
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -154,6 +159,25 @@ function AppStack({ isGuest }) {
       }
     };
     fetchUnreadCount();
+
+    // Register push notifications
+    if (user && !isGuest) {
+      registerPushToken(user.id);
+    }
+
+    // Setup notification listeners for navigation
+    const cleanup = setupNotificationListeners(null, (response) => {
+      const data = response.notification.request.content.data;
+      if (data.type === 'order_update') {
+        navigation.navigate('Orders');
+      } else if (data.type === 'promotion' && data.stallId) {
+        navigation.navigate('StallDetails', { stallId: data.stallId });
+      } else if (data.type === 'chat') {
+        navigation.navigate('ChatList');
+      }
+    });
+
+    return cleanup;
   }, []);
 
   const getHeaderProps = () => {
@@ -189,6 +213,8 @@ function AppStack({ isGuest }) {
         return { title: '🔔 Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
         return { title: '🚩 Report Issue', subtitle: 'Help us improve' };
+      case 'Favorites':
+        return { title: '❤️ Favorites', subtitle: 'Your saved products and stalls' };
       case 'CustomerReports':
         return { title: '📋 My Reports', subtitle: 'Track your reports' };
       default:
@@ -222,6 +248,7 @@ function AppStack({ isGuest }) {
         {/* ✅ NEW: Customer Report Screens */}
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
       </Stack.Navigator>
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
@@ -244,6 +271,10 @@ function AppStack({ isGuest }) {
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Orders')}>
           <Text style={styles.navIcon}>📋</Text>
           <Text style={styles.navText}>Orders</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Favorites')}>
+          <Text style={styles.navIcon}>❤️</Text>
+          <Text style={styles.navText}>Favorites</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
           <Text style={styles.navIcon}>💬</Text>
@@ -387,9 +418,13 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <AuthProvider>
-          <CartProvider>
-            <RootNavigator />
-          </CartProvider>
+          <I18nProvider>
+            <ThemeProvider>
+              <CartProvider>
+                <RootNavigator />
+              </CartProvider>
+            </ThemeProvider>
+          </I18nProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

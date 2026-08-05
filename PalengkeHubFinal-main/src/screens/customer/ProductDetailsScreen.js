@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
+import { useFavorites } from '../../hooks/useFavorites';
 
 const COLORS = {
   primary: '#DC2626',
@@ -111,6 +112,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   
   const { user, isGuest, setIsGuest } = useAuth();
   const { addToCart } = useCart();
+  const { isProductFavorite, toggleProductFavorite } = useFavorites();
 
   useEffect(() => {
     if (productId) {
@@ -389,7 +391,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       {/* Product Info */}
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{product.name}</Text>
+        <View style={styles.productTitleRow}>
+          <Text style={styles.productName}>{product.name}</Text>
+          <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
+            <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.priceRow}>
           <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
@@ -649,12 +656,21 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: 1,
   },
+  productTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
   productName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 12,
   },
+  favBtn: { padding: 6 },
+  favIcon: { fontSize: 24 },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
