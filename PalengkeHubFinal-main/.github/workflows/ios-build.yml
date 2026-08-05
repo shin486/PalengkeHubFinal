@@ -1,0 +1,78 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'PalengkeHubFinal-main/src/**'
+      - 'PalengkeHubFinal-main/app.config.js'
+      - 'PalengkeHubFinal-main/App.js'
+      - 'PalengkeHubFinal-main/package.json'
+      - 'PalengkeHubFinal-main/capacitor.config.ts'
+      - 'PalengkeHubFinal-main/index.js'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: PalengkeHubFinal-main
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: PalengkeHubFinal-main/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create .env file
+        run: |
+          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" >> .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
+          echo "EXPO_PUBLIC_PAYMONGO_PROXY_URL=${{ secrets.EXPO_PUBLIC_PAYMONGO_PROXY_URL }}" >> .env
+
+      - name: Export web assets
+        run: npx expo export --platform web
+
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Install CocoaPods
+        run: |
+          cd ios/App
+          pod install
+
+      - name: Build iOS IPA
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            -archivePath build/App.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Create IPA from xcarchive
+        run: |
+          mkdir -p ios/App/build/Payload
+          cp -r ios/App/build/App.xcarchive/Products/Applications/App.app ios/App/build/Payload/
+          cd ios/App/build
+          zip -r PalengkeHub.ipa Payload/
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PalengkeHub-iOS
+          path: PalengkeHubFinal-main/ios/App/build/PalengkeHub.ipa
+          retention-days: 7
