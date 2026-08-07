@@ -574,6 +574,8 @@ const Sidebar = ({
     { id: 'violations', label: 'Violations', icon: 'warning' },
     { id: 'complaints', label: 'Complaints', icon: 'chat-bubble-outline' },
     { id: 'chats', label: 'Chats', icon: 'chat' },
+    { id: 'price_monitoring', label: 'Price Monitoring', icon: 'attach-money' },
+    { id: 'audit_trail', label: 'Audit Trail', icon: 'history' },
     { id: 'reports', label: 'Reports', icon: 'analytics' },
   ];
 
@@ -827,6 +829,8 @@ export default function AdminDashboardScreen({ navigation }) {
   const [announcementModal, setAnnouncementModal] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
+  const [announcementAudience, setAnnouncementAudience] = useState('both');
+  const [announcementDuration, setAnnouncementDuration] = useState('24');
   const [violationModal, setViolationModal] = useState(false);
   const [violationReason, setViolationReason] = useState('');
   const [complaintModal, setComplaintModal] = useState(false);
@@ -846,6 +850,38 @@ export default function AdminDashboardScreen({ navigation }) {
     role: '',
     phone: '',
   });
+
+  // User/Vendor/Stall Detail Modal States
+  const [userDetailModalVisible, setUserDetailModalVisible] = useState(false);
+  const [vendorDetailModalVisible, setVendorDetailModalVisible] = useState(false);
+  const [stallDetailModalVisible, setStallDetailModalVisible] = useState(false);
+  const [selectedUserForDetail, setSelectedUserForDetail] = useState(null);
+  const [selectedVendorForDetail, setSelectedVendorForDetail] = useState(null);
+  const [selectedStallForDetail, setSelectedStallForDetail] = useState(null);
+  const [userDetailData, setUserDetailData] = useState({
+    orders: [],
+    totalOrders: 0,
+    totalSpent: 0,
+  });
+  const [vendorDetailData, setVendorDetailData] = useState({
+    stall: null,
+    products: [],
+    totalProducts: 0,
+    orders: [],
+    totalOrders: 0,
+    totalRevenue: 0,
+  });
+  const [stallDetailData, setStallDetailData] = useState({
+    vendor: null,
+    products: [],
+    totalProducts: 0,
+    orders: [],
+    totalOrders: 0,
+    completedOrders: 0,
+    totalRevenue: 0,
+    recentTransactions: [],
+  });
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Filter States
   const [selectedStallCategory, setSelectedStallCategory] = useState('all');
@@ -2260,14 +2296,24 @@ export default function AdminDashboardScreen({ navigation }) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+    
+    // Calculate expiry date based on duration
+    const expiryDate = new Date();
+    expiryDate.setHours(expiryDate.getHours() + parseInt(announcementDuration));
+    
     await supabase.from('announcements').insert({
       title: announcementTitle,
       content: announcementContent,
       created_by: user.id,
+      audience: announcementAudience,
+      duration_hours: parseInt(announcementDuration),
+      expires_at: expiryDate.toISOString(),
     });
     setAnnouncementModal(false);
     setAnnouncementTitle('');
     setAnnouncementContent('');
+    setAnnouncementAudience('both');
+    setAnnouncementDuration('24');
     Alert.alert('Success', 'Announcement posted');
     fetchAllData();
   };
@@ -2315,6 +2361,99 @@ export default function AdminDashboardScreen({ navigation }) {
   };
 
   // ============================================================
+  // USER/VENDOR DETAIL VIEW FUNCTIONS
+  // ============================================================
+  
+  const viewUserDetails = async (user) => {
+    setSelectedUserForDetail(user);
+    setUserDetailModalVisible(true);
+    setDetailLoading(true);
+    
+    try {
+      // Fetch user's orders
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('consumer_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      const totalOrders = orders?.length || 0;
+      const totalSpent = orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+      
+      setUserDetailData({
+        orders: orders || [],
+        totalOrders,
+        totalSpent,
+      });
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const viewVendorDetails = async (vendor) => {
+    setSelectedVendorForDetail(vendor);
+    setVendorDetailModalVisible(true);
+    setDetailLoading(true);
+    
+    try {
+      // Fetch vendor's stall
+      const { data: stall } = await supabase
+        .from('stalls')
+        .select('*')
+        .eq('vendor_id', vendor.id)
+        .maybeSingle();
+      
+      // Fetch vendor's products
+      const stallId = stall?.id;
+      let products = [];
+      let totalProducts = 0;
+      
+      if (stallId) {
+        const { data: productsData } = await supabase
+          .from('products')
+          .select('*')
+          .eq('stall_id', stallId);
+        products = productsData || [];
+        totalProducts = products.length;
+      }
+      
+      // Fetch vendor's orders
+      let orders = [];
+      let totalOrders = 0;
+      let totalRevenue = 0;
+      
+      if (stallId) {
+        const { data: ordersData } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('stall_id', stallId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        
+        orders = ordersData || [];
+        totalOrders = orders.length;
+        totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      }
+      
+      setVendorDetailData({
+        stall: stall || null,
+        products: products.slice(0, 5),
+        totalProducts,
+        orders: orders.slice(0, 5),
+        totalOrders,
+        totalRevenue,
+      });
+    } catch (error) {
+      console.error('Error fetching vendor details:', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // ============================================================
   // RENDER FUNCTIONS
   // ============================================================
   
@@ -2331,7 +2470,11 @@ export default function AdminDashboardScreen({ navigation }) {
         data={users}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={[styles.tableRow, darkMode && styles.tableRowDark]}>
+          <TouchableOpacity 
+            style={[styles.tableRow, darkMode && styles.tableRowDark]}
+            onPress={() => viewUserDetails(item)}
+            activeOpacity={0.7}
+          >
             <View style={styles.userInfoCell}>
               <Text style={[styles.tableCell, darkMode && styles.tableCellDark]} numberOfLines={1}>{item.full_name || 'N/A'}</Text>
               <Text style={[styles.tableCellSub, darkMode && styles.tableCellSubDark]} numberOfLines={1}>{item.email}</Text>
@@ -2342,18 +2485,24 @@ export default function AdminDashboardScreen({ navigation }) {
             <View style={styles.actionButtons}>
               <TouchableOpacity 
                 style={styles.editButtonSmall}
-                onPress={() => handleEditUser(item)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleEditUser(item);
+                }}
               >
                 <MaterialIcons name="edit" size={16} color="#1565C0" />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.deleteButtonSmall}
-                onPress={() => showDeleteConfirmation(item, 'user')}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  showDeleteConfirmation(item, 'user');
+                }}
               >
                 <MaterialIcons name="delete" size={16} color="#D32F2F" />
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -2406,7 +2555,11 @@ export default function AdminDashboardScreen({ navigation }) {
           data={filteredVendors}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={[styles.tableRow, darkMode && styles.tableRowDark]}>
+            <TouchableOpacity 
+              style={[styles.tableRow, darkMode && styles.tableRowDark]}
+              onPress={() => viewVendorDetails(item)}
+              activeOpacity={0.7}
+            >
               <View style={styles.userInfoCell}>
                 <Text style={[styles.tableCell, darkMode && styles.tableCellDark]} numberOfLines={1}>{item.full_name || 'N/A'}</Text>
                 <Text style={[styles.tableCellSub, darkMode && styles.tableCellSubDark]} numberOfLines={1}>{item.email}</Text>
@@ -2423,7 +2576,10 @@ export default function AdminDashboardScreen({ navigation }) {
                 {item.stall ? (
                   <TouchableOpacity 
                     style={[styles.actionButtonSmall, item.stall.is_active ? styles.deactivateButton : styles.activateButton]}
-                    onPress={() => confirmStallAction(item.stall, item.stall.is_active ? 'deactivate' : 'activate')}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      confirmStallAction(item.stall, item.stall.is_active ? 'deactivate' : 'activate');
+                    }}
                   >
                     <Text style={styles.actionButtonText}>{item.stall.is_active ? 'Ban Stall' : 'Activate Stall'}</Text>
                   </TouchableOpacity>
@@ -2431,25 +2587,34 @@ export default function AdminDashboardScreen({ navigation }) {
                 {item.stall ? (
                   <TouchableOpacity 
                     style={styles.editButtonSmall}
-                    onPress={() => handleChatWithVendor(item)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleChatWithVendor(item);
+                    }}
                   >
                     <MaterialIcons name="chat" size={16} color="#1565C0" />
                   </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity 
                   style={styles.editButtonSmall}
-                  onPress={() => handleEditUser(item)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditUser(item);
+                  }}
                 >
                   <MaterialIcons name="edit" size={16} color="#1565C0" />
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.deleteButtonSmall}
-                  onPress={() => showDeleteConfirmation(item, 'vendor')}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    showDeleteConfirmation(item, 'vendor');
+                  }}
                 >
                   <MaterialIcons name="delete" size={16} color="#D32F2F" />
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -3203,6 +3368,30 @@ export default function AdminDashboardScreen({ navigation }) {
         return renderComplaints();
       case 'chats':
         return renderChats();
+      case 'price_monitoring':
+        return (
+          <TouchableOpacity
+            style={{ padding: 20, alignItems: 'center' }}
+            onPress={() => navigation.navigate('AdminPriceMonitoring')}
+          >
+            <MaterialIcons name="attach-money" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, color: '#666', marginTop: 10 }}>
+              Navigate to Price Monitoring Screen
+            </Text>
+          </TouchableOpacity>
+        );
+      case 'audit_trail':
+        return (
+          <TouchableOpacity
+            style={{ padding: 20, alignItems: 'center' }}
+            onPress={() => navigation.navigate('AdminAuditTrail')}
+          >
+            <MaterialIcons name="history" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, color: '#666', marginTop: 10 }}>
+              Navigate to Audit Trail Screen
+            </Text>
+          </TouchableOpacity>
+        );
       case 'reports':
         return renderReports();
       default:
@@ -3518,6 +3707,73 @@ export default function AdminDashboardScreen({ navigation }) {
               <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>New Announcement</Text>
               <TextInput style={[styles.modalInput, darkMode && styles.modalInputDark]} placeholder="Title" value={announcementTitle} onChangeText={setAnnouncementTitle} />
               <TextInput style={[styles.modalInput, styles.textArea, darkMode && styles.modalInputDark]} placeholder="Content" value={announcementContent} onChangeText={setAnnouncementContent} multiline numberOfLines={4} />
+              
+              {/* Audience Targeting */}
+              <Text style={[styles.modalLabel, darkMode && styles.modalLabelDark]}>Audience</Text>
+              <View style={styles.audienceSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'vendors' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('vendors')}
+                >
+                  <MaterialIcons name="store" size={16} color={announcementAudience === 'vendors' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'vendors' && styles.audienceOptionTextActive,
+                  ]}>Vendors Only</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'consumers' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('consumers')}
+                >
+                  <MaterialIcons name="people" size={16} color={announcementAudience === 'consumers' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'consumers' && styles.audienceOptionTextActive,
+                  ]}>Consumers Only</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'both' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('both')}
+                >
+                  <MaterialIcons name="public" size={16} color={announcementAudience === 'both' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'both' && styles.audienceOptionTextActive,
+                  ]}>Both</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Duration Setting */}
+              <Text style={[styles.modalLabel, darkMode && styles.modalLabelDark]}>Duration (hours)</Text>
+              <View style={styles.durationSelector}>
+                {[1, 6, 12, 24, 48, 72, 168].map((hours) => (
+                  <TouchableOpacity
+                    key={hours}
+                    style={[
+                      styles.durationOption,
+                      announcementDuration === hours.toString() && styles.durationOptionActive,
+                    ]}
+                    onPress={() => setAnnouncementDuration(hours.toString())}
+                  >
+                    <Text style={[
+                      styles.durationOptionText,
+                      announcementDuration === hours.toString() && styles.durationOptionTextActive,
+                    ]}>
+                      {hours === 168 ? '1 week' : `${hours}h`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setAnnouncementModal(false)}>
                   <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Cancel</Text>
@@ -3646,6 +3902,260 @@ export default function AdminDashboardScreen({ navigation }) {
                   )}
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* USER DETAIL MODAL */}
+        <Modal visible={userDetailModalVisible} transparent animationType="slide">
+          <View style={[styles.modalOverlay, darkMode && styles.modalOverlayDark]}>
+            <View style={[styles.modalContainer, darkMode && styles.modalContainerDark, { maxHeight: '85%', width: Platform.OS === 'web' ? 600 : '90%' }]}>
+              <ScrollView showsVerticalScrollIndicator={true}>
+                <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>User Details</Text>
+                
+                {selectedUserForDetail && (
+                  <>
+                    {/* User Info Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Profile Information</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Name</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.full_name || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Email</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.email || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Phone</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.phone || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Role</Text>
+                        <View style={[styles.roleBadge, { backgroundColor: selectedUserForDetail.role === 'admin' ? '#C62828' : selectedUserForDetail.role === 'vendor' ? '#E65100' : '#1565C0' }]}>
+                          <Text style={styles.roleText}>{selectedUserForDetail.role}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Member Since</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>
+                          {selectedUserForDetail.created_at ? new Date(selectedUserForDetail.created_at).toLocaleDateString() : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Stats Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Statistics</Text>
+                      <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{userDetailData.totalOrders}</Text>
+                          <Text style={styles.statLabel}>Total Orders</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>₱{userDetailData.totalSpent.toFixed(2)}</Text>
+                          <Text style={styles.statLabel}>Total Spent</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Recent Orders */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Orders</Text>
+                      {detailLoading ? (
+                        <ActivityIndicator size="small" color="#C62828" style={{ padding: 20 }} />
+                      ) : userDetailData.orders.length > 0 ? (
+                        userDetailData.orders.map((order) => (
+                          <View key={order.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]}>
+                                Order #{order.order_number?.slice(-8) || order.id.toString().slice(-8)}
+                              </Text>
+                              <View style={[styles.transactionStatus, { backgroundColor: order.status === 'completed' ? '#10B981' : order.status === 'cancelled' ? '#EF4444' : '#F59E0B' }]}>
+                                <Text style={styles.transactionStatusText}>{order.status}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>
+                              ₱{order.total_amount || 0}
+                            </Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.emptySection}>
+                          <MaterialIcons name="shopping-cart" size={40} color="#CCCCCC" />
+                          <Text style={[styles.emptySectionText, darkMode && styles.emptySectionTextDark]}>No orders yet</Text>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setUserDetailModalVisible(false)}>
+                    <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Close</Text>
+                  </TouchableOpacity>
+                  {selectedUserForDetail && (
+                    <TouchableOpacity style={[styles.modalSubmit, darkMode && styles.modalSubmitDark]} onPress={() => {
+                      setUserDetailModalVisible(false);
+                      handleEditUser(selectedUserForDetail);
+                    }}>
+                      <Text style={styles.modalSubmitText}>Edit User</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* VENDOR DETAIL MODAL */}
+        <Modal visible={vendorDetailModalVisible} transparent animationType="slide">
+          <View style={[styles.modalOverlay, darkMode && styles.modalOverlayDark]}>
+            <View style={[styles.modalContainer, darkMode && styles.modalContainerDark, { maxHeight: '85%', width: Platform.OS === 'web' ? 700 : '90%' }]}>
+              <ScrollView showsVerticalScrollIndicator={true}>
+                <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>Vendor Details</Text>
+                
+                {selectedVendorForDetail && (
+                  <>
+                    {/* Vendor Info Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Vendor Information</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Name</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedVendorForDetail.full_name || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Email</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedVendorForDetail.email || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Phone</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedVendorForDetail.phone || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Member Since</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>
+                          {selectedVendorForDetail.created_at ? new Date(selectedVendorForDetail.created_at).toLocaleDateString() : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Stall Info Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Stall Information</Text>
+                      {vendorDetailData.stall ? (
+                        <>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Stall Name</Text>
+                            <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{vendorDetailData.stall.stall_name || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Stall Number</Text>
+                            <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>#{vendorDetailData.stall.stall_number || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Section</Text>
+                            <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{vendorDetailData.stall.section || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Status</Text>
+                            <View style={[styles.statusBadge, vendorDetailData.stall.is_active ? styles.activeBadge : styles.inactiveBadge]}>
+                              <Text style={styles.statusText}>{vendorDetailData.stall.is_active ? 'Active' : 'Inactive'}</Text>
+                            </View>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.emptySection}>
+                          <MaterialIcons name="storefront" size={40} color="#CCCCCC" />
+                          <Text style={[styles.emptySectionText, darkMode && styles.emptySectionTextDark]}>No stall assigned</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Stats Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Business Statistics</Text>
+                      <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{vendorDetailData.totalProducts}</Text>
+                          <Text style={styles.statLabel}>Products</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{vendorDetailData.totalOrders}</Text>
+                          <Text style={styles.statLabel}>Orders</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>₱{vendorDetailData.totalRevenue.toFixed(2)}</Text>
+                          <Text style={styles.statLabel}>Revenue</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Recent Products */}
+                    {vendorDetailData.products.length > 0 && (
+                      <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                        <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Products</Text>
+                        {vendorDetailData.products.map((product) => (
+                          <View key={product.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]}>{product.name}</Text>
+                              <View style={[styles.statusBadge, product.is_available ? styles.activeBadge : styles.inactiveBadge]}>
+                                <Text style={styles.statusText}>{product.is_available ? 'Available' : 'Unavailable'}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>₱{product.price || 0}</Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              Stock: {product.stock_quantity || 0} • {product.category || 'Uncategorized'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Recent Orders */}
+                    {vendorDetailData.orders.length > 0 && (
+                      <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                        <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Orders</Text>
+                        {vendorDetailData.orders.map((order) => (
+                          <View key={order.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]}>
+                                Order #{order.order_number?.slice(-8) || order.id.toString().slice(-8)}
+                              </Text>
+                              <View style={[styles.transactionStatus, { backgroundColor: order.status === 'completed' ? '#10B981' : order.status === 'cancelled' ? '#EF4444' : '#F59E0B' }]}>
+                                <Text style={styles.transactionStatusText}>{order.status}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>
+                              ₱{order.total_amount || 0}
+                            </Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setVendorDetailModalVisible(false)}>
+                    <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Close</Text>
+                  </TouchableOpacity>
+                  {selectedVendorForDetail && (
+                    <TouchableOpacity style={[styles.modalSubmit, darkMode && styles.modalSubmitDark]} onPress={() => {
+                      setVendorDetailModalVisible(false);
+                      handleEditUser(selectedVendorForDetail);
+                    }}>
+                      <Text style={styles.modalSubmitText}>Edit Vendor</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -5821,9 +6331,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     backgroundColor: '#2a2a2a',
   },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  modalLabelDark: {
+    color: '#FFFFFF',
+  },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  audienceSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  audienceOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  audienceOptionActive: {
+    backgroundColor: '#C62828',
+    borderColor: '#C62828',
+  },
+  audienceOptionText: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  audienceOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  durationSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 16,
+  },
+  durationOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  durationOptionActive: {
+    backgroundColor: '#C62828',
+    borderColor: '#C62828',
+  },
+  durationOptionText: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  durationOptionTextActive: {
+    color: '#FFFFFF',
   },
   modalButtons: {
     flexDirection: 'row',

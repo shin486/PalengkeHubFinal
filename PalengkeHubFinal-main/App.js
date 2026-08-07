@@ -26,7 +26,10 @@ import NotificationScreen from './src/screens/customer/NotificationScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import AdminVendorApplicationsScreen from './src/screens/admin/AdminVendorApplicationsScreen';
 import AdminStallsManagementScreen from './src/screens/admin/AdminStallsManagementScreen';
+import AdminStallDetailsScreen from './src/screens/admin/AdminStallDetailsScreen';
 import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
+import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
+import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
 import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
@@ -185,40 +188,40 @@ function AppStack({ isGuest }) {
     
     switch (routeName) {
       case 'Home':
-        return { title: '🛒 PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
       case 'Search':
-        return { title: '🔍 Search', subtitle: 'Find products and stalls' };
+        return { title: 'Search', subtitle: 'Find products and stalls' };
       case 'Cart':
         return { 
-          title: '🛒 Your Cart', 
+          title: 'Your Cart', 
           subtitle: cartCount > 0 ? `${cartCount} item${cartCount > 1 ? 's' : ''}` : 'Add items to get started' 
         };
       case 'Orders':
-        return { title: '📋 My Orders', subtitle: 'Track your orders here' };
+        return { title: 'My Orders', subtitle: 'Track your orders here' };
       case 'Profile':
-        return { title: '👤 My Profile', subtitle: 'Manage your account' };
+        return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
-        return { title: '🏪 Stalls Directory', subtitle: 'Browse all market stalls' };
+        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'ProductDetails':
-        return { title: '🛍️ Product Details', subtitle: 'View item details' };
+        return { title: 'Product Details', subtitle: 'View item details' };
       case 'StallDetails':
-        return { title: '🏪 Stall Details', subtitle: 'View stall information' };
+        return { title: 'Stall Details', subtitle: 'View stall information' };
       case 'CategoryProducts':
-        return { title: '📂 Category', subtitle: 'Browse products' };
+        return { title: 'Category', subtitle: 'Browse products' };
       case 'ChatList':
-        return { title: '💬 Messages', subtitle: 'Chat with stalls' };
+        return { title: 'Messages', subtitle: 'Chat with stalls' };
       case 'ChatDetail':
-        return { title: '💬 Chat', subtitle: 'Conversation' };
+        return { title: 'Chat', subtitle: 'Conversation' };
       case 'Notifications':
-        return { title: '🔔 Notifications', subtitle: 'Your alerts' };
+        return { title: 'Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
-        return { title: '🚩 Report Issue', subtitle: 'Help us improve' };
+        return { title: 'Report Issue', subtitle: 'Help us improve' };
       case 'Favorites':
-        return { title: '❤️ Favorites', subtitle: 'Your saved products and stalls' };
+        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
       case 'CustomerReports':
-        return { title: '📋 My Reports', subtitle: 'Track your reports' };
+        return { title: 'My Reports', subtitle: 'Track your reports' };
       default:
-        return { title: '🛒 PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
     }
   };
 
@@ -252,15 +255,15 @@ function AppStack({ isGuest }) {
       </Stack.Navigator>
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
-          <Text style={styles.navIcon}>🏠</Text>
+          <MaterialIcons name="home" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.navIcon}>🔍</Text>
+          <MaterialIcons name="search" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Search</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Cart')}>
-          <Text style={styles.navIcon}>🛒</Text>
+          <MaterialIcons name="shopping-cart" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Cart</Text>
           {cartCount > 0 && (
             <View style={styles.navBadge}>
@@ -269,19 +272,19 @@ function AppStack({ isGuest }) {
           )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Orders')}>
-          <Text style={styles.navIcon}>📋</Text>
+          <MaterialIcons name="receipt-long" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Orders</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Favorites')}>
-          <Text style={styles.navIcon}>❤️</Text>
+          <MaterialIcons name="favorite-border" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Favorites</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
-          <Text style={styles.navIcon}>💬</Text>
+          <MaterialIcons name="chat" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Chats</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.navIcon}>🔔</Text>
+          <MaterialIcons name="notifications" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Alerts</Text>
           {unreadCount > 0 && (
             <View style={styles.navBadge}>
@@ -290,7 +293,7 @@ function AppStack({ isGuest }) {
           )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-          <Text style={styles.navIcon}>👤</Text>
+          <MaterialIcons name="person" size={20} color={colors.text.secondary} />
           <Text style={styles.navText}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -385,7 +388,10 @@ function RootNavigator() {
         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
         <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />
         <Stack.Screen name="AdminStallsManagement" component={AdminStallsManagementScreen} />
+        <Stack.Screen name="AdminStallDetails" component={AdminStallDetailsScreen} />
         <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
+        <Stack.Screen name="AdminAuditTrail" component={AdminAuditTrailScreen} />
+        <Stack.Screen name="AdminPriceMonitoring" component={AdminPriceMonitoringScreen} />
         <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
         
         {/* Customer / Guest App */}
@@ -450,7 +456,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   navIcon: {
-    fontSize: 20,
     marginBottom: 2,
   },
   navText: {
