@@ -1193,6 +1193,14 @@
   border-bottom-left-radius: 6px;
 }
 
+.chat-sender-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+  text-transform: capitalize;
+  opacity: 0.8;
+}
+
 .chat-msg-time {
   font-size: 0.68rem;
   margin-top: 6px;
@@ -1382,4 +1390,393 @@ input[type="checkbox"], input[type="radio"] {
   .stats-grid { grid-template-columns: 1fr; }
   .admin-main { padding: 16px; }
   .admin-section { padding: 20px 16px; }
+}
+
+/* ========== TOOLBAR / SEARCH / FILTERS ========== */
+.admin-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.admin-toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--admin-surface);
+  border: 2px solid var(--admin-border);
+  border-radius: var(--admin-radius-sm);
+  padding: 8px 14px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+  transition: all var(--transition-smooth);
+  color: var(--admin-text-muted);
+}
+
+.admin-toolbar-search:focus-within {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.admin-search-input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 0.88rem;
+  font-family: 'Manrope', sans-serif;
+  color: var(--admin-text);
+  background: transparent;
+}
+
+.admin-search-input::placeholder {
+  color: var(--admin-text-muted);
+}
+
+.admin-filter-select {
+  padding: 9px 14px;
+  border: 2px solid var(--admin-border);
+  border-radius: var(--admin-radius-sm);
+  font-size: 0.85rem;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 500;
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  min-width: 140px;
+}
+
+.admin-filter-select:hover {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.06);
+}
+
+.admin-filter-select:focus {
+  outline: none;
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* ========== TABLE SUBTEXT ========== */
+.table-subtext, .text-subtext {
+  font-size: 0.75rem;
+  color: var(--admin-text-muted);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* ========== ACTION BUTTONS ========== */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ========== MODAL ========== */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out forwards;
+  padding: 20px;
+}
+
+.admin-modal {
+  background: var(--admin-surface);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow-xl);
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+.admin-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--admin-border-light);
+  position: sticky;
+  top: 0;
+  background: var(--admin-surface);
+  z-index: 1;
+}
+
+.admin-modal-header h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #7A1C1E;
+  margin: 0;
+}
+
+.admin-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--admin-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.admin-modal-close:hover {
+  color: var(--admin-primary);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.admin-modal-body {
+  padding: 24px;
+}
+
+/* ========== FORM ========== */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--admin-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-input {
+  padding: 10px 14px;
+  border: 2px solid var(--admin-border);
+  border-radius: var(--admin-radius-sm);
+  font-size: 0.88rem;
+  font-family: 'Manrope', sans-serif;
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  transition: all var(--transition-smooth);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.form-input::placeholder {
+  color: var(--admin-text-muted);
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  padding: 10px 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--admin-border-light);
+}
+
+.btn-secondary {
+  background: var(--admin-bg);
+  color: var(--admin-text-secondary);
+  border: 1px solid var(--admin-border);
+}
+
+.btn-secondary:hover {
+  background: var(--admin-border-light);
+  transform: translateY(-2px);
+  box-shadow: var(--admin-shadow);
+}
+
+/* ========== USER DETAIL ========== */
+.user-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.user-detail-grid div {
+  padding: 12px 16px;
+  background: var(--admin-bg);
+  border-radius: var(--admin-radius-sm);
+  font-size: 0.88rem;
+  color: var(--admin-text-secondary);
+}
+
+/* ========== ANNOUNCEMENT CARD ENHANCEMENTS ========== */
+.announcement-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.announcement-card-top h4 {
+  margin: 0;
+  flex: 1;
+}
+
+.announcement-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.announcement-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--admin-border-light);
+}
+
+.announcement-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ========== COMPLAINT DETAIL ========== */
+.complaint-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.complaint-detail-row {
+  font-size: 0.9rem;
+  color: var(--admin-text-secondary);
+}
+
+.complaint-description {
+  background: var(--admin-bg);
+  border-radius: var(--admin-radius-sm);
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  color: var(--admin-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* ========== REPORT CARDS ========== */
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.report-card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 24px;
+  transition: all var(--transition-bounce);
+  animation: cardEntrance 0.5s ease-out forwards;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--admin-shadow-lg);
+  border-color: rgba(220, 38, 38, 0.12);
+}
+
+.report-card h4 {
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #7A1C1E;
+  margin: 0;
+}
+
+.report-card p {
+  font-size: 0.85rem;
+  color: var(--admin-text-muted);
+  line-height: 1.5;
+  flex: 1;
+  margin: 0;
+}
+
+.report-card .btn {
+  align-self: flex-start;
+}
+
+/* ========== GRAPH RANGE BUTTONS ========== */
+.graph-range-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* ========== RESPONSIVE ENHANCEMENTS ========== */
+@media (max-width: 768px) {
+  .admin-toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .admin-toolbar-search {
+    max-width: none;
+  }
+  
+  .admin-filter-select {
+    width: 100%;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+  }
+  
+  .modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
 }
