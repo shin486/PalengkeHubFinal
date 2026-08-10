@@ -2,10 +2,25 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import AdminSidebar from './admin/AdminSidebar';
+import { ToastContainer, toast } from '../components/admin/Toast';
+import { Skeleton, SkeletonTable, SkeletonStatCard, SkeletonChart } from '../components/admin/Skeleton';
+import {
+  exportToCSV,
+  formatDateRange,
+  getDateRangePreset,
+  aggregateSalesByDate,
+  aggregateByStatus,
+  aggregateRevenueByStall,
+  aggregateRevenueByCategory,
+  calculateOrderStats,
+  calculateProductPerformance,
+  calculateVendorPerformance,
+  calculateCustomerAnalytics,
+} from '../lib/exportUtils';
 import { jsPDF } from 'jspdf';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, BarChart, Bar,
+  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
 } from 'recharts';
 import '../admin.css';
 
@@ -54,6 +69,7 @@ function FilterSelect({ value, onChange, options, placeholder = 'All' }) {
 function EmptyState({ message }) {
   return (
     <div className="empty-state">
+      <div className="empty-state-icon">📦</div>
       <div className="empty-state-text">{message}</div>
     </div>
   );
@@ -96,20 +112,16 @@ const PDF_COLORS = {
 
 function addPdfHeader(doc, title, subtitle) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  // Header band
   doc.setFillColor(...PDF_COLORS.primary);
   doc.rect(0, 0, pageWidth, 42, 'F');
-  // Accent line
   doc.setFillColor(...PDF_COLORS.accent);
   doc.rect(0, 42, pageWidth, 3, 'F');
-  // Logo placeholder (text-based since image loading is async)
   doc.setFillColor(...PDF_COLORS.white);
   doc.roundedRect(14, 8, 26, 26, 4, 4, 'F');
   doc.setTextColor(...PDF_COLORS.primary);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.text('PH', 27, 25, { align: 'center' });
-  // Title
   doc.setTextColor(...PDF_COLORS.white);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
@@ -117,7 +129,6 @@ function addPdfHeader(doc, title, subtitle) {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.text(subtitle, 48, 30);
-  // Date on right
   doc.setFontSize(8);
   doc.text(`Generated: ${new Date().toLocaleString('en-PH')}`, pageWidth - 14, 20, { align: 'right' });
   doc.text('PalengkeHub Admin System', pageWidth - 14, 30, { align: 'right' });
@@ -135,6 +146,7 @@ function addPdfFooter(doc) {
 }
 
 function addPdfTable(doc, headers, rows, startY, colWidths) {
+  const pageHeight = doc.internal.pageSize.getHeight();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const tableWidth = pageWidth - margin * 2;
@@ -217,6 +229,23 @@ function generatePdf({ title, subtitle, filename, headers, rows, colWidths, summ
   doc.save(filename);
 }
 
+/* ==================== AUDIT LOG ==================== */
+async function logAudit(action, table, recordId, details) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from('audit_log').insert({
+      action,
+      table_name: table,
+      record_id: recordId,
+      details,
+      user_id: session.user.id,
+    });
+  } catch (err) {
+    console.error('Audit log error:', err);
+  }
+}
+
 /* ==================== MAIN COMPONENT ==================== */
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -234,7 +263,7 @@ export default function AdminDashboard() {
     })();
   }, [navigate]);
 
-  if (loading) return <div className="admin-loading">Loading dashboard</div>;
+  if (loading) return <div className="admin-loading"><div className="admin-loading-spinner"></div><span>Loading dashboard</span></div>;
 
   const labels = {
     overview: 'Admin Dashboard', users: 'User Management', stalls: 'Stall Management',
@@ -259,6 +288,7 @@ export default function AdminDashboard() {
         </div>
         <SectionRenderer section={activeSection} />
       </main>
+      <ToastContainer />
     </div>
   );
 }
@@ -287,33 +317,62 @@ function Overview() {
   const [stats, setStats] = useState({});
   const [orders, setOrders] = useState([]);
   const [salesData, setSalesData] = useState([]);
-  useEffect(() => { load(); }, []);
-  async function load() {
-    const r = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'vendor'),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'consumer'),
-      supabase.from('stalls').select('id', { count: 'exact', head: true }),
-      supabase.from('orders').select('id', { count: 'exact', head: true }),
-      supabase.from('products').select('id', { count: 'exact', head: true }),
-      supabase.from('vendor_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ]);
-    setStats({ vendors: r[0].count || 0, customers: r[1].count || 0, stalls: r[2].count || 0, orders: r[3].count || 0, products: r[4].count || 0, pendingApps: r[5].count || 0, pendingOrders: r[6].count || 0, pendingComplaints: r[7].count || 0 });
-    const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5);
-    setOrders(data || []);
-    // Sales data for chart (last 7 days)
-    const { data: allOrders } = await supabase.from('orders').select('total_amount, created_at').eq('status', 'completed');
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      const dayTotal = (allOrders || []).filter(o => (o.created_at || '').startsWith(key)).reduce((s, o) => s + parseFloat(o.total_amount || 0), 0);
-      days.push({ date: d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }), sales: dayTotal });
+  const [orderStatusData, setOrderStatusData] = useState([]);
+  const [revenueByStall, setRevenueByStall] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'vendor'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'consumer'),
+        supabase.from('stalls').select('id', { count: 'exact', head: true }),
+        supabase.from('orders').select('id', { count: 'exact', head: true }),
+        supabase.from('products').select('id', { count: 'exact', head: true }),
+        supabase.from('vendor_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      ]);
+      setStats({ vendors: r[0].count || 0, customers: r[1].count || 0, stalls: r[2].count || 0, orders: r[3].count || 0, products: r[4].count || 0, pendingApps: r[5].count || 0, pendingOrders: r[6].count || 0, pendingComplaints: r[7].count || 0 });
+      const { data: recentOrders } = await supabase.from('orders').select('*, customer:consumer_id(full_name), stall:stall_id(stall_name)').order('created_at', { ascending: false }).limit(5);
+      setOrders(recentOrders || []);
+      // Sales data for chart (last 7 days)
+      const { data: allOrders } = await supabase.from('orders').select('total_amount, created_at, status').eq('status', 'completed');
+      setSalesData(aggregateSalesByDate(allOrders || [], 7));
+      // Order status distribution
+      const { data: allStatusOrders } = await supabase.from('orders').select('status').limit(1000);
+      setOrderStatusData(aggregateByStatus(allStatusOrders || []));
+      // Revenue by stall
+      const { data: stallOrders } = await supabase.from('orders').select('*, stall:stall_id(stall_name, stall_number)').eq('status', 'completed').limit(1000);
+      setRevenueByStall(aggregateRevenueByStall(stallOrders || []));
+      toast({ message: 'Dashboard data refreshed successfully', type: 'success' });
+    } catch (err) {
+      setError(err.message || 'Failed to load dashboard data');
+      toast({ message: 'Failed to load dashboard data', type: 'error' });
+    } finally {
+      setLoading(false);
     }
-    setSalesData(days);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const STATUS_COLORS = {
+    pending: '#F59E0B', confirmed: '#3B82F6', preparing: '#8B5CF6',
+    ready: '#10B981', completed: '#22C55E', cancelled: '#EF4444',
+  };
+
+  if (error) {
+    return (
+      <div className="error-state">
+        <div className="error-state-icon">!</div>
+        <div className="error-state-text">{error}</div>
+        <button className="btn btn-primary refresh-btn" onClick={load}>Retry</button>
+      </div>
+    );
   }
+
   return (
     <>
       <div className="priority-grid">
@@ -340,18 +399,69 @@ function Overview() {
           </div>
         ))}
       </div>
-      <div className="admin-section">
-        <div className="admin-section-header">Sales Overview - Last 7 Days</div>
+      <div className="chart-card">
+        <div className="chart-card-header">
+          <h3 className="chart-card-title">Sales Overview - Last 7 Days</h3>
+          <button className="refresh-btn" onClick={load} disabled={loading}>
+            <span className={loading ? 'refreshing' : ''}>Refresh</span>
+          </button>
+        </div>
         <div style={{ height: 280 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#6B7280' }} />
-              <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} />
-              <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
-              <Bar dataKey="sales" fill="#DC2626" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {loading ? <SkeletonChart /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={salesData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#6B7280' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} />
+                <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
+                <Bar dataKey="sales" fill="#DC2626" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+      <div className="chart-card">
+        <div className="chart-card-header">
+          <h3 className="chart-card-title">Order Status Distribution</h3>
+        </div>
+        <div style={{ height: 280 }}>
+          {loading ? <SkeletonChart /> : orderStatusData.length === 0 ? (
+            <EmptyState message="No order data available" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <Tooltip formatter={(v) => [v, 'Orders']} />
+                <Legend />
+                <Pie data={orderStatusData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                  {orderStatusData.map((entry, i) => (
+                    <Cell key={`cell-${i}`} fill={STATUS_COLORS[entry.status] || '#9CA3AF'} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+      <div className="chart-card">
+        <div className="chart-card-header">
+          <h3 className="chart-card-title">Revenue by Stall (Top 5)</h3>
+        </div>
+        <div style={{ height: 280 }}>
+          {loading ? <SkeletonChart /> : revenueByStall.length === 0 ? (
+            <EmptyState message="No revenue data available" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={revenueByStall.slice(0, 5)} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <YAxis dataKey="stall" tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Revenue']} />
+                <Legend />
+                <Bar dataKey="revenue" fill="#DC2626" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
       <div className="admin-section">
@@ -360,7 +470,11 @@ function Overview() {
           <table className="admin-table">
             <thead><tr><th>Order #</th><th>Status</th><th>Total</th><th>Date</th></tr></thead>
             <tbody>
-              {orders.length === 0 ? <tr><td colSpan="4"><EmptyState message="No orders yet" /></td></tr>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}><td colSpan="4"><SkeletonTable rows={1} cols={4} /></td></tr>
+                ))
+              ) : orders.length === 0 ? <tr><td colSpan="4"><EmptyState message="No orders yet" /></td></tr>
                 : orders.map(o => { const s = ORDER_STATUS[o.status] || ORDER_STATUS.pending; return (
                   <tr key={o.id}><td>#{o.order_number?.slice(-6) || String(o.id).slice(-6)}</td><td><span className={`status-badge ${s.cls}`}>{s.label}</span></td><td>₱{PH(o.total_amount || o.total)}</td><td>{PH_DATE(o.created_at)}</td></tr>
                 ); })}
@@ -403,6 +517,7 @@ function StallManagement() {
   const toggleActive = async (stall) => {
     await supabase.from('stalls').update({ is_active: !stall.is_active }).eq('id', stall.id);
     await logAudit('stall_status_change', 'stalls', stall.id, `${stall.stall_name || `Stall #${stall.stall_number}`} ${stall.is_active ? 'deactivated' : 'activated'}`);
+    toast({ message: `Stall ${stall.is_active ? 'deactivated' : 'activated'} successfully`, type: 'success' });
     load();
   };
 
@@ -419,6 +534,7 @@ function StallManagement() {
     await logAudit('stall_update', 'stalls', `${editing.stall_name || `Stall #${editing.stall_number}`}`, 'Stall details updated');
     setSaving(false);
     setEditing(null);
+    toast({ message: 'Stall details updated successfully', type: 'success' });
     load();
   };
 
@@ -558,6 +674,7 @@ function UserManagement() {
   const toggleActive = async (user) => {
     await supabase.from('profiles').update({ is_active: user.is_active === false ? true : false }).eq('id', user.id);
     await logAudit('user_status_change', 'profiles', user.email, `${user.email} ${user.is_active === false ? 'activated' : 'deactivated'}`);
+    toast({ message: `User ${user.is_active === false ? 'activated' : 'deactivated'} successfully`, type: 'success' });
     load();
   };
 
@@ -958,6 +1075,7 @@ function Orders() {
   const update = async (id, status) => {
     await supabase.from('orders').update({ status }).eq('id', id);
     await logAudit('order_status_change', 'orders', `Order #${String(id).slice(-6)}`, `Status changed to ${status}`);
+    toast({ message: `Order status updated to ${status}`, type: 'success' });
     load();
   };
 
@@ -1008,53 +1126,44 @@ function Orders() {
 
 /* ==================== ANNOUNCEMENTS ==================== */
 function Announcements() {
-  const [items, setItems] = useState([]);
-  const [search, setSearch] = useState('');
-  const [audienceFilter, setAudienceFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [announcements, setAnnouncements] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
   const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
 
-  const load = useCallback(() => {
-    supabase.from('announcements').select('*').order('created_at', { ascending: false }).then(({ data }) => setItems(data || []));
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+    setAnnouncements(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const now = new Date();
-  const filtered = items.filter(a => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || (a.title || '').toLowerCase().includes(q) || (a.content || '').toLowerCase().includes(q);
-    const matchAudience = !audienceFilter || a.audience === audienceFilter;
-    const isExpired = a.expires_at && new Date(a.expires_at) < now;
-    const matchStatus = !statusFilter || (statusFilter === 'active' ? !isExpired : isExpired);
-    return matchSearch && matchAudience && matchStatus;
-  });
-
   const create = async () => {
-    if (!form.title.trim() || !form.content.trim()) return;
     setSaving(true);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + parseInt(form.duration_days || 7));
-    await supabase.from('announcements').insert({
+    const { error } = await supabase.from('announcements').insert({
       title: form.title,
       content: form.content,
       audience: form.audience,
-      expires_at: expiresAt.toISOString(),
+      duration_days: form.duration_days,
       is_promotion: form.is_promotion,
       promotion_type: form.is_promotion ? form.promotion_type : null,
     });
-    await logAudit('announcement_create', 'announcements', form.title, `Announcement created for ${form.audience} audience`);
+    if (error) {
+      toast({ message: `Failed to create announcement: ${error.message}`, type: 'error' });
+    } else {
+      setSaving(false);
+      setShowForm(false);
+      setForm({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
+      toast({ message: 'Announcement created successfully', type: 'success' });
+      load();
+    }
     setSaving(false);
-    setShowForm(false);
-    setForm({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
-    load();
   };
 
   const deleteAnnouncement = async (a) => {
-    if (!window.confirm(`Delete announcement "${a.title}"?`)) return;
+    if (!window.confirm('Are you sure you want to delete this announcement?')) return;
     await supabase.from('announcements').delete().eq('id', a.id);
     await logAudit('announcement_delete', 'announcements', a.title, 'Announcement deleted');
+    toast({ message: 'Announcement deleted', type: 'success' });
     load();
   };
 
@@ -1062,79 +1171,65 @@ function Announcements() {
     <div className="admin-section">
       <div className="admin-section-header">Announcements</div>
       <div className="admin-toolbar-row">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search announcements..." />
-        <FilterSelect value={audienceFilter} onChange={setAudienceFilter} options={[{ value: 'all', label: 'Everyone' }, { value: 'vendor', label: 'Vendors' }, { value: 'consumer', label: 'Consumers' }]} placeholder="All Audiences" />
-        <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }]} placeholder="All Statuses" />
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>New Announcement</button>
+        <button className="btn btn-primary" onClick={() => setShowForm(true)}>Create Announcement</button>
       </div>
       <div className="announcement-grid">
-        {filtered.length === 0 ? <EmptyState message="No announcements found" />
-          : filtered.map(a => {
-            const isExpired = a.expires_at && new Date(a.expires_at) < now;
-            return (
-              <div key={a.id} className="announcement-card">
-                <div className="announcement-card-top">
-                  <h4>{a.title}</h4>
-                  {a.is_promotion && <span className="status-badge status-confirmed">Promotion</span>}
-                </div>
-                <p>{a.content}</p>
-                <div className="announcement-meta">
-                  <span className="status-badge status-approved" style={{ textTransform: 'capitalize' }}>{a.audience || 'all'}</span>
-                  {a.promotion_type && <span className="status-badge status-pending">{a.promotion_type}</span>}
-                  <span className={`status-badge ${isExpired ? 'status-cancelled' : 'status-completed'}`}>{isExpired ? 'Expired' : 'Active'}</span>
-                </div>
-                <div className="announcement-footer">
-                  <div className="date">Created: {PH_DATE(a.created_at)}</div>
-                  {a.expires_at && <div className="date">Expires: {PH_DATE(a.expires_at)}</div>}
-                </div>
+        {announcements.length === 0 ? <EmptyState message="No announcements yet" />
+          : announcements.map(a => (
+            <div key={a.id} className="announcement-card">
+              <div className="announcement-card-top">
+                <h4>{a.title}</h4>
+                {a.is_promotion && <span className="badge badge-warning">Promotion</span>}
+              </div>
+              <p>{a.content}</p>
+              <div className="announcement-meta">
+                <span className="badge badge-info">Audience: {a.audience}</span>
+                <span className="badge badge-primary">Duration: {a.duration_days} days</span>
+              </div>
+              <div className="announcement-footer">
+                <span className="text-subtext">{PH_DATETIME(a.created_at)}</span>
                 <div className="announcement-actions">
                   <button className="btn btn-sm btn-danger" onClick={() => deleteAnnouncement(a)}>Delete</button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
       </div>
 
       {showForm && (
-        <Modal title="New Announcement" onClose={() => setShowForm(false)}>
+        <Modal title="Create Announcement" onClose={() => setShowForm(false)}>
           <div className="form-grid">
             <FormField label="Title">
-              <input className="form-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Announcement title" />
+              <input className="form-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+            </FormField>
+            <FormField label="Content">
+              <textarea className="form-input" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} />
             </FormField>
             <FormField label="Audience">
               <select className="form-input" value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
-                <option value="all">Everyone (Vendors & Consumers)</option>
+                <option value="all">All Users</option>
                 <option value="vendor">Vendors Only</option>
-                <option value="consumer">Consumers Only</option>
+                <option value="consumer">Customers Only</option>
               </select>
             </FormField>
-            <FormField label="Content">
-              <textarea className="form-input" rows="4" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="Announcement content" />
-            </FormField>
             <FormField label="Duration (days)">
-              <input type="number" className="form-input" min="1" max="365" value={form.duration_days} onChange={e => setForm({ ...form, duration_days: e.target.value })} />
+              <input type="number" className="form-input" value={form.duration_days} onChange={e => setForm({ ...form, duration_days: parseInt(e.target.value) || 7 })} />
             </FormField>
-            <FormField label="Promotion">
-              <label className="checkbox-label">
-                <input type="checkbox" checked={form.is_promotion} onChange={e => setForm({ ...form, is_promotion: e.target.checked })} />
-                Mark as promotion
-              </label>
+            <FormField label="Is Promotion?">
+              <select className="form-input" value={form.is_promotion ? 'true' : 'false'} onChange={e => setForm({ ...form, is_promotion: e.target.value === 'true' })}>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
             </FormField>
             {form.is_promotion && (
               <FormField label="Promotion Type">
-                <select className="form-input" value={form.promotion_type} onChange={e => setForm({ ...form, promotion_type: e.target.value })}>
-                  <option value="">Select type</option>
-                  <option value="stall_promotion">Stall Promotion</option>
-                  <option value="product_promotion">Product Promotion</option>
-                  <option value="market_event">Market Event</option>
-                  <option value="seasonal">Seasonal</option>
-                </select>
+                <input className="form-input" value={form.promotion_type} onChange={e => setForm({ ...form, promotion_type: e.target.value })} />
               </FormField>
             )}
           </div>
           <div className="modal-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={create} disabled={saving}>{saving ? 'Creating...' : 'Create Announcement'}</button>
+            <button className="btn btn-primary" onClick={create} disabled={saving}>{saving ? 'Creating...' : 'Create'}</button>
           </div>
         </Modal>
       )}
@@ -1147,80 +1242,323 @@ function ComplaintManagement() {
   const [complaints, setComplaints] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [selected, setSelected] = useState(null);
   const [resolution, setResolution] = useState('');
 
-  const load = useCallback(() => {
-    supabase.from('complaints').select('*').order('created_at', { ascending: false }).then(({ data }) => setComplaints(data || []));
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('complaints').select('*, user:profiles(full_name, email)').order('created_at', { ascending: false });
+    setComplaints(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const filtered = complaints.filter(c => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || (c.user_name || '').toLowerCase().includes(q) || (c.subject || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q);
-    const matchStatus = !statusFilter || c.status === statusFilter;
-    const matchType = !typeFilter || c.complaint_type === typeFilter;
-    return matchSearch && matchStatus && matchType;
-  });
+  const types = [
+    { value: 'pending', label: 'Pending', cls: 'status-pending' },
+    { value: 'in_progress', label: 'In Progress', cls: 'status-preparing' },
+    { value: 'resolved', label: 'Resolved', cls: 'status-completed' },
+    { value: 'rejected', label: 'Rejected', cls: 'status-cancelled' },
+  ];
 
-  const updateStatus = async (c, status) => {
-    await supabase.from('complaints').update({ status, resolution: resolution || c.resolution || null }).eq('id', c.id);
-    await logAudit('complaint_update', 'complaints', c.subject, `Complaint marked as ${status}`);
+  const updateStatus = async (status) => {
+    await supabase.from('complaints').update({ status, resolution: resolution }).eq('id', selected.id);
+    await logAudit('complaint_status_change', 'complaints', selected.id, `Status changed to ${status}`);
     setSelected(null);
     setResolution('');
+    toast({ message: `Complaint marked as ${status}`, type: 'success' });
     load();
   };
 
-  const types = [...new Set(complaints.map(c => c.complaint_type).filter(Boolean))];
+  const filtered = complaints.filter(c => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || (c.subject || '').toLowerCase().includes(q) || (c.user?.full_name || '').toLowerCase().includes(q);
+    const matchStatus = !statusFilter || c.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
 
   return (
     <div className="admin-section">
       <div className="admin-section-header">Complaint Management</div>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search complaints..." />
-        <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'pending', label: 'Pending' }, { value: 'resolved', label: 'Resolved' }, { value: 'dismissed', label: 'Dismissed' }]} placeholder="All Statuses" />
-        <FilterSelect value={typeFilter} onChange={setTypeFilter} options={types.map(t => ({ value: t, label: t }))} placeholder="All Types" />
+        <FilterSelect value={statusFilter} onChange={setStatusFilter} options={types.map(t => ({ value: t.value, label: t.label }))} placeholder="All Statuses" />
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>From</th><th>Subject</th><th>Type</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+          <thead><tr><th>Subject</th><th>User</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No complaints found" /></td></tr>
-              : filtered.map(c => (
-                <tr key={c.id}>
-                  <td><strong>{c.user_name || 'Anonymous'}</strong></td>
-                  <td>{c.subject || 'N/A'}</td>
-                  <td><span className="status-badge status-confirmed">{c.complaint_type || 'General'}</span></td>
-                  <td><span className={`status-badge ${c.status === 'resolved' ? 'status-completed' : c.status === 'dismissed' ? 'status-cancelled' : 'status-pending'}`}>{c.status || 'pending'}</span></td>
-                  <td>{PH_DATE(c.created_at)}</td>
-                  <td><button className="btn btn-sm btn-primary" onClick={() => { setSelected(c); setResolution(c.resolution || ''); }}>Review</button></td>
-                </tr>
-              ))}
+            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No complaints found" /></td></tr>
+              : filtered.map(c => {
+                const t = types.find(t => t.value === c.status) || types[0];
+                return (
+                  <tr key={c.id}>
+                    <td><strong>{c.subject || 'No subject'}</strong></td>
+                    <td>{c.user?.full_name || 'N/A'}</td>
+                    <td><span className={`status-badge ${t.cls}`}>{t.label}</span></td>
+                    <td>{PH_DATE(c.created_at)}</td>
+                    <td><button className="btn btn-sm btn-primary" onClick={() => setSelected(c)}>View</button></td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
 
       {selected && (
-        <Modal title="Review Complaint" onClose={() => setSelected(null)}>
+        <Modal title="Complaint Details" onClose={() => setSelected(null)} width="700px">
           <div className="complaint-detail">
-            <div className="complaint-detail-row"><strong>From:</strong> {selected.user_name || 'Anonymous'}</div>
-            <div className="complaint-detail-row"><strong>Subject:</strong> {selected.subject}</div>
-            <div className="complaint-detail-row"><strong>Type:</strong> {selected.complaint_type || 'General'}</div>
+            <div className="complaint-detail-row"><strong>Subject:</strong> {selected.subject || 'N/A'}</div>
+            <div className="complaint-detail-row"><strong>User:</strong> {selected.user?.full_name || 'N/A'} ({selected.user?.email || 'N/A'})</div>
+            <div className="complaint-detail-row"><strong>Status:</strong> {types.find(t => t.value === selected.status)?.label || selected.status}</div>
             <div className="complaint-detail-row"><strong>Date:</strong> {PH_DATETIME(selected.created_at)}</div>
-            <div className="complaint-detail-row"><strong>Description:</strong></div>
-            <div className="complaint-description">{selected.description || 'No description provided'}</div>
-            <FormField label="Resolution / Notes">
-              <textarea className="form-input" rows="4" value={resolution} onChange={e => setResolution(e.target.value)} placeholder="Enter resolution or notes..." />
+            <div className="complaint-description">
+              <strong>Description:</strong><br />
+              {selected.description || 'No description provided.'}
+            </div>
+            <FormField label="Resolution">
+              <textarea className="form-input" value={resolution} onChange={e => setResolution(e.target.value)} placeholder="Enter resolution details..." />
             </FormField>
-          </div>
-          <div className="modal-actions">
-            <button className="btn btn-secondary" onClick={() => setSelected(null)}>Cancel</button>
-            <button className="btn btn-success" onClick={() => updateStatus(selected, 'resolved')}>Mark Resolved</button>
-            <button className="btn btn-danger" onClick={() => updateStatus(selected, 'dismissed')}>Dismiss</button>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setSelected(null)}>Cancel</button>
+              {types.map(t => (
+                <button key={t.value} className={`btn btn-sm ${t.value === 'resolved' ? 'btn-success' : t.value === 'rejected' ? 'btn-danger' : 'btn-primary'}`} onClick={() => updateStatus(t.value)}>{t.label}</button>
+              ))}
+            </div>
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+/* ==================== CHAT ==================== */
+function Chat() {
+  const [convs, setConvs] = useState([]);
+  const [active, setActive] = useState(null);
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  // Load conversations from the database (vendors AND customers)
+  const loadConvs = useCallback(async () => {
+    setLoadingConvs(true);
+    try {
+      const { data } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          customer:customer_id(id, full_name, email),
+          stall:stall_id(id, stall_name, stall_number, vendor_id, vendor:vendor_id(full_name, email))
+        `)
+        .order('updated_at', { ascending: false });
+      setConvs(data || []);
+    } catch (err) {
+      toast({ message: 'Failed to load conversations', type: 'error' });
+    } finally {
+      setLoadingConvs(false);
+    }
+  }, []);
+  useEffect(() => { loadConvs(); }, [loadConvs]);
+
+  // Real-time subscription: auto-refresh on new messages
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-messages-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        if (active && payload.new?.conversation_id === active) {
+          setMsgs(prev => [...prev, payload.new]);
+          setTimeout(() => {
+            const el = document.querySelector('.chat-messages-scroll');
+            if (el) el.scrollTop = el.scrollHeight;
+          }, 50);
+        }
+        loadConvs();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [active, loadConvs]);
+
+  // Filter conversations by search query
+  const filtered = convs.filter(c => {
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    const haystack = [
+      c.customer?.full_name,
+      c.customer?.email,
+      c.stall?.stall_name,
+      c.stall?.vendor?.full_name,
+      c.stall?.vendor?.email,
+      String(c.stall?.stall_number || ''),
+      c.last_message,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+
+  const convName = (c) =>
+    c?.stall?.vendor?.full_name || c?.customer?.full_name || c?.stall?.stall_name || 'User';
+
+  const convSub = (c) => {
+    const parts = [];
+    if (c?.stall?.stall_name) parts.push(c.stall.stall_name);
+    if (c?.stall?.vendor?.full_name) parts.push('Vendor');
+    if (c?.customer?.full_name) parts.push('Customer');
+    return parts.join(' • ') || 'Conversation';
+  };
+
+  const convAvatar = (c) => (convName(c).charAt(0) || '?').toUpperCase();
+
+  async function loadMsgs(id) {
+    setActive(id);
+    setLoadingMsgs(true);
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', id)
+      .order('created_at', { ascending: true });
+    setMsgs(data || []);
+    setLoadingMsgs(false);
+    setTimeout(() => {
+      const el = document.querySelector('.chat-messages-scroll');
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 100);
+  }
+
+  async function send() {
+    if (!input.trim() || !active || sending) return;
+    setSending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await supabase.from('messages').insert({
+        conversation_id: active,
+        sender_id: session.user.id,
+        sender_role: 'admin',
+        message: input,
+        is_image: false,
+      });
+      await supabase.from('conversations').update({
+        last_message: input,
+        last_message_time: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', active);
+      setInput('');
+      await loadMsgs(active);
+      await loadConvs();
+    } catch (err) {
+      toast({ message: 'Failed to send message', type: 'error' });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const activeConv = convs.find(c => c.id === active);
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-header">Admin Chat</div>
+      <div className="chat-container">
+        <div className="chat-sidebar">
+          <div className="chat-sidebar-header">
+            <span>Conversations</span>
+            <span className="chat-count-badge">{filtered.length}</span>
+          </div>
+          <div className="chat-search-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              className="chat-search-input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search vendor, customer, stall..."
+            />
+            {search && <button className="chat-search-clear" onClick={() => setSearch('')}>&times;</button>}
+          </div>
+          <div className="chat-sidebar-list">
+            {loadingConvs ? (
+              <div className="chat-list-loading"><Skeleton count={4} height="48px" /></div>
+            ) : filtered.length === 0 ? (
+              <div className="chat-empty">No conversations found</div>
+            ) : filtered.map(c => (
+              <div key={c.id} className={`chat-conv-item${active === c.id ? ' active' : ''}`} onClick={() => loadMsgs(c.id)}>
+                <div className="chat-conv-avatar">{convAvatar(c)}</div>
+                <div className="chat-conv-info">
+                  <div className="chat-conv-name">{convName(c)}</div>
+                  <div className="chat-conv-preview">{c.last_message || 'No messages yet'}</div>
+                  <div className="chat-conv-meta">{convSub(c)}</div>
+                </div>
+                {c.updated_at && <div className="chat-conv-time">{new Date(c.updated_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="chat-main">
+          {!active ? (
+            <div className="chat-empty">
+              <div className="chat-empty-icon">💬</div>
+              <div>Select a conversation to start chatting</div>
+              <span className="chat-empty-sub">Messages are fetched live from the database</span>
+            </div>
+          ) : (
+            <>
+              <div className="chat-header">
+                <div className="chat-header-avatar">{convAvatar(activeConv)}</div>
+                <div className="chat-header-info">
+                  <div className="chat-header-name">{convName(activeConv)}</div>
+                  <div className="chat-header-sub">{convSub(activeConv)}</div>
+                </div>
+                <button className="refresh-btn" onClick={loadConvs} disabled={loadingConvs} title="Refresh conversations">
+                  <span className={loadingConvs ? 'refreshing' : ''}>↻</span>
+                </button>
+              </div>
+              <div className="chat-messages chat-messages-scroll">
+                {loadingMsgs ? (
+                  <div className="chat-list-loading"><Skeleton count={3} height="52px" /></div>
+                ) : msgs.length === 0 ? (
+                  <div className="chat-empty">No messages yet. Say hello! 👋</div>
+                ) : msgs.map((m, idx) => {
+                  const prev = msgs[idx - 1];
+                  const showDate = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+                  const mine = m.sender_role === 'admin';
+                  return (
+                    <div key={m.id} className="chat-message-block">
+                      {showDate && (
+                        <div className="chat-date-divider">
+                          <span>{new Date(m.created_at).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      )}
+                      <div className={`chat-msg ${mine ? 'chat-msg-sent' : 'chat-msg-received'}`}>
+                        {!mine && <div className="chat-sender-label">{m.sender_role || 'Customer'}</div>}
+                        {m.is_image ? (
+                          <img src={m.message} alt="Shared" className="chat-msg-image" />
+                        ) : (
+                          m.message
+                        )}
+                        <div className="chat-msg-time">
+                          {new Date(m.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
+                          {mine && <span className="chat-msg-read"> ✓</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="chat-input-bar">
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !sending && send()}
+                  placeholder="Type a message..."
+                />
+                <button onClick={send} disabled={sending || !input.trim()}>
+                  {sending ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1230,47 +1568,42 @@ function AuditTrail() {
   const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
-  const [entityFilter, setEntityFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
 
-  const load = useCallback(() => {
-    supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(200).then(({ data }) => setLogs(data || []));
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('audit_log').select('*, user:profiles(full_name)').order('created_at', { ascending: false }).limit(200);
+    setLogs(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const actions = [...new Set(logs.map(l => l.action).filter(Boolean))];
-  const entities = [...new Set(logs.map(l => l.entity_type).filter(Boolean))];
-
   const filtered = logs.filter(l => {
     const q = search.toLowerCase();
-    const matchSearch = !q || (l.details || '').toLowerCase().includes(q) || (l.user_email || '').toLowerCase().includes(q) || (l.entity_id || '').toLowerCase().includes(q);
+    const matchSearch = !q || (l.action || '').toLowerCase().includes(q) || (l.details || '').toLowerCase().includes(q) || (l.user?.full_name || '').toLowerCase().includes(q);
     const matchAction = !actionFilter || l.action === actionFilter;
-    const matchEntity = !entityFilter || l.entity_type === entityFilter;
-    const matchDate = !dateFilter || (l.created_at || '').startsWith(dateFilter);
-    return matchSearch && matchAction && matchEntity && matchDate;
+    return matchSearch && matchAction;
   });
+
+  const actionTypes = [...new Set(logs.map(l => l.action).filter(Boolean))];
 
   return (
     <div className="admin-section">
-      <div className="admin-section-header">Audit Trail - System Activity Log</div>
+      <div className="admin-section-header">Audit Trail</div>
       <div className="admin-toolbar-row">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search details, user, entity..." />
-        <FilterSelect value={actionFilter} onChange={setActionFilter} options={actions.map(a => ({ value: a, label: a }))} placeholder="All Actions" />
-        <FilterSelect value={entityFilter} onChange={setEntityFilter} options={entities.map(e => ({ value: e, label: e }))} placeholder="All Entities" />
-        <input type="date" className="admin-filter-select" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+        <SearchBar value={search} onChange={setSearch} placeholder="Search by action or details..." />
+        <FilterSelect value={actionFilter} onChange={setActionFilter} options={actionTypes.map(a => ({ value: a, label: a }))} placeholder="All Actions" />
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Timestamp</th><th>Action</th><th>Entity</th><th>Details</th><th>User</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Action</th><th>Table</th><th>Record</th><th>Details</th><th>User</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No audit logs found" /></td></tr>
+            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No audit logs found" /></td></tr>
               : filtered.map(l => (
                 <tr key={l.id}>
                   <td>{PH_DATETIME(l.created_at)}</td>
-                  <td><span className="status-badge status-confirmed">{l.action || 'Update'}</span></td>
-                  <td>{l.entity_type || 'N/A'}</td>
-                  <td style={{ maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.details || 'N/A'}</td>
-                  <td>{l.user_email || 'System'}</td>
+                  <td><span className="badge badge-primary">{l.action}</span></td>
+                  <td>{l.table_name || 'N/A'}</td>
+                  <td>{l.record_id || 'N/A'}</td>
+                  <td>{l.details || 'N/A'}</td>
+                  <td>{l.user?.full_name || 'System'}</td>
                 </tr>
               ))}
           </tbody>
@@ -1285,257 +1618,400 @@ function Reports() {
   const [products, setProducts] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [orderItems, setOrderItems] = useState([]);
   const [sales, setSales] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [dateRange, setDateRange] = useState('month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [exporting, setExporting] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [p, s, o, ph] = await Promise.all([
-      supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
-      supabase.from('stalls').select('*, vendor:profiles(full_name, email)').order('stall_number'),
-      supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(500),
-      supabase.from('price_history').select('*, product:product_id(name)').order('changed_at', { ascending: false }).limit(200),
-    ]);
-    setProducts(p.data || []);
-    setStalls(s.data || []);
-    setOrders(o.data || []);
-    setPriceHistory(ph.data || []);
-    // Sales data
-    const completed = (o.data || []).filter(x => x.status === 'completed');
-    const byDate = {};
-    completed.forEach(x => {
-      const d = (x.created_at || '').split('T')[0];
-      byDate[d] = (byDate[d] || 0) + parseFloat(x.total_amount || 0);
-    });
-    setSales(Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date)));
-    setLoading(false);
+    try {
+      const [p, s, o, oi, ph] = await Promise.all([
+        supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
+        supabase.from('stalls').select('*, vendor:profiles(full_name, email)').order('stall_number'),
+        supabase.from('orders').select('*, customer:consumer_id(full_name, email), stall:stall_id(stall_name, stall_number)').order('created_at', { ascending: false }).limit(1000),
+        supabase.from('order_items').select('*').order('created_at', { ascending: false }).limit(2000),
+        supabase.from('price_history').select('*, product:product_id(name)').order('changed_at', { ascending: false }).limit(500),
+      ]);
+      setProducts(p.data || []);
+      setStalls(s.data || []);
+      setOrders(o.data || []);
+      setOrderItems(oi.data || []);
+      setPriceHistory(ph.data || []);
+      // Sales data
+      const completed = (o.data || []).filter(x => x.status === 'completed');
+      const byDate = {};
+      completed.forEach(x => {
+        const d = (x.created_at || '').split('T')[0];
+        byDate[d] = (byDate[d] || 0) + parseFloat(x.total_amount || 0);
+      });
+      setSales(Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date)));
+      toast({ message: 'Report data loaded from database', type: 'success' });
+    } catch (err) {
+      toast({ message: 'Failed to load report data', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
   }, []);
   useEffect(() => { loadData(); }, [loadData]);
 
-  const exportProducts = () => {
-    const rows = products.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.stock || 0]);
-    generatePdf({
-      title: 'Product Price Report',
-      subtitle: 'Complete list of products and their current prices',
-      headers: ['Product', 'Category', 'Stall', 'Price', 'Stock'],
-      rows,
-      filename: `palengkehub_products_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Products: ${products.length}`, `Generated by PalengkeHub Admin`],
-    });
+  // Apply date range filter to orders
+  const getFilteredOrders = () => {
+    let filtered = [...orders];
+    if (dateRange === 'custom' && customStart && customEnd) {
+      filtered = filtered.filter(o => {
+        const d = new Date(o.created_at || '');
+        return d >= new Date(customStart) && d <= new Date(customEnd);
+      });
+    } else if (dateRange !== 'all') {
+      const { startDate, endDate } = getDateRangePreset(dateRange);
+      if (startDate && endDate) {
+        filtered = filtered.filter(o => {
+          const d = new Date(o.created_at || '');
+          return d >= new Date(startDate) && d <= new Date(endDate);
+        });
+      }
+    }
+    return filtered;
   };
 
-  const exportStalls = () => {
-    const rows = stalls.map(s => [s.stall_name || `Stall #${s.stall_number}`, s.stall_number, s.section || 'N/A', s.floor || 'N/A', s.location || 'N/A', s.vendor?.full_name || 'Unassigned', s.is_active ? 'Active' : 'Inactive']);
-    generatePdf({
-      title: 'Stall Report',
-      subtitle: 'Complete list of market stalls',
-      headers: ['Stall Name', 'Number', 'Section', 'Floor', 'Location', 'Vendor', 'Status'],
-      rows,
-      filename: `palengkehublog_stalls_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Stalls: ${stalls.length}`, `Active: ${stalls.filter(s => s.is_active).length}`, `Inactive: ${stalls.filter(s => !s.is_active).length}`],
+  const filteredOrders = getFilteredOrders();
+  const filteredCompleted = filteredOrders.filter(o => o.status === 'completed');
+  const filteredSales = (() => {
+    const byDate = {};
+    filteredCompleted.forEach(x => {
+      const d = (x.created_at || '').split('T')[0];
+      byDate[d] = (byDate[d] || 0) + parseFloat(x.total_amount || 0);
     });
+    return Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
+  })();
+
+  const handleExport = async (type) => {
+    setExporting(type);
+    try {
+      if (type === 'products-pdf') {
+        const rows = products.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.stock || 0]);
+        generatePdf({
+          title: 'Product Price Report',
+          subtitle: `Complete list of products and their current prices (${formatDateRange(customStart, customEnd)})`,
+          headers: ['Product', 'Category', 'Stall', 'Price', 'Stock'],
+          rows,
+          filename: `palengkehub_products_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Products: ${products.length}`, `Generated by PalengkeHub Admin`],
+        });
+        toast({ message: 'Product Price Report generated successfully', type: 'success' });
+      } else if (type === 'products-csv') {
+        exportToCSV({
+          data: products,
+          filename: `palengkehub_products_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['name', 'category', 'price', 'stock', 'stall_name'],
+        });
+        toast({ message: 'Product data exported to CSV', type: 'success' });
+      } else if (type === 'stalls-pdf') {
+        const rows = stalls.map(s => [s.stall_name || `Stall #${s.stall_number}`, s.stall_number, s.section || 'N/A', s.floor || 'N/A', s.location || 'N/A', s.vendor?.full_name || 'Unassigned', s.is_active ? 'Active' : 'Inactive']);
+        generatePdf({
+          title: 'Stall Report',
+          subtitle: 'Complete list of market stalls',
+          headers: ['Stall Name', 'Number', 'Section', 'Floor', 'Location', 'Vendor', 'Status'],
+          rows,
+          filename: `palengkehublog_stalls_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Stalls: ${stalls.length}`, `Active: ${stalls.filter(s => s.is_active).length}`, `Inactive: ${stalls.filter(s => !s.is_active).length}`],
+        });
+        toast({ message: 'Stall Report generated successfully', type: 'success' });
+      } else if (type === 'stalls-csv') {
+        exportToCSV({
+          data: stalls,
+          filename: `palengkehublog_stalls_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['stall_name', 'stall_number', 'section', 'floor', 'location', 'is_active'],
+        });
+        toast({ message: 'Stall data exported to CSV', type: 'success' });
+      } else if (type === 'orders-pdf') {
+        const rows = filteredOrders.map(o => [`#${o.order_number?.slice(-8) || String(o.id).slice(-6)}`, o.status, `₱${PH(o.total_amount || o.total)}`, PH_DATE(o.created_at), o.customer?.full_name || 'N/A', o.stall?.stall_name || 'N/A']);
+        generatePdf({
+          title: 'Order Report',
+          subtitle: `All orders (${filteredOrders.length} records)`,
+          headers: ['Order #', 'Status', 'Total', 'Date', 'Customer', 'Stall'],
+          rows,
+          filename: `palengkehublog_orders_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Orders: ${filteredOrders.length}`, `Total Revenue: ₱${PH(filteredCompleted.reduce((s, o) => s + parseFloat(o.total_amount || o.total || 0), 0))}`],
+        });
+        toast({ message: 'Order Report generated successfully', type: 'success' });
+      } else if (type === 'orders-csv') {
+        exportToCSV({
+          data: filteredOrders,
+          filename: `palengkehublog_orders_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['order_number', 'status', 'total_amount', 'created_at', 'customer_name', 'stall_name'],
+        });
+        toast({ message: 'Order data exported to CSV', type: 'success' });
+      } else if (type === 'sales-pdf') {
+        const rows = filteredSales.map(s => [s.date, `₱${PH(s.total)}`]);
+        generatePdf({
+          title: 'Sales Report',
+          subtitle: `Completed sales by date (${filteredCompleted.length} transactions)`,
+          headers: ['Date', 'Total Sales'],
+          rows,
+          filename: `palengkehublog_sales_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Sales: ₱${PH(filteredSales.reduce((s, x) => s + x.total, 0))}`, `Total Transactions: ${filteredCompleted.length}`],
+        });
+        toast({ message: 'Sales Report generated successfully', type: 'success' });
+      } else if (type === 'sales-csv') {
+        exportToCSV({
+          data: filteredSales,
+          filename: `palengkehublog_sales_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['date', 'total'],
+        });
+        toast({ message: 'Sales data exported to CSV', type: 'success' });
+      } else if (type === 'price-history-pdf') {
+        const rows = priceHistory.map(h => [h.product?.name || 'Unknown', `₱${PH(h.previous_price)}`, `₱${PH(h.new_price)}`, PH_DATETIME(h.changed_at)]);
+        generatePdf({
+          title: 'Price Change Report',
+          subtitle: 'Historical price changes per product',
+          headers: ['Product', 'Previous Price', 'New Price', 'Date Changed'],
+          rows,
+          filename: `palengkehublog_price_changes_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Price Changes: ${priceHistory.length}`],
+        });
+        toast({ message: 'Price Change Report generated successfully', type: 'success' });
+      } else if (type === 'price-history-csv') {
+        exportToCSV({
+          data: priceHistory,
+          filename: `palengkehublog_price_changes_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['product_name', 'previous_price', 'new_price', 'changed_at'],
+        });
+        toast({ message: 'Price history exported to CSV', type: 'success' });
+      } else if (type === 'price-per-product-pdf') {
+        const rows = products.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
+        generatePdf({
+          title: 'Price Per Product Report',
+          subtitle: 'Current price of each product per stall',
+          headers: ['Product', 'Category', 'Price', 'Stall'],
+          rows,
+          filename: `palengkehublog_price_per_product_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Products: ${products.length}`],
+        });
+        toast({ message: 'Price Per Product Report generated successfully', type: 'success' });
+      } else if (type === 'vendor-performance-pdf') {
+        const vendorPerf = calculateVendorPerformance(stalls, filteredOrders);
+        const rows = vendorPerf.map(v => [v.stallName, v.vendor, v.section, `₱${PH(v.totalRevenue)}`, v.orderCount, v.completedOrders]);
+        generatePdf({
+          title: 'Vendor Performance Report',
+          subtitle: 'Revenue and order count by vendor/stall',
+          headers: ['Stall', 'Vendor', 'Section', 'Revenue', 'Total Orders', 'Completed'],
+          rows,
+          filename: `palengkehublog_vendor_performance_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Vendors: ${vendorPerf.length}`, `Total Revenue: ₱${PH(vendorPerf.reduce((s, v) => s + v.totalRevenue, 0))}`],
+        });
+        toast({ message: 'Vendor Performance Report generated successfully', type: 'success' });
+      } else if (type === 'vendor-performance-csv') {
+        const vendorPerf = calculateVendorPerformance(stalls, filteredOrders);
+        exportToCSV({
+          data: vendorPerf,
+          filename: `palengkehublog_vendor_performance_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['stallName', 'vendor', 'section', 'totalRevenue', 'orderCount', 'completedOrders'],
+        });
+        toast({ message: 'Vendor performance exported to CSV', type: 'success' });
+      } else if (type === 'customer-analytics-pdf') {
+        const customerData = calculateCustomerAnalytics(filteredOrders);
+        const rows = customerData.map(c => [c.customerName, `₱${PH(c.totalSpent)}`, c.orderCount]);
+        generatePdf({
+          title: 'Customer Analytics Report',
+          subtitle: 'Top customers by total spending',
+          headers: ['Customer', 'Total Spent', 'Order Count'],
+          rows,
+          filename: `palengkehublog_customer_analytics_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Customers: ${customerData.length}`, `Total Revenue: ₱${PH(customerData.reduce((s, c) => s + c.totalSpent, 0))}`],
+        });
+        toast({ message: 'Customer Analytics Report generated successfully', type: 'success' });
+      } else if (type === 'customer-analytics-csv') {
+        const customerData = calculateCustomerAnalytics(filteredOrders);
+        exportToCSV({
+          data: customerData,
+          filename: `palengkehublog_customer_analytics_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['customerName', 'totalSpent', 'orderCount'],
+        });
+        toast({ message: 'Customer analytics exported to CSV', type: 'success' });
+      } else if (type === 'product-performance-pdf') {
+        const productPerf = calculateProductPerformance(products, orderItems);
+        const rows = productPerf.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.totalRevenue)}`, p.totalSold, p.orderCount]);
+        generatePdf({
+          title: 'Product Performance Report',
+          subtitle: 'Top selling products by revenue',
+          headers: ['Product', 'Category', 'Revenue', 'Units Sold', 'Orders'],
+          rows,
+          filename: `palengkehublog_product_performance_${formatDateRange(customStart, customEnd)}.pdf`,
+          summary: [`Total Products Sold: ${productPerf.length}`, `Total Revenue: ₱${PH(productPerf.reduce((s, p) => s + p.totalRevenue, 0))}`],
+        });
+        toast({ message: 'Product Performance Report generated successfully', type: 'success' });
+      } else if (type === 'product-performance-csv') {
+        const productPerf = calculateProductPerformance(products, orderItems);
+        exportToCSV({
+          data: productPerf,
+          filename: `palengkehublog_product_performance_${formatDateRange(customStart, customEnd)}.csv`,
+          headers: ['name', 'category', 'totalRevenue', 'totalSold', 'orderCount'],
+        });
+        toast({ message: 'Product performance exported to CSV', type: 'success' });
+      }
+    } catch (err) {
+      toast({ message: `Export failed: ${err.message || 'Unknown error'}`, type: 'error' });
+    } finally {
+      setExporting(null);
+    }
   };
 
-  const exportOrders = () => {
-    const rows = orders.map(o => [`#${o.order_number?.slice(-8) || String(o.id).slice(-6)}`, o.status, `₱${PH(o.total_amount || o.total)}`, PH_DATE(o.created_at)]);
-    generatePdf({
-      title: 'Order Report',
-      subtitle: 'All orders in the system',
-      headers: ['Order #', 'Status', 'Total', 'Date'],
-      rows,
-      filename: `palengkehublog_orders_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Orders: ${orders.length}`, `Total Revenue: ₱${PH(orders.filter(o => o.status === 'completed').reduce((s, o) => s + parseFloat(o.total_amount || o.total || 0), 0))}`],
-    });
-  };
-
-  const exportSales = () => {
-    const rows = sales.map(s => [s.date, `₱${PH(s.total)}`]);
-    generatePdf({
-      title: 'Sales Report',
-      subtitle: 'Completed sales by date',
-      headers: ['Date', 'Total Sales'],
-      rows,
-      filename: `palengkehublog_sales_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Sales: ₱${PH(sales.reduce((s, x) => s + x.total, 0))}`, `Total Transactions: ${sales.length}`],
-    });
-  };
-
-  const exportPriceHistory = () => {
-    const rows = priceHistory.map(h => [h.product?.name || 'Unknown', `₱${PH(h.previous_price)}`, `₱${PH(h.new_price)}`, PH_DATETIME(h.changed_at)]);
-    generatePdf({
-      title: 'Price Change Report',
-      subtitle: 'Historical price changes per product',
-      headers: ['Product', 'Previous Price', 'New Price', 'Date Changed'],
-      rows,
-      filename: `palengkehublog_price_changes_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Price Changes: ${priceHistory.length}`],
-    });
-  };
-
-  const exportPricePerProduct = () => {
-    const rows = products.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
-    generatePdf({
-      title: 'Price Per Product Report',
-      subtitle: 'Current price of each product per stall',
-      headers: ['Product', 'Category', 'Price', 'Stall'],
-      rows,
-      filename: `palengkehublog_price_per_product_${new Date().toISOString().split('T')[0]}.pdf`,
-      summary: [`Total Products: ${products.length}`],
-    });
-  };
+  const orderStats = calculateOrderStats(filteredOrders);
 
   return (
     <>
       <div className="admin-section">
         <div className="admin-section-header">Report Generation</div>
         <p style={{ color: 'var(--admin-text-muted)', marginBottom: '20px', fontSize: '0.9rem' }}>
-          Generate professional PDF reports with the PalengkeHub branding. Reports include prices, products, stalls, orders, and sales data.
+          Generate professional PDF or CSV reports with the PalengkeHub branding. All data is fetched directly from the database.
+          Use the date range filter to narrow down report data.
         </p>
+        <div className="admin-toolbar-row">
+          <div className="date-range-picker">
+            <label>Date Range:</label>
+            <select className="admin-filter-select" value={dateRange} onChange={e => { setDateRange(e.target.value); if (e.target.value !== 'custom') { setCustomStart(''); setCustomEnd(''); } }}>
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+              <option value="quarter">Last 90 Days</option>
+              <option value="year">Last Year</option>
+              <option value="custom">Custom Range</option>
+            </select>
+            {dateRange === 'custom' && (
+              <>
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+              </>
+            )}
+          </div>
+          <button className="refresh-btn" onClick={loadData} disabled={loading}>
+            <span className={loading ? 'refreshing' : ''}>Refresh</span> Data
+          </button>
+        </div>
+
+        <div className="report-summary-bar">
+          <div className="report-summary-item">
+            <div className="value">₱{PH(orderStats.totalRevenue)}</div>
+            <div className="label">Total Revenue</div>
+          </div>
+          <div className="report-summary-item">
+            <div className="value">{orderStats.totalOrders}</div>
+            <div className="label">Total Orders</div>
+          </div>
+          <div className="report-summary-item">
+            <div className="value">{orderStats.completedOrders}</div>
+            <div className="label">Completed</div>
+          </div>
+          <div className="report-summary-item">
+            <div className="value">{orderStats.pendingOrders}</div>
+            <div className="label">Pending</div>
+          </div>
+          <div className="report-summary-item">
+            <div className="value">₱{PH(orderStats.avgOrderValue)}</div>
+            <div className="label">Avg Order</div>
+          </div>
+        </div>
+
         <div className="report-grid">
           <div className="report-card">
             <h4>Product Price Report</h4>
             <p>Complete list of all products with current prices and stock levels.</p>
-            <button className="btn btn-primary" onClick={exportProducts} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('products-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('products-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
           <div className="report-card">
             <h4>Stall Report</h4>
             <p>All market stalls with vendor assignments, locations, and status.</p>
-            <button className="btn btn-primary" onClick={exportStalls} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('stalls-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('stalls-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
           <div className="report-card">
             <h4>Order Report</h4>
             <p>All orders with status, totals, and transaction dates.</p>
-            <button className="btn btn-primary" onClick={exportOrders} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('orders-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('orders-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
           <div className="report-card">
             <h4>Sales Report</h4>
             <p>Completed sales aggregated by date with revenue totals.</p>
-            <button className="btn btn-primary" onClick={exportSales} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('sales-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('sales-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
           <div className="report-card">
             <h4>Price Change Report</h4>
             <p>Historical price changes per product with timestamps.</p>
-            <button className="btn btn-primary" onClick={exportPriceHistory} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-history-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('price-history-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
           <div className="report-card">
             <h4>Price Per Product</h4>
             <p>Current price of each product per stall for market comparison.</p>
-            <button className="btn btn-primary" onClick={exportPricePerProduct} disabled={loading}>Generate PDF</button>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-per-product-pdf')} disabled={loading || exporting}>PDF</button>
+            </div>
+          </div>
+          <div className="report-card">
+            <h4>Vendor Performance</h4>
+            <p>Revenue and order count by vendor/stall.</p>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('vendor-performance-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('vendor-performance-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
+          </div>
+          <div className="report-card">
+            <h4>Customer Analytics</h4>
+            <p>Top customers by total spending and order count.</p>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('customer-analytics-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('customer-analytics-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
+          </div>
+          <div className="report-card">
+            <h4>Product Performance</h4>
+            <p>Top selling products by revenue and units sold.</p>
+            <div className="export-btn-group">
+              <button className="btn btn-sm btn-primary" onClick={() => handleExport('product-performance-pdf')} disabled={loading || exporting}>PDF</button>
+              <button className="btn btn-sm btn-success" onClick={() => handleExport('product-performance-csv')} disabled={loading || exporting}>CSV</button>
+            </div>
           </div>
         </div>
       </div>
-      <div className="admin-section">
-        <div className="admin-section-header">Sales Chart</div>
+      <div className="chart-card">
+        <div className="chart-card-header">
+          <h3 className="chart-card-title">Sales Trend</h3>
+        </div>
         <div style={{ height: 300 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sales}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
-              <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
-              <Legend />
-              <Line type="monotone" dataKey="total" name="Sales" stroke="#DC2626" strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          {loading ? <SkeletonChart /> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={filteredSales}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
+                <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
+                <Legend />
+                <Line type="monotone" dataKey="total" name="Sales" stroke="#DC2626" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
     </>
   );
-}
-
-/* ==================== CHAT ==================== */
-function Chat() {
-  const [convs, setConvs] = useState([]);
-  const [active, setActive] = useState(null);
-  const [msgs, setMsgs] = useState([]);
-  const [input, setInput] = useState('');
-
-  const loadConvs = useCallback(() => {
-    supabase.from('conversations')
-      .select('*, customer:customer_id(id, full_name, email), stall:stall_id(id, stall_name, stall_number, vendor_id)')
-      .order('updated_at', { ascending: false })
-      .then(({ data }) => setConvs(data || []));
-  }, []);
-  useEffect(() => { loadConvs(); }, [loadConvs]);
-
-  async function loadMsgs(id) {
-    setActive(id);
-    const { data } = await supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true });
-    setMsgs(data || []);
-    setTimeout(() => {
-      const el = document.querySelector('.chat-messages-scroll');
-      if (el) el.scrollTop = el.scrollHeight;
-    }, 100);
-  }
-
-  async function send() {
-    if (!input.trim() || !active) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from('messages').insert({
-      conversation_id: active,
-      sender_id: session.user.id,
-      sender_role: 'admin',
-      message: input,
-      is_image: false,
-    });
-    await supabase.from('conversations').update({
-      last_message: input,
-      last_message_time: new Date().toISOString(),
-    }).eq('id', active);
-    setInput('');
-    loadMsgs(active);
-    loadConvs();
-  }
-
-  return (
-    <div className="chat-container">
-      <div className="chat-sidebar">
-        <div className="chat-sidebar-header">Conversations</div>
-        <div className="chat-sidebar-list">
-          {convs.length === 0 ? <div className="empty-state"><div className="empty-state-text">No conversations</div></div>
-            : convs.map(c => (
-              <div key={c.id} className={`chat-conv-item${active === c.id ? ' active' : ''}`} onClick={() => loadMsgs(c.id)}>
-                <div className="chat-conv-name">{c.customer?.full_name || 'Customer'} - {c.stall?.stall_name || 'Stall #' + (c.stall?.stall_number || '')}</div>
-                <div className="chat-conv-preview">{c.last_message || 'No messages'}</div>
-              </div>
-            ))}
-        </div>
-      </div>
-      <div className="chat-main">
-        {!active ? <div className="chat-empty">Select a conversation to view messages</div> : <>
-          <div className="chat-messages chat-messages-scroll">
-            {msgs.length === 0 ? <div className="chat-empty">No messages yet</div>
-              : msgs.map(m => (
-                <div key={m.id} className={`chat-msg ${m.sender_role === 'admin' ? 'chat-msg-sent' : 'chat-msg-received'}`}>
-                  <div className="chat-sender-label">{m.sender_role === 'admin' ? 'Admin' : m.sender_role}</div>
-                  {m.message}
-                  <div className="chat-msg-time">{new Date(m.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</div>
-                </div>
-              ))}
-          </div>
-          <div className="chat-input-bar">
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Type a message..." />
-            <button onClick={send}>Send</button>
-          </div>
-        </>}
-      </div>
-    </div>
-  );
-}
-
-/* ==================== AUDIT LOG HELPER ==================== */
-async function logAudit(action, entityType, entityId, details) {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from('audit_logs').insert({
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      details,
-      user_email: session?.user?.email || 'System',
-    });
-  } catch (e) {
-    console.error('Failed to log audit:', e);
-  }
 }
