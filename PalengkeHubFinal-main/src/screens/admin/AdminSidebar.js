@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   Image,
   Platform,
-  ScrollView, // ✅ ADD THIS
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const isWeb = Platform.OS === 'web';
 
@@ -22,26 +23,29 @@ export const AdminSidebar = ({
   userName,
   userEmail,
 }) => {
-  // Complete menu items
+  // Complete menu items matching AdminDashboardScreen sections
   const menuItems = [
-    { id: 'overview', label: 'Overview', icon: '📊', color: '#DC2626' },
-    { id: 'users', label: 'Users', icon: '👥', color: '#3B82F6' },
-    { id: 'vendors', label: 'Vendors', icon: '🏪', color: '#10B981' },
-    { id: 'compliance', label: 'Compliance', icon: '✅', color: '#8B5CF6' },
-    { id: 'applications', label: 'Applications', icon: '📋', color: '#F59E0B' },
-    { id: 'stalls', label: 'Stalls', icon: '📍', color: '#EC4899' },
-    { id: 'orders', label: 'Orders', icon: '📦', color: '#14B8A6' },
-    { id: 'announcements', label: 'Announcements', icon: '📢', color: '#8B5CF6' },
-    { id: 'violations', label: 'Violations', icon: '⚠️', color: '#EF4444' },
-    { id: 'complaints', label: 'Complaints', icon: '💬', color: '#EC4899' },
-    { id: 'reports', label: 'Reports', icon: '📄', color: '#6B7280' },
+    { id: 'overview', label: 'Dashboard', icon: 'dashboard', color: '#DC2626' },
+    { id: 'applications', label: 'Applications', icon: 'description', color: '#F59E0B' },
+    { id: 'stalls', label: 'Stalls', icon: 'storefront', color: '#EC4899' },
+    { id: 'products', label: 'Products', icon: 'inventory', color: '#3B82F6' },
+    { id: 'orders', label: 'Orders', icon: 'shopping-cart', color: '#14B8A6' },
+    { id: 'users', label: 'Users', icon: 'people', color: '#8B5CF6' },
+    { id: 'vendors', label: 'Vendors', icon: 'store', color: '#10B981' },
+    { id: 'announcements', label: 'Announcements', icon: 'campaign', color: '#F59E0B' },
+    { id: 'violations', label: 'Violations', icon: 'warning', color: '#EF4444' },
+    { id: 'complaints', label: 'Complaints', icon: 'chat-bubble-outline', color: '#EC4899' },
+    { id: 'chats', label: 'Chats', icon: 'chat', color: '#06B6D4' },
+    { id: 'price_monitoring', label: 'Price Monitoring', icon: 'attach-money', color: '#10B981' },
+    { id: 'audit_trail', label: 'Audit Trail', icon: 'history', color: '#6B7280' },
+    { id: 'reports', label: 'Reports', icon: 'analytics', color: '#6366F1' },
   ];
 
   return (
     <View style={[styles.sidebar, collapsed && styles.sidebarCollapsed]}>
       {/* Logo Section */}
       <LinearGradient
-        colors={['#DC2626', '#EF4444']}
+        colors={['#DC2626', '#8B0000']}
         style={styles.logoContainer}
       >
         <Image 
@@ -60,11 +64,15 @@ export const AdminSidebar = ({
       {/* Collapse Toggle (Web only) */}
       {isWeb && (
         <TouchableOpacity style={styles.collapseButton} onPress={() => setCollapsed(!collapsed)}>
-          <Text style={styles.collapseIcon}>{collapsed ? '→' : '←'}</Text>
+          <MaterialIcons 
+            name={collapsed ? 'chevron-right' : 'chevron-left'} 
+            size={16} 
+            color="rgba(255,255,255,0.6)" 
+          />
         </TouchableOpacity>
       )}
 
-      {/* ✅ FIXED: Scrollable Navigation Menu */}
+      {/* Scrollable Navigation Menu */}
       <ScrollView 
         style={styles.navScrollView}
         contentContainerStyle={styles.navScrollContent}
@@ -79,16 +87,23 @@ export const AdminSidebar = ({
             ]}
             onPress={() => setActiveSection(item.id)}
           >
-            <Text style={styles.navIcon}>{item.icon}</Text>
-            {!collapsed && (
-              <View style={styles.navTextContainer}>
-                <Text style={[styles.navLabel, activeSection === item.id && styles.navLabelActive]}>
+            <View style={styles.navItemContent}>
+              <MaterialIcons 
+                name={item.icon} 
+                size={20} 
+                color={activeSection === item.id ? '#DC2626' : '#6B7280'} 
+              />
+              {!collapsed && (
+                <Text style={[
+                  styles.navLabel,
+                  activeSection === item.id && styles.navLabelActive,
+                ]} numberOfLines={1}>
                   {item.label}
                 </Text>
-                {activeSection === item.id && (
-                  <View style={[styles.navIndicator, { backgroundColor: item.color }]} />
-                )}
-              </View>
+              )}
+            </View>
+            {activeSection === item.id && (
+              <View style={[styles.navIndicator, { backgroundColor: item.color }]} />
             )}
           </TouchableOpacity>
         ))}
@@ -97,7 +112,7 @@ export const AdminSidebar = ({
       {/* User Info & Logout - Fixed at bottom */}
       <View style={styles.userSection}>
         <View style={styles.userAvatar}>
-          <Text style={styles.userAvatarText}>👤</Text>
+          <MaterialIcons name="person" size={20} color="#DC2626" />
         </View>
         {!collapsed && (
           <View style={styles.userInfo}>
@@ -106,7 +121,7 @@ export const AdminSidebar = ({
           </View>
         )}
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutIcon}>🚪</Text>
+          <MaterialIcons name="logout" size={18} color="#DC2626" />
           {!collapsed && <Text style={styles.logoutText}>Logout</Text>}
         </TouchableOpacity>
       </View>
@@ -130,7 +145,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    // ✅ Make sidebar a flex container
     display: 'flex',
     flexDirection: 'column',
   },
@@ -143,8 +157,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-    // ✅ Keep logo at top
+    borderBottomColor: '#E5E7EB',
     flexShrink: 0,
   },
   logo: {
@@ -180,12 +193,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  collapseIcon: {
-    fontSize: 12,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  // ✅ NEW: ScrollView styles
+  // ScrollView styles
   navScrollView: {
     flex: 1,
   },
@@ -197,7 +205,8 @@ const styles = StyleSheet.create({
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
     paddingHorizontal: 12,
     marginBottom: 4,
     borderRadius: 10,
@@ -206,17 +215,11 @@ const styles = StyleSheet.create({
   navItemActive: {
     backgroundColor: '#FEF3F2',
   },
-  navIcon: {
-    fontSize: 18,
-    width: 28,
-    textAlign: 'center',
-  },
-  navTextContainer: {
-    flex: 1,
+  navItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    minWidth: 0,
+    gap: 10,
+    flex: 1,
   },
   navLabel: {
     fontSize: 13,
@@ -232,9 +235,8 @@ const styles = StyleSheet.create({
     width: 3,
     height: 16,
     borderRadius: 1.5,
-    marginLeft: 8,
   },
-  // ✅ User section - fixed at bottom
+  // User section - fixed at bottom
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,7 +245,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#E5E7EB',
     gap: 8,
     backgroundColor: 'white',
-    flexShrink: 0, // ✅ Prevents user section from shrinking
+    flexShrink: 0,
   },
   userAvatar: {
     width: 36,
@@ -252,9 +254,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3F2',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  userAvatarText: {
-    fontSize: 16,
   },
   userInfo: {
     flex: 1,
@@ -277,9 +276,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 8,
     backgroundColor: '#FEF3F2',
-  },
-  logoutIcon: {
-    fontSize: 14,
   },
   logoutText: {
     fontSize: 11,

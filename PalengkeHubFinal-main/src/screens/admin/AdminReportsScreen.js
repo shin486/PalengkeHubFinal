@@ -14,8 +14,11 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
-import { Header } from '../../components/Header';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 
 export default function AdminReportsScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('customer'); // 'customer' or 'vendor'
@@ -27,6 +30,7 @@ export default function AdminReportsScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
   const [newStatus, setNewStatus] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchAllReports();
@@ -82,6 +86,173 @@ export default function AdminReportsScreen({ navigation }) {
     fetchAllReports();
   };
 
+  const generateCSV = (reports, type) => {
+    const headers = ['ID', 'Type', 'Status', 'Description', 'Date', 'Reporter', 'Admin Notes'];
+    const rows = reports.map(report => [
+      report.id,
+      report.report_type || type,
+      report.status,
+      `"${(report.description || '').replace(/"/g, '""')}"`,
+      new Date(report.created_at).toLocaleString(),
+      type === 'customer' 
+        ? (report.profile?.full_name || report.user_id)
+        : (report.vendor?.full_name || report.vendor_id),
+      `"${(report.admin_notes || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    return csvContent;
+  };
+
+  const exportToCSV = async () => {
+    try {
+      setExporting(true);
+      const reports = activeTab === 'customer' ? customerReports : vendorReports;
+      
+      if (reports.length === 0) {
+        Alert.alert('No Data', 'There are no reports to export');
+        return;
+      }
+
+      const csvContent = generateCSV(reports, activeTab);
+      const fileName = `${activeTab}_reports_${new Date().toISOString().split('T')[0]}.csv`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      const shareOptions = {
+        mimeType: 'text/csv',
+        dialogTitle: `Export ${activeTab} reports as CSV`,
+        UTI: 'public.comma-separated-values-text',
+      };
+
+      await Sharing.shareAsync(fileUri, shareOptions);
+      Alert.alert('Success', 'CSV file exported successfully');
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      Alert.alert('Error', 'Failed to export CSV file');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const generatePrintableHTML = (reports, type) => {
+    const statusColors = {
+      pending: '#F59E0B',
+      reviewing: '#3B82F6',
+      resolved: '#10B981',
+      dismissed: '#6B7280'
+    };
+
+    const rows = reports.map(report => `
+      <tr>
+        <td>${report.id.slice(0, 8)}</td>
+        <td>${(report.report_type || 'N/A').toUpperCase()}</td>
+        <td><span style="background-color: ${statusColors[report.status] || '#6B7280'}20; color: ${statusColors[report.status] || '#6B7280'}; padding: 4px 8px; border-radius: 4px; font-weight: 600;">${report.status.toUpperCase()}</span></td>
+        <td>${report.description || 'N/A'}</td>
+        <td>${new Date(report.created_at).toLocaleString()}</td>
+        <td>${type === 'customer' ? (report.profile?.full_name || 'N/A') : (report.vendor?.full_name || 'N/A')}</td>
+        <td>${report.admin_notes || 'N/A'}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${type === 'customer' ? 'Customer' : 'Vendor'} Reports</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          h1 { color: #DC2626; border-bottom: 3px solid #DC2626; padding-bottom: 10px; }
+          .info { margin-bottom: 20px; color: #666; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background-color: #DC2626; color: white; padding: 12px; text-align: left; font-weight: 600; }
+          td { padding: 10px; border-bottom: 1px solid #E5E7EB; }
+          tr:hover { background-color: #F9FAFB; }
+          .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #E5E7EB; color: #666; font-size: 12px; }
+          @media print {
+            body { margin: 0; }
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>${type === 'customer' ? 'Customer' : 'Vendor'} Reports</h1>
+        <div class="info">
+          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+          <p><strong>Total Reports:</strong> ${reports.length}</p>
+          <p><strong>Pending:</strong> ${reports.filter(r => r.status === 'pending').length}</p>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Description</th>
+              <th>Date</th>
+              <th>Reporter</th>
+              <th>Admin Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>PalengkeHub Admin Panel - Lipa City Public Market</p>
+          <p>Generated on ${new Date().toLocaleString()}</p>
+        </div>
+
+        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background-color: #DC2626; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+          Print / Save as PDF
+        </button>
+      </body>
+      </html>
+    `;
+  };
+
+  const exportToPDF = async () => {
+    try {
+      setExporting(true);
+      const reports = activeTab === 'customer' ? customerReports : vendorReports;
+      
+      if (reports.length === 0) {
+        Alert.alert('No Data', 'There are no reports to export');
+        return;
+      }
+
+      // Generate professional HTML for PDF
+      const htmlContent = generatePrintableHTML(reports, activeTab);
+      
+      // Use expo-print to generate PDF
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+      });
+
+      // Share the PDF file
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Export ${activeTab} reports as PDF`,
+        UTI: 'com.adobe.pdf',
+      });
+
+      Alert.alert('Success', 'PDF exported successfully!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      Alert.alert('Error', 'Failed to export PDF: ' + error.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleUpdateReport = async () => {
     if (!selectedReport) return;
 
@@ -125,27 +296,27 @@ export default function AdminReportsScreen({ navigation }) {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'pending': return '⏳ Pending';
-      case 'reviewing': return '🔍 Reviewing';
-      case 'resolved': return '✅ Resolved';
-      case 'dismissed': return '❌ Dismissed';
+      case 'pending': return 'Pending';
+      case 'reviewing': return 'Reviewing';
+      case 'resolved': return 'Resolved';
+      case 'dismissed': return 'Dismissed';
       default: return status;
     }
   };
 
   const getReportTypeIcon = (type) => {
     const icons = {
-      product: '🚫',
-      vendor: '🏪',
-      order: '📋',
-      payment: '💰',
-      customer_behavior: '👤',
-      order_issue: '📋',
-      payment_issue: '💰',
-      fraud: '⚠️',
-      other: '📝',
+      product: 'inventory',
+      vendor: 'store',
+      order: 'receipt',
+      payment: 'payment',
+      customer_behavior: 'person',
+      order_issue: 'receipt',
+      payment_issue: 'payment',
+      fraud: 'warning',
+      other: 'description',
     };
-    return icons[type] || '📝';
+    return icons[type] || 'description';
   };
 
   const renderCustomerReportCard = (report) => (
@@ -295,10 +466,26 @@ export default function AdminReportsScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
       
-      <Header 
-        title="📋 Reports Management"
-        subtitle={`${activeTab === 'customer' ? 'Customer' : 'Vendor'} Reports - ${pendingCount} pending`}
-      />
+      <View style={styles.headerContainer}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#C62828" />
+        </TouchableOpacity>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Reports Management</Text>
+          <Text style={styles.headerSubtitle}>
+            {activeTab === 'customer' ? 'Customer' : 'Vendor'} Reports - {pendingCount} pending
+          </Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={onRefresh}
+        >
+          <MaterialIcons name="refresh" size={22} color="#DC2626" />
+        </TouchableOpacity>
+      </View>
 
       {/* Tab Selector */}
       <View style={styles.tabContainer}>
@@ -306,8 +493,9 @@ export default function AdminReportsScreen({ navigation }) {
           style={[styles.tab, activeTab === 'customer' && styles.tabActive]}
           onPress={() => setActiveTab('customer')}
         >
+          <MaterialIcons name="people" size={18} color={activeTab === 'customer' ? '#DC2626' : '#6B7280'} />
           <Text style={[styles.tabText, activeTab === 'customer' && styles.tabTextActive]}>
-            👥 Customer Reports
+            Customer Reports
           </Text>
           {customerReports.filter(r => r.status === 'pending').length > 0 && (
             <View style={styles.tabBadge}>
@@ -322,8 +510,9 @@ export default function AdminReportsScreen({ navigation }) {
           style={[styles.tab, activeTab === 'vendor' && styles.tabActive]}
           onPress={() => setActiveTab('vendor')}
         >
+          <MaterialIcons name="store" size={18} color={activeTab === 'vendor' ? '#DC2626' : '#6B7280'} />
           <Text style={[styles.tabText, activeTab === 'vendor' && styles.tabTextActive]}>
-            🏪 Vendor Reports
+            Vendor Reports
           </Text>
           {vendorReports.filter(r => r.status === 'pending').length > 0 && (
             <View style={styles.tabBadge}>
@@ -332,6 +521,26 @@ export default function AdminReportsScreen({ navigation }) {
               </Text>
             </View>
           )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Export Buttons */}
+      <View style={styles.exportContainer}>
+        <TouchableOpacity 
+          style={[styles.exportButton, styles.exportCSVButton]}
+          onPress={exportToCSV}
+          disabled={exporting}
+        >
+          <MaterialIcons name="download" size={18} color="white" />
+          <Text style={styles.exportButtonText}>Export CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.exportButton, styles.exportPDFButton]}
+          onPress={exportToPDF}
+          disabled={exporting}
+        >
+          <MaterialIcons name="picture-as-pdf" size={18} color="white" />
+          <Text style={styles.exportButtonText}>Export PDF</Text>
         </TouchableOpacity>
       </View>
 
@@ -368,7 +577,7 @@ export default function AdminReportsScreen({ navigation }) {
 
         {currentReports.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
+            <MaterialIcons name="inbox" size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No Reports</Text>
             <Text style={styles.emptyText}>
               No {activeTab} reports found
@@ -472,6 +681,44 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: '#6B7280',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEF3F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEF3F2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
@@ -757,6 +1004,36 @@ const styles = StyleSheet.create({
   updateButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  exportContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+  },
+  exportButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  exportCSVButton: {
+    backgroundColor: '#10B981',
+  },
+  exportPDFButton: {
+    backgroundColor: '#DC2626',
+  },
+  exportButtonText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

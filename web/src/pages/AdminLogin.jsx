@@ -32,7 +32,7 @@ export default function AdminLogin() {
     setStatus({ type: '', message: '' });
 
     if (!email || !password) {
-      setStatus({ type: 'error', message: '⚠️ Please enter both email and password.' });
+      setStatus({ type: 'error', message: 'Please enter both email and password.' });
       return;
     }
 
@@ -51,13 +51,13 @@ export default function AdminLogin() {
 
       if (!profile || profile.role !== 'admin') {
         await supabase.auth.signOut();
-        setStatus({ type: 'error', message: '⛔ Access denied. Admin accounts can only log in through the web portal. Customers and vendors should use the PalengkeHub app.' });
+        setStatus({ type: 'error', message: 'Access denied. Admin accounts can only log in through the web portal. Customers and vendors should use the PalengkeHub app.' });
         setLoading(false);
         return;
       }
 
       sessionStorage.setItem('palengkehub_admin_name', profile.full_name || 'Admin');
-      setStatus({ type: 'success', message: `✅ Welcome, ${profile.full_name || 'Admin'}!` });
+      setStatus({ type: 'success', message: `Welcome, ${profile.full_name || 'Admin'}!` });
       setTimeout(() => navigate('/admin', { replace: true }), 600);
     } catch (err) {
       const msg = err.message.toLowerCase();
@@ -65,7 +65,7 @@ export default function AdminLogin() {
       if (msg.includes('invalid login') || msg.includes('invalid credentials')) userMsg = 'Wrong email or password.';
       else if (msg.includes('email not confirmed')) userMsg = 'Please verify your email first.';
       else if (msg.includes('rate limit')) userMsg = 'Too many attempts. Please wait.';
-      setStatus({ type: 'error', message: '⚠️ ' + userMsg });
+      setStatus({ type: 'error', message: userMsg });
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export default function AdminLogin() {
             </div>
           </div>
           <div className="admin-login-title">
-            <h2>Welcome, Admin 👋</h2>
+            <h2>Welcome, Admin</h2>
             <p>Sign in to manage vendors, stalls, orders, and reports.</p>
           </div>
           <form onSubmit={handleSubmit} method="post" action="#">
@@ -117,7 +117,9 @@ export default function AdminLogin() {
             </button>
           </form>
           <div className="admin-login-info">
-            <div className="admin-login-info-icon">🔒</div>
+            <div className="admin-login-info-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            </div>
             <p><strong>Restricted Access:</strong> This portal is for <strong>administrators only</strong>. Customers and vendors should use the PalengkeHub mobile app to log in.</p>
           </div>
           <div className="admin-login-back">
