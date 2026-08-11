@@ -482,6 +482,7 @@ function Overview() {
           </table>
         </div>
       </div>
+      <Chat />
     </>
   );
 }
@@ -1339,45 +1340,47 @@ function Chat() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
+  const [myId, setMyId] = useState(null);
+
+  // Store the current admin's user id to identify own sent messages
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setMyId(data?.session?.user?.id || null);
+    });
+  }, []);
 
   // Load conversations from the database (vendors AND customers)
   const loadConvs = useCallback(async () => {
     setLoadingConvs(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('conversations')
-        .select(`
-          *,
-          customer:customer_id(id, full_name, email),
-          stall:stall_id(id, stall_name, stall_number, vendor_id, vendor:vendor_id(full_name, email))
-        `)
+        .select('*, customer:customer_id(id, full_name, email), stall:stall_id(id, stall_name, stall_number, vendor_id)')
         .order('updated_at', { ascending: false });
-      setConvs(data || []);
+      if (error) throw error;
+      const list = data || [];
+      // Fetch vendor names for stalls that have an assigned vendor
+      const vendorIds = [...new Set(list.map(c => c.stall?.vendor_id).filter(Boolean))];
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const { data: vendors } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', vendorIds);
+        (vendors || []).forEach(v => { vendorMap[v.id] = v; });
+      }
+      setConvs(list.map(c =>
+        c.stall?.vendor_id
+          ? { ...c, stall: { ...c.stall, vendor: vendorMap[c.stall.vendor_id] || null } }
+          : c
+      ));
     } catch (err) {
-      toast({ message: 'Failed to load conversations', type: 'error' });
+      toast({ message: 'Failed to load conversations: ' + (err.message || 'Unknown error'), type: 'error' });
     } finally {
       setLoadingConvs(false);
     }
   }, []);
   useEffect(() => { loadConvs(); }, [loadConvs]);
-
-  // Real-time subscription: auto-refresh on new messages
-  useEffect(() => {
-    const channel = supabase
-      .channel('admin-messages-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        if (active && payload.new?.conversation_id === active) {
-          setMsgs(prev => [...prev, payload.new]);
-          setTimeout(() => {
-            const el = document.querySelector('.chat-messages-scroll');
-            if (el) el.scrollTop = el.scrollHeight;
-          }, 50);
-        }
-        loadConvs();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [active, loadConvs]);
 
   // Filter conversations by search query
   const filtered = convs.filter(c => {
@@ -1429,23 +1432,27 @@ function Chat() {
     setSending(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from('messages').insert({
+      const { error: insertError } = await supabase.from('messages').insert({
         conversation_id: active,
         sender_id: session.user.id,
-        sender_role: 'admin',
+        sender_role: 'customer',
         message: input,
         is_image: false,
       });
+      if (insertError) throw insertError;
+
       await supabase.from('conversations').update({
         last_message: input,
         last_message_time: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       }).eq('id', active);
+
       setInput('');
+      toast({ message: 'Message sent successfully', type: 'success' });
       await loadMsgs(active);
       await loadConvs();
     } catch (err) {
-      toast({ message: 'Failed to send message', type: 'error' });
+      console.error('Send error:', err);
+      toast({ message: 'Send failed: ' + (err.message || 'Unknown error'), type: 'error' });
     } finally {
       setSending(false);
     }
@@ -1520,7 +1527,7 @@ function Chat() {
                 ) : msgs.map((m, idx) => {
                   const prev = msgs[idx - 1];
                   const showDate = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
-                  const mine = m.sender_role === 'admin';
+                  const mine = m.sender_id === myId;
                   return (
                     <div key={m.id} className="chat-message-block">
                       {showDate && (
