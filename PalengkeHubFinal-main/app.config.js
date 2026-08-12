@@ -17,6 +17,10 @@ export default {
     },
     ios: {
       supportsTablet: true,
+      bundleIdentifier: "com.palengkehub.app",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
       config: {
         googleMapsApiKey: "YOUR_GOOGLE_MAPS_API_KEY",
       },
@@ -41,6 +45,9 @@ export default {
       bundler: "metro",
     },
     extra: {
+      eas: {
+        projectId: "b4b641a9-9226-46f7-9d6b-6b0c02bd3a23",
+      },
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       paymongoProxyUrl: process.env.EXPO_PUBLIC_PAYMONGO_PROXY_URL || process.env.PAYMONGO_PROXY_URL || '',

@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import {
   vendorColors,
@@ -20,7 +21,6 @@ import {
   vendorShadows,
   getStatusColor,
   getStatusLabel,
-  getPaymentStatusColor,
 } from '../../theme/vendorTheme';
 import { VendorStatusBadge, VendorPaymentStatusBadge } from './VendorStatusBadge';
 
@@ -128,13 +128,11 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
         {/* Customer */}
         <View style={styles.customerRow}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {order.profiles?.full_name?.charAt(0)?.toUpperCase() || '👤'}
-            </Text>
+            <Ionicons name="person-outline" size={18} color={vendorColors.primary} />
           </View>
           <View style={styles.customerInfo}>
             <Text style={styles.customerName}>{order.profiles?.full_name || 'Customer'}</Text>
-            {order.profiles?.phone && <Text style={styles.customerPhone}>📞 {order.profiles.phone}</Text>}
+            {order.profiles?.phone && <Text style={styles.customerPhone}>{order.profiles.phone}</Text>}
           </View>
         </View>
 
@@ -155,14 +153,20 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
 
         {/* Pickup time */}
         <View style={styles.pickupRow}>
-          <Text style={styles.pickupLabel}>🛎️ Pickup:</Text>
+          <View style={styles.metaIconWrap}>
+            <Ionicons name="time-outline" size={14} color={vendorColors.text.secondary} />
+          </View>
+          <Text style={styles.pickupLabel}>Pickup:</Text>
           <Text style={styles.pickupTime}>{formatPickupTime(order.pickup_time)}</Text>
         </View>
 
         {/* Payment status */}
         {order.payment_status && (
           <View style={styles.paymentRow}>
-            <Text style={styles.paymentLabel}>💳 Payment:</Text>
+            <View style={styles.metaIconWrap}>
+              <Ionicons name="card-outline" size={14} color={vendorColors.text.secondary} />
+            </View>
+            <Text style={styles.paymentLabel}>Payment:</Text>
             <VendorPaymentStatusBadge status={order.payment_status} size="sm" />
           </View>
         )}
@@ -170,10 +174,15 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
         {/* Special instructions */}
         {order.special_instructions && (
           <View style={styles.instructions}>
-            <Text style={styles.instructionsLabel}>📝 Special Instructions</Text>
-            <Text style={styles.instructionsText} numberOfLines={2}>
-              {order.special_instructions}
-            </Text>
+            <View style={styles.metaIconWrap}>
+              <Ionicons name="document-text-outline" size={14} color={vendorColors.primary} />
+            </View>
+            <View style={styles.instructionsContent}>
+              <Text style={styles.instructionsLabel}>Special Instructions</Text>
+              <Text style={styles.instructionsText} numberOfLines={2}>
+                {order.special_instructions}
+              </Text>
+            </View>
           </View>
         )}
 
@@ -187,7 +196,8 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
           <View style={styles.actionRow}>
             {/* View details */}
             <TouchableOpacity style={styles.detailsBtn} onPress={openDetails}>
-              <Text style={styles.detailsBtnText}>👁️ View</Text>
+              <Ionicons name="eye-outline" size={14} color={vendorColors.text.secondary} />
+              <Text style={styles.detailsBtnText}>View</Text>
             </TouchableOpacity>
 
             {/* Payment verification buttons */}
@@ -197,13 +207,15 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                   style={[styles.actionBtn, styles.approveBtn]}
                   onPress={() => onPaymentApprove(order)}
                 >
-                  <Text style={styles.actionBtnText}>✓ Approve</Text>
+                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                  <Text style={styles.actionBtnText}>Approve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.rejectPaymentBtn]}
                   onPress={() => onPaymentReject(order)}
                 >
-                  <Text style={styles.actionBtnText}>✗ Reject</Text>
+                  <Ionicons name="close" size={14} color="#FFF" />
+                  <Text style={styles.actionBtnText}>Reject</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -211,21 +223,24 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {/* Propose change */}
             {canProposeChange && onProposeChange && (
               <TouchableOpacity style={[styles.actionBtn, styles.proposeBtn]} onPress={() => onProposeChange(order)}>
-                <Text style={styles.actionBtnText}>✏️ Negotiate</Text>
+                <Ionicons name="create-outline" size={14} color="#FFF" />
+                <Text style={styles.actionBtnText}>Negotiate</Text>
               </TouchableOpacity>
             )}
 
             {/* Request payment */}
             {canRequestPayment && onRequestPayment && (
               <TouchableOpacity style={[styles.actionBtn, styles.paymentBtn]} onPress={() => onRequestPayment(order)}>
-                <Text style={styles.actionBtnText}>💰 Request Pay</Text>
+                <Ionicons name="card-outline" size={14} color="#FFF" />
+                <Text style={styles.actionBtnText}>Request Pay</Text>
               </TouchableOpacity>
             )}
 
             {/* Reject */}
             {canReject && (
               <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => setShowRejectModal(true)}>
-                <Text style={styles.actionBtnText}>✗ Reject</Text>
+                <Ionicons name="close" size={14} color="#FFF" />
+                <Text style={styles.actionBtnText}>Reject</Text>
               </TouchableOpacity>
             )}
 
@@ -235,6 +250,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                 style={[styles.actionBtn, styles.updateBtn]}
                 onPress={() => onUpdateStatus(order.id, nextStep.status)}
               >
+                <Ionicons name="checkmark-done" size={14} color="#FFF" />
                 <Text style={styles.actionBtnText}>{nextStep.label}</Text>
               </TouchableOpacity>
             )}
@@ -339,15 +355,10 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: vendorColors.accent,
+    backgroundColor: vendorColors.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: vendorColors.primary,
   },
   customerInfo: {
     flex: 1,
@@ -388,15 +399,18 @@ const styles = StyleSheet.create({
   },
   pickupRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: vendorColors.divider,
   },
+  metaIconWrap: {
+    marginRight: 6,
+  },
   pickupLabel: {
     fontSize: 12,
     color: vendorColors.text.secondary,
+    marginRight: 8,
   },
   pickupTime: {
     fontSize: 13,
@@ -405,7 +419,6 @@ const styles = StyleSheet.create({
   },
   paymentRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 4,
     paddingBottom: 8,
@@ -413,12 +426,18 @@ const styles = StyleSheet.create({
   paymentLabel: {
     fontSize: 12,
     color: vendorColors.text.secondary,
+    marginRight: 8,
   },
   instructions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     backgroundColor: vendorColors.accentLight,
     padding: 10,
     borderRadius: vendorBorderRadius.sm,
     marginBottom: vendorSpacing.md,
+  },
+  instructionsContent: {
+    flex: 1,
   },
   instructionsLabel: {
     fontSize: 11,
@@ -457,6 +476,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   detailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: vendorBorderRadius.sm,
@@ -470,6 +492,9 @@ const styles = StyleSheet.create({
     color: vendorColors.text.secondary,
   },
   actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: vendorBorderRadius.sm,

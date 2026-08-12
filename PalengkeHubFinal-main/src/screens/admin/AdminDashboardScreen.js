@@ -574,6 +574,8 @@ const Sidebar = ({
     { id: 'violations', label: 'Violations', icon: 'warning' },
     { id: 'complaints', label: 'Complaints', icon: 'chat-bubble-outline' },
     { id: 'chats', label: 'Chats', icon: 'chat' },
+    { id: 'price_monitoring', label: 'Price Monitoring', icon: 'attach-money' },
+    { id: 'audit_trail', label: 'Audit Trail', icon: 'history' },
     { id: 'reports', label: 'Reports', icon: 'analytics' },
   ];
 
@@ -827,6 +829,8 @@ export default function AdminDashboardScreen({ navigation }) {
   const [announcementModal, setAnnouncementModal] = useState(false);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
+  const [announcementAudience, setAnnouncementAudience] = useState('both');
+  const [announcementDuration, setAnnouncementDuration] = useState('24');
   const [violationModal, setViolationModal] = useState(false);
   const [violationReason, setViolationReason] = useState('');
   const [complaintModal, setComplaintModal] = useState(false);
@@ -846,6 +850,46 @@ export default function AdminDashboardScreen({ navigation }) {
     role: '',
     phone: '',
   });
+
+  // User/Vendor/Stall Detail Modal States
+  const [userDetailModalVisible, setUserDetailModalVisible] = useState(false);
+  const [vendorDetailModalVisible, setVendorDetailModalVisible] = useState(false);
+  const [stallDetailModalVisible, setStallDetailModalVisible] = useState(false);
+  const [selectedUserForDetail, setSelectedUserForDetail] = useState(null);
+  const [selectedVendorForDetail, setSelectedVendorForDetail] = useState(null);
+  const [selectedStallForDetail, setSelectedStallForDetail] = useState(null);
+  const [userDetailData, setUserDetailData] = useState({
+    orders: [],
+    totalOrders: 0,
+    totalSpent: 0,
+  });
+  const [vendorDetailData, setVendorDetailData] = useState({
+    stall: null,
+    products: [],
+    totalProducts: 0,
+    activeListings: 0,
+    orders: [],
+    totalOrders: 0,
+    completedOrders: 0,
+    totalRevenue: 0,
+    averageOrderValue: 0,
+    completionRate: 0,
+    bestSellingProduct: null,
+    highestEarningProduct: null,
+    recentPriceUpdates: [],
+    lowStockCount: 0,
+  });
+  const [stallDetailData, setStallDetailData] = useState({
+    vendor: null,
+    products: [],
+    totalProducts: 0,
+    orders: [],
+    totalOrders: 0,
+    completedOrders: 0,
+    totalRevenue: 0,
+    recentTransactions: [],
+  });
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Filter States
   const [selectedStallCategory, setSelectedStallCategory] = useState('all');
@@ -2260,14 +2304,24 @@ export default function AdminDashboardScreen({ navigation }) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
+    
+    // Calculate expiry date based on duration
+    const expiryDate = new Date();
+    expiryDate.setHours(expiryDate.getHours() + parseInt(announcementDuration));
+    
     await supabase.from('announcements').insert({
       title: announcementTitle,
       content: announcementContent,
       created_by: user.id,
+      audience: announcementAudience,
+      duration_hours: parseInt(announcementDuration),
+      expires_at: expiryDate.toISOString(),
     });
     setAnnouncementModal(false);
     setAnnouncementTitle('');
     setAnnouncementContent('');
+    setAnnouncementAudience('both');
+    setAnnouncementDuration('24');
     Alert.alert('Success', 'Announcement posted');
     fetchAllData();
   };
@@ -2315,6 +2369,230 @@ export default function AdminDashboardScreen({ navigation }) {
   };
 
   // ============================================================
+  // USER/VENDOR DETAIL VIEW FUNCTIONS
+  // ============================================================
+  
+  const viewUserDetails = async (user) => {
+    setSelectedUserForDetail(user);
+    setUserDetailModalVisible(true);
+    setDetailLoading(true);
+    
+    try {
+      // Fetch ALL user's orders (not just 10) for accurate analytics
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('consumer_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      // Fetch user's complaints
+      const { data: complaints } = await supabase
+        .from('complaints')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      const totalOrders = orders?.length || 0;
+      const totalSpent = orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+      const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
+      
+      // Compute shopping frequency (orders per 30 days)
+      let shoppingFrequency = 0;
+      if (orders && orders.length > 0) {
+        const firstOrder = new Date(orders[orders.length - 1].created_at);
+        const lastOrder = new Date(orders[0].created_at);
+        const daysActive = Math.max(1, (lastOrder - firstOrder) / (1000 * 60 * 60 * 24));
+        shoppingFrequency = totalOrders / (daysActive / 30);
+      }
+      
+      // Compute favorite product categories from order items
+      const categoryCounts = {};
+      const productCounts = {};
+      orders?.forEach(order => {
+        const items = order.items || [];
+        items.forEach(item => {
+          const category = item.category || 'Uncategorized';
+          categoryCounts[category] = (categoryCounts[category] || 0) + (item.quantity || 1);
+          const productName = item.name || 'Unknown';
+          productCounts[productName] = (productCounts[productName] || 0) + (item.quantity || 1);
+        });
+      });
+      
+      const favoriteCategories = Object.entries(categoryCounts)
+        .sort(([,a],[,b]) => b - a)
+        .slice(0, 3)
+        .map(([name, count]) => ({ name, count }));
+      
+      const favoriteProducts = Object.entries(productCounts)
+        .sort(([,a],[,b]) => b - a)
+        .slice(0, 3)
+        .map(([name, count]) => ({ name, count }));
+      
+      // Compute shopping patterns
+      const statusCounts = {};
+      orders?.forEach(order => {
+        const status = order.status || 'pending';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      });
+      
+      const mostCommonStatus = Object.entries(statusCounts)
+        .sort(([,a],[,b]) => b - a)[0]?.[0] || 'N/A';
+      
+      // Compute monthly spending pattern
+      const monthlySpending = {};
+      orders?.forEach(order => {
+        const date = new Date(order.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlySpending[monthKey] = (monthlySpending[monthKey] || 0) + (order.total_amount || 0);
+      });
+      
+      const spendingTrend = Object.entries(monthlySpending)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, total]) => ({ month, total }));
+      
+      setUserDetailData({
+        orders: orders || [],
+        totalOrders,
+        totalSpent,
+        avgOrderValue,
+        shoppingFrequency,
+        complaints: complaints || [],
+        totalComplaints: complaints?.length || 0,
+        favoriteCategories,
+        favoriteProducts,
+        mostCommonStatus,
+        spendingTrend,
+      });
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+
+  const viewVendorDetails = async (vendor) => {
+    setSelectedVendorForDetail(vendor);
+    setVendorDetailModalVisible(true);
+    setDetailLoading(true);
+    
+    try {
+      // Fetch vendor's stall
+      const { data: stall } = await supabase
+        .from('stalls')
+        .select('*')
+        .eq('vendor_id', vendor.id)
+        .maybeSingle();
+      
+      // Fetch vendor's products
+      const stallId = stall?.id;
+      let products = [];
+      let totalProducts = 0;
+      let activeListings = 0;
+      let lowStockCount = 0;
+      
+      if (stallId) {
+        const { data: productsData } = await supabase
+          .from('products')
+          .select('*')
+          .eq('stall_id', stallId);
+        products = productsData || [];
+        totalProducts = products.length;
+        activeListings = products.filter(p => p.is_available).length;
+        lowStockCount = products.filter(p => typeof p.stock_quantity === 'number' && p.stock_quantity <= 5).length;
+      }
+      
+      // Fetch vendor's orders (all, to compute accurate KPIs)
+      let orders = [];
+      let totalOrders = 0;
+      let completedOrders = 0;
+      let totalRevenue = 0;
+      let averageOrderValue = 0;
+      let completionRate = 0;
+      let bestSellingProduct = null;
+      let highestEarningProduct = null;
+      
+      if (stallId) {
+        const { data: ordersData } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('stall_id', stallId)
+          .order('created_at', { ascending: false });
+        
+        orders = ordersData || [];
+        totalOrders = orders.length;
+        completedOrders = orders.filter(o => o.status === 'completed').length;
+        totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+        averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+        completionRate = totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
+        
+        // Compute best-selling and highest-earning products from order items
+        const productSales = {};
+        orders.forEach(order => {
+          if (order.items && Array.isArray(order.items)) {
+            order.items.forEach(item => {
+              if (!item?.id) return;
+              if (productSales[item.id]) {
+                productSales[item.id].quantity += item.quantity || 0;
+                productSales[item.id].revenue += (item.price || 0) * (item.quantity || 0);
+              } else {
+                productSales[item.id] = {
+                  id: item.id,
+                  name: item.name || 'Unknown Product',
+                  quantity: item.quantity || 0,
+                  revenue: (item.price || 0) * (item.quantity || 0),
+                };
+              }
+            });
+          }
+        });
+        
+        const salesArray = Object.values(productSales);
+        if (salesArray.length > 0) {
+          const byQuantity = [...salesArray].sort((a, b) => b.quantity - a.quantity);
+          const byRevenue = [...salesArray].sort((a, b) => b.revenue - a.revenue);
+          bestSellingProduct = byQuantity[0];
+          highestEarningProduct = byRevenue[0];
+        }
+      }
+      
+      // Recent price updates: products sorted by updated_at desc
+      const recentPriceUpdates = [...products]
+        .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
+        .slice(0, 5)
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          unit: p.unit || '',
+          updated_at: p.updated_at || p.created_at,
+          is_available: p.is_available,
+        }));
+      
+      setVendorDetailData({
+        stall: stall || null,
+        products: products.slice(0, 5),
+        totalProducts,
+        activeListings,
+        orders: orders.slice(0, 5),
+        totalOrders,
+        completedOrders,
+        totalRevenue,
+        averageOrderValue,
+        completionRate,
+        bestSellingProduct,
+        highestEarningProduct,
+        recentPriceUpdates,
+        lowStockCount,
+      });
+    } catch (error) {
+      console.error('Error fetching vendor details:', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // ============================================================
   // RENDER FUNCTIONS
   // ============================================================
   
@@ -2331,7 +2609,11 @@ export default function AdminDashboardScreen({ navigation }) {
         data={users}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={[styles.tableRow, darkMode && styles.tableRowDark]}>
+          <TouchableOpacity 
+            style={[styles.tableRow, darkMode && styles.tableRowDark]}
+            onPress={() => viewUserDetails(item)}
+            activeOpacity={0.7}
+          >
             <View style={styles.userInfoCell}>
               <Text style={[styles.tableCell, darkMode && styles.tableCellDark]} numberOfLines={1}>{item.full_name || 'N/A'}</Text>
               <Text style={[styles.tableCellSub, darkMode && styles.tableCellSubDark]} numberOfLines={1}>{item.email}</Text>
@@ -2342,18 +2624,24 @@ export default function AdminDashboardScreen({ navigation }) {
             <View style={styles.actionButtons}>
               <TouchableOpacity 
                 style={styles.editButtonSmall}
-                onPress={() => handleEditUser(item)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleEditUser(item);
+                }}
               >
                 <MaterialIcons name="edit" size={16} color="#1565C0" />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.deleteButtonSmall}
-                onPress={() => showDeleteConfirmation(item, 'user')}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  showDeleteConfirmation(item, 'user');
+                }}
               >
                 <MaterialIcons name="delete" size={16} color="#D32F2F" />
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -2406,7 +2694,11 @@ export default function AdminDashboardScreen({ navigation }) {
           data={filteredVendors}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={[styles.tableRow, darkMode && styles.tableRowDark]}>
+            <TouchableOpacity 
+              style={[styles.tableRow, darkMode && styles.tableRowDark]}
+              onPress={() => viewVendorDetails(item)}
+              activeOpacity={0.7}
+            >
               <View style={styles.userInfoCell}>
                 <Text style={[styles.tableCell, darkMode && styles.tableCellDark]} numberOfLines={1}>{item.full_name || 'N/A'}</Text>
                 <Text style={[styles.tableCellSub, darkMode && styles.tableCellSubDark]} numberOfLines={1}>{item.email}</Text>
@@ -2423,7 +2715,10 @@ export default function AdminDashboardScreen({ navigation }) {
                 {item.stall ? (
                   <TouchableOpacity 
                     style={[styles.actionButtonSmall, item.stall.is_active ? styles.deactivateButton : styles.activateButton]}
-                    onPress={() => confirmStallAction(item.stall, item.stall.is_active ? 'deactivate' : 'activate')}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      confirmStallAction(item.stall, item.stall.is_active ? 'deactivate' : 'activate');
+                    }}
                   >
                     <Text style={styles.actionButtonText}>{item.stall.is_active ? 'Ban Stall' : 'Activate Stall'}</Text>
                   </TouchableOpacity>
@@ -2431,25 +2726,34 @@ export default function AdminDashboardScreen({ navigation }) {
                 {item.stall ? (
                   <TouchableOpacity 
                     style={styles.editButtonSmall}
-                    onPress={() => handleChatWithVendor(item)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleChatWithVendor(item);
+                    }}
                   >
                     <MaterialIcons name="chat" size={16} color="#1565C0" />
                   </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity 
                   style={styles.editButtonSmall}
-                  onPress={() => handleEditUser(item)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditUser(item);
+                  }}
                 >
                   <MaterialIcons name="edit" size={16} color="#1565C0" />
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.deleteButtonSmall}
-                  onPress={() => showDeleteConfirmation(item, 'vendor')}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    showDeleteConfirmation(item, 'vendor');
+                  }}
                 >
                   <MaterialIcons name="delete" size={16} color="#D32F2F" />
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -3203,6 +3507,30 @@ export default function AdminDashboardScreen({ navigation }) {
         return renderComplaints();
       case 'chats':
         return renderChats();
+      case 'price_monitoring':
+        return (
+          <TouchableOpacity
+            style={{ padding: 20, alignItems: 'center' }}
+            onPress={() => navigation.navigate('AdminPriceMonitoring')}
+          >
+            <MaterialIcons name="attach-money" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, color: '#666', marginTop: 10 }}>
+              Navigate to Price Monitoring Screen
+            </Text>
+          </TouchableOpacity>
+        );
+      case 'audit_trail':
+        return (
+          <TouchableOpacity
+            style={{ padding: 20, alignItems: 'center' }}
+            onPress={() => navigation.navigate('AdminAuditTrail')}
+          >
+            <MaterialIcons name="history" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, color: '#666', marginTop: 10 }}>
+              Navigate to Audit Trail Screen
+            </Text>
+          </TouchableOpacity>
+        );
       case 'reports':
         return renderReports();
       default:
@@ -3518,6 +3846,73 @@ export default function AdminDashboardScreen({ navigation }) {
               <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>New Announcement</Text>
               <TextInput style={[styles.modalInput, darkMode && styles.modalInputDark]} placeholder="Title" value={announcementTitle} onChangeText={setAnnouncementTitle} />
               <TextInput style={[styles.modalInput, styles.textArea, darkMode && styles.modalInputDark]} placeholder="Content" value={announcementContent} onChangeText={setAnnouncementContent} multiline numberOfLines={4} />
+              
+              {/* Audience Targeting */}
+              <Text style={[styles.modalLabel, darkMode && styles.modalLabelDark]}>Audience</Text>
+              <View style={styles.audienceSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'vendors' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('vendors')}
+                >
+                  <MaterialIcons name="store" size={16} color={announcementAudience === 'vendors' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'vendors' && styles.audienceOptionTextActive,
+                  ]}>Vendors Only</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'consumers' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('consumers')}
+                >
+                  <MaterialIcons name="people" size={16} color={announcementAudience === 'consumers' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'consumers' && styles.audienceOptionTextActive,
+                  ]}>Consumers Only</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.audienceOption,
+                    announcementAudience === 'both' && styles.audienceOptionActive,
+                  ]}
+                  onPress={() => setAnnouncementAudience('both')}
+                >
+                  <MaterialIcons name="public" size={16} color={announcementAudience === 'both' ? '#FFFFFF' : '#666666'} />
+                  <Text style={[
+                    styles.audienceOptionText,
+                    announcementAudience === 'both' && styles.audienceOptionTextActive,
+                  ]}>Both</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Duration Setting */}
+              <Text style={[styles.modalLabel, darkMode && styles.modalLabelDark]}>Duration (hours)</Text>
+              <View style={styles.durationSelector}>
+                {[1, 6, 12, 24, 48, 72, 168].map((hours) => (
+                  <TouchableOpacity
+                    key={hours}
+                    style={[
+                      styles.durationOption,
+                      announcementDuration === hours.toString() && styles.durationOptionActive,
+                    ]}
+                    onPress={() => setAnnouncementDuration(hours.toString())}
+                  >
+                    <Text style={[
+                      styles.durationOptionText,
+                      announcementDuration === hours.toString() && styles.durationOptionTextActive,
+                    ]}>
+                      {hours === 168 ? '1 week' : `${hours}h`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setAnnouncementModal(false)}>
                   <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Cancel</Text>
@@ -3646,6 +4041,370 @@ export default function AdminDashboardScreen({ navigation }) {
                   )}
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* USER DETAIL MODAL */}
+        <Modal visible={userDetailModalVisible} transparent animationType="slide">
+          <View style={[styles.modalOverlay, darkMode && styles.modalOverlayDark]}>
+            <View style={[styles.modalContainer, darkMode && styles.modalContainerDark, { maxHeight: '85%', width: Platform.OS === 'web' ? 600 : '90%' }]}>
+              <ScrollView showsVerticalScrollIndicator={true}>
+                <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>User Details</Text>
+                
+                {selectedUserForDetail && (
+                  <>
+                    {/* User Info Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Profile Information</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Name</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.full_name || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Email</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.email || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Phone</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedUserForDetail.phone || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Role</Text>
+                        <View style={[styles.roleBadge, { backgroundColor: selectedUserForDetail.role === 'admin' ? '#C62828' : selectedUserForDetail.role === 'vendor' ? '#E65100' : '#1565C0' }]}>
+                          <Text style={styles.roleText}>{selectedUserForDetail.role}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Member Since</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>
+                          {selectedUserForDetail.created_at ? new Date(selectedUserForDetail.created_at).toLocaleDateString() : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Stats Section */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Statistics</Text>
+                      <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>{userDetailData.totalOrders}</Text>
+                          <Text style={styles.statLabel}>Total Orders</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statValue}>₱{userDetailData.totalSpent.toFixed(2)}</Text>
+                          <Text style={styles.statLabel}>Total Spent</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Recent Orders */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Orders</Text>
+                      {detailLoading ? (
+                        <ActivityIndicator size="small" color="#C62828" style={{ padding: 20 }} />
+                      ) : userDetailData.orders.length > 0 ? (
+                        userDetailData.orders.map((order) => (
+                          <View key={order.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]}>
+                                Order #{order.order_number?.slice(-8) || order.id.toString().slice(-8)}
+                              </Text>
+                              <View style={[styles.transactionStatus, { backgroundColor: order.status === 'completed' ? '#10B981' : order.status === 'cancelled' ? '#EF4444' : '#F59E0B' }]}>
+                                <Text style={styles.transactionStatusText}>{order.status}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>
+                              ₱{order.total_amount || 0}
+                            </Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.emptySection}>
+                          <MaterialIcons name="shopping-cart" size={40} color="#CCCCCC" />
+                          <Text style={[styles.emptySectionText, darkMode && styles.emptySectionTextDark]}>No orders yet</Text>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setUserDetailModalVisible(false)}>
+                    <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Close</Text>
+                  </TouchableOpacity>
+                  {selectedUserForDetail && (
+                    <TouchableOpacity style={[styles.modalSubmit, darkMode && styles.modalSubmitDark]} onPress={() => {
+                      setUserDetailModalVisible(false);
+                      handleEditUser(selectedUserForDetail);
+                    }}>
+                      <Text style={styles.modalSubmitText}>Edit User</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* VENDOR DETAIL MODAL */}
+        <Modal visible={vendorDetailModalVisible} transparent animationType="slide">
+          <View style={[styles.modalOverlay, darkMode && styles.modalOverlayDark]}>
+            <View style={[styles.modalContainer, darkMode && styles.modalContainerDark, { maxHeight: '85%', width: Platform.OS === 'web' ? 700 : '90%' }]}>
+              <ScrollView showsVerticalScrollIndicator={true}>
+                <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>Vendor Details</Text>
+                
+                {selectedVendorForDetail && (
+                  <>
+                    {/* Vendor Header Card */}
+                    <View style={[styles.vendorHeaderCard, darkMode && styles.vendorHeaderCardDark]}>
+                      <View style={[styles.vendorAvatar, darkMode && styles.vendorAvatarDark]}>
+                        <Text style={styles.vendorAvatarText}>
+                          {(selectedVendorForDetail.full_name || 'V').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.vendorHeaderInfo}>
+                        <Text style={[styles.vendorHeaderName, darkMode && styles.vendorHeaderNameDark]} numberOfLines={1}>
+                          {selectedVendorForDetail.full_name || 'Unknown Vendor'}
+                        </Text>
+                        <View style={styles.vendorHeaderMeta}>
+                          {vendorDetailData.stall ? (
+                            <View style={[styles.vendorStallBadge, vendorDetailData.stall.is_active ? styles.vendorStallBadgeActive : styles.vendorStallBadgeInactive]}>
+                              <MaterialIcons name="storefront" size={12} color={vendorDetailData.stall.is_active ? '#2E7D32' : '#C62828'} />
+                              <Text style={[styles.vendorStallBadgeText, { color: vendorDetailData.stall.is_active ? '#2E7D32' : '#C62828' }]}>
+                                {vendorDetailData.stall.stall_name || 'Stall'} • #{vendorDetailData.stall.stall_number || 'N/A'}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.vendorStallBadge, styles.vendorStallBadgeInactive]}>
+                              <MaterialIcons name="storefront" size={12} color="#C62828" />
+                              <Text style={[styles.vendorStallBadgeText, { color: '#C62828' }]}>No Stall Assigned</Text>
+                            </View>
+                          )}
+                          <Text style={[styles.vendorHeaderDate, darkMode && styles.vendorHeaderDateDark]}>
+                            Member since {selectedVendorForDetail.created_at ? new Date(selectedVendorForDetail.created_at).toLocaleDateString() : 'N/A'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* KPI Cards */}
+                    <View style={styles.kpiGrid}>
+                      <View style={[styles.kpiCard, darkMode && styles.kpiCardDark]}>
+                        <View style={[styles.kpiIconContainer, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
+                          <MaterialIcons name="inventory" size={20} color="#C62828" />
+                        </View>
+                        <Text style={[styles.kpiValue, darkMode && styles.kpiValueDark]}>{vendorDetailData.totalProducts}</Text>
+                        <Text style={[styles.kpiLabel, darkMode && styles.kpiLabelDark]}>Total Products</Text>
+                      </View>
+                      <View style={[styles.kpiCard, darkMode && styles.kpiCardDark]}>
+                        <View style={[styles.kpiIconContainer, { backgroundColor: 'rgba(21,101,192,0.08)' }]}>
+                          <MaterialIcons name="shopping-cart" size={20} color="#1565C0" />
+                        </View>
+                        <Text style={[styles.kpiValue, darkMode && styles.kpiValueDark]}>{vendorDetailData.totalOrders}</Text>
+                        <Text style={[styles.kpiLabel, darkMode && styles.kpiLabelDark]}>Total Orders</Text>
+                      </View>
+                      <View style={[styles.kpiCard, darkMode && styles.kpiCardDark]}>
+                        <View style={[styles.kpiIconContainer, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
+                          <MaterialIcons name="payments" size={20} color="#2E7D32" />
+                        </View>
+                        <Text style={[styles.kpiValue, darkMode && styles.kpiValueDark]}>₱{vendorDetailData.totalRevenue.toFixed(2)}</Text>
+                        <Text style={[styles.kpiLabel, darkMode && styles.kpiLabelDark]}>Revenue</Text>
+                      </View>
+                      <View style={[styles.kpiCard, darkMode && styles.kpiCardDark]}>
+                        <View style={[styles.kpiIconContainer, { backgroundColor: 'rgba(230,81,0,0.08)' }]}>
+                          <MaterialIcons name="storefront" size={20} color="#E65100" />
+                        </View>
+                        <Text style={[styles.kpiValue, darkMode && styles.kpiValueDark]}>{vendorDetailData.activeListings}</Text>
+                        <Text style={[styles.kpiLabel, darkMode && styles.kpiLabelDark]}>Active Listings</Text>
+                      </View>
+                    </View>
+
+                    {/* Business Insights */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <View style={styles.detailSectionHeader}>
+                        <MaterialIcons name="insights" size={18} color="#C62828" />
+                        <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Business Insights</Text>
+                      </View>
+                      
+                      {vendorDetailData.bestSellingProduct ? (
+                        <View style={[styles.insightRow, darkMode && styles.insightRowDark]}>
+                          <View style={[styles.insightIconContainer, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
+                            <MaterialIcons name="trending-up" size={18} color="#C62828" />
+                          </View>
+                          <View style={styles.insightContent}>
+                            <Text style={[styles.insightLabel, darkMode && styles.insightLabelDark]}>Best-Selling Product</Text>
+                            <Text style={[styles.insightValue, darkMode && styles.insightValueDark]} numberOfLines={1}>
+                              {vendorDetailData.bestSellingProduct.name}
+                            </Text>
+                          </View>
+                          <View style={styles.insightStat}>
+                            <Text style={[styles.insightStatValue, darkMode && styles.insightStatValueDark]}>
+                              {vendorDetailData.bestSellingProduct.quantity}
+                            </Text>
+                            <Text style={[styles.insightStatLabel, darkMode && styles.insightStatLabelDark]}>sold</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={[styles.insightRow, darkMode && styles.insightRowDark]}>
+                          <View style={[styles.insightIconContainer, { backgroundColor: 'rgba(0,0,0,0.04)' }]}>
+                            <MaterialIcons name="trending-up" size={18} color="#9CA3AF" />
+                          </View>
+                          <View style={styles.insightContent}>
+                            <Text style={[styles.insightLabel, darkMode && styles.insightLabelDark]}>Best-Selling Product</Text>
+                            <Text style={[styles.insightValue, darkMode && styles.insightValueDark]}>No sales data yet</Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {vendorDetailData.highestEarningProduct ? (
+                        <View style={[styles.insightRow, darkMode && styles.insightRowDark]}>
+                          <View style={[styles.insightIconContainer, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
+                            <MaterialIcons name="attach-money" size={18} color="#2E7D32" />
+                          </View>
+                          <View style={styles.insightContent}>
+                            <Text style={[styles.insightLabel, darkMode && styles.insightLabelDark]}>Highest Earning Product</Text>
+                            <Text style={[styles.insightValue, darkMode && styles.insightValueDark]} numberOfLines={1}>
+                              {vendorDetailData.highestEarningProduct.name}
+                            </Text>
+                          </View>
+                          <View style={styles.insightStat}>
+                            <Text style={[styles.insightStatValue, darkMode && styles.insightStatValueDark]}>
+                              ₱{vendorDetailData.highestEarningProduct.revenue.toFixed(2)}
+                            </Text>
+                            <Text style={[styles.insightStatLabel, darkMode && styles.insightStatLabelDark]}>earned</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={[styles.insightRow, darkMode && styles.insightRowDark]}>
+                          <View style={[styles.insightIconContainer, { backgroundColor: 'rgba(0,0,0,0.04)' }]}>
+                            <MaterialIcons name="attach-money" size={18} color="#9CA3AF" />
+                          </View>
+                          <View style={styles.insightContent}>
+                            <Text style={[styles.insightLabel, darkMode && styles.insightLabelDark]}>Highest Earning Product</Text>
+                            <Text style={[styles.insightValue, darkMode && styles.insightValueDark]}>No sales data yet</Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Performance Metrics */}
+                      <View style={styles.performanceRow}>
+                        <View style={[styles.performanceItem, darkMode && styles.performanceItemDark]}>
+                          <Text style={[styles.performanceValue, darkMode && styles.performanceValueDark]}>
+                            {vendorDetailData.completionRate}%
+                          </Text>
+                          <Text style={[styles.performanceLabel, darkMode && styles.performanceLabelDark]}>Completion Rate</Text>
+                        </View>
+                        <View style={[styles.performanceItem, darkMode && styles.performanceItemDark]}>
+                          <Text style={[styles.performanceValue, darkMode && styles.performanceValueDark]}>
+                            ₱{vendorDetailData.averageOrderValue.toFixed(2)}
+                          </Text>
+                          <Text style={[styles.performanceLabel, darkMode && styles.performanceLabelDark]}>Avg Order Value</Text>
+                        </View>
+                        <View style={[styles.performanceItem, darkMode && styles.performanceItemDark]}>
+                          <Text style={[styles.performanceValue, darkMode && styles.performanceValueDark, vendorDetailData.lowStockCount > 0 && { color: '#E65100' }]}>
+                            {vendorDetailData.lowStockCount}
+                          </Text>
+                          <Text style={[styles.performanceLabel, darkMode && styles.performanceLabelDark]}>Low Stock Items</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Recent Price Updates */}
+                    {vendorDetailData.recentPriceUpdates.length > 0 && (
+                      <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                        <View style={styles.detailSectionHeader}>
+                          <MaterialIcons name="price-change" size={18} color="#E65100" />
+                          <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Price Updates</Text>
+                        </View>
+                        {vendorDetailData.recentPriceUpdates.map((product) => (
+                          <View key={product.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]} numberOfLines={1}>{product.name}</Text>
+                              <View style={[styles.statusBadge, product.is_available ? styles.activeBadge : styles.inactiveBadge]}>
+                                <Text style={styles.statusText}>{product.is_available ? 'Available' : 'Unavailable'}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>
+                              ₱{product.price || 0}{product.unit ? ` / ${product.unit}` : ''}
+                            </Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              Updated {product.updated_at ? new Date(product.updated_at).toLocaleDateString() : 'N/A'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Recent Transactions */}
+                    {vendorDetailData.orders.length > 0 && (
+                      <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                        <View style={styles.detailSectionHeader}>
+                          <MaterialIcons name="receipt-long" size={18} color="#1565C0" />
+                          <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Recent Transactions</Text>
+                        </View>
+                        {vendorDetailData.orders.map((order) => (
+                          <View key={order.id} style={[styles.transactionCard, darkMode && styles.transactionCardDark]}>
+                            <View style={styles.transactionHeader}>
+                              <Text style={[styles.transactionId, darkMode && styles.transactionIdDark]}>
+                                Order #{order.order_number?.slice(-8) || order.id.toString().slice(-8)}
+                              </Text>
+                              <View style={[styles.transactionStatus, { backgroundColor: order.status === 'completed' ? '#10B981' : order.status === 'cancelled' ? '#EF4444' : '#F59E0B' }]}>
+                                <Text style={styles.transactionStatusText}>{order.status}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.transactionAmount, darkMode && styles.transactionAmountDark]}>
+                              ₱{order.total_amount || 0}
+                            </Text>
+                            <Text style={[styles.transactionDate, darkMode && styles.transactionDateDark]}>
+                              {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Vendor Contact Info */}
+                    <View style={[styles.detailSection, darkMode && styles.detailSectionDark]}>
+                      <View style={styles.detailSectionHeader}>
+                        <MaterialIcons name="contact-phone" size={18} color="#6B7280" />
+                        <Text style={[styles.detailSectionTitle, darkMode && styles.detailSectionTitleDark]}>Contact Information</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Email</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]} numberOfLines={1}>{selectedVendorForDetail.email || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Phone</Text>
+                        <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{selectedVendorForDetail.phone || 'N/A'}</Text>
+                      </View>
+                      {vendorDetailData.stall && (
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, darkMode && styles.detailLabelDark]}>Stall Section</Text>
+                          <Text style={[styles.detailValue, darkMode && styles.detailValueDark]}>{vendorDetailData.stall.section || 'N/A'}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={[styles.modalCancel, darkMode && styles.modalCancelDark]} onPress={() => setVendorDetailModalVisible(false)}>
+                    <Text style={[styles.modalCancelText, darkMode && styles.modalCancelTextDark]}>Close</Text>
+                  </TouchableOpacity>
+                  {selectedVendorForDetail && (
+                    <TouchableOpacity style={[styles.modalSubmit, darkMode && styles.modalSubmitDark]} onPress={() => {
+                      setVendorDetailModalVisible(false);
+                      handleEditUser(selectedVendorForDetail);
+                    }}>
+                      <Text style={styles.modalSubmitText}>Edit Vendor</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -5753,6 +6512,372 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  // Detail Modal Styles
+  detailSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 16,
+    marginBottom: 12,
+  },
+  detailSectionDark: {
+    backgroundColor: '#1a1a1a',
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  detailSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 12,
+  },
+  detailSectionTitleDark: {
+    color: '#FFFFFF',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  detailLabelDark: {
+    color: '#888888',
+  },
+  detailValue: {
+    fontSize: 13,
+    color: '#1a1a1a',
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 12,
+  },
+  detailValueDark: {
+    color: '#FFFFFF',
+  },
+
+  // Vendor Header Card
+  vendorHeaderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  vendorHeaderCardDark: {
+    backgroundColor: '#1a1a1a',
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  vendorAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#C62828',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vendorAvatarDark: {
+    backgroundColor: '#C62828',
+  },
+  vendorAvatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  vendorHeaderInfo: {
+    flex: 1,
+  },
+  vendorHeaderName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    letterSpacing: -0.3,
+  },
+  vendorHeaderNameDark: {
+    color: '#FFFFFF',
+  },
+  vendorHeaderMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  vendorStallBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  vendorStallBadgeActive: {
+    backgroundColor: '#E8F5E9',
+  },
+  vendorStallBadgeInactive: {
+    backgroundColor: '#FFEBEE',
+  },
+  vendorStallBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  vendorHeaderDate: {
+    fontSize: 11,
+    color: '#888888',
+  },
+  vendorHeaderDateDark: {
+    color: '#666666',
+  },
+
+  // KPI Cards
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  kpiCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 12,
+    alignItems: 'center',
+  },
+  kpiCardDark: {
+    backgroundColor: '#1a1a1a',
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  kpiIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  kpiValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    letterSpacing: -0.3,
+  },
+  kpiValueDark: {
+    color: '#FFFFFF',
+  },
+  kpiLabel: {
+    fontSize: 11,
+    color: '#666666',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  kpiLabelDark: {
+    color: '#888888',
+  },
+
+  // Insight Rows
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
+    gap: 10,
+  },
+  insightRowDark: {
+    borderBottomColor: 'rgba(255,255,255,0.04)',
+  },
+  insightIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightContent: {
+    flex: 1,
+  },
+  insightLabel: {
+    fontSize: 11,
+    color: '#888888',
+    fontWeight: '500',
+  },
+  insightLabelDark: {
+    color: '#666666',
+  },
+  insightValue: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  insightValueDark: {
+    color: '#FFFFFF',
+  },
+  insightStat: {
+    alignItems: 'flex-end',
+  },
+  insightStatValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  insightStatValueDark: {
+    color: '#FFFFFF',
+  },
+  insightStatLabel: {
+    fontSize: 10,
+    color: '#888888',
+  },
+  insightStatLabelDark: {
+    color: '#666666',
+  },
+
+  // Performance Metrics
+  performanceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  performanceItem: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+  },
+  performanceItemDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  performanceValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  performanceValueDark: {
+    color: '#FFFFFF',
+  },
+  performanceLabel: {
+    fontSize: 10,
+    color: '#888888',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  performanceLabelDark: {
+    color: '#666666',
+  },
+
+  // Transaction Cards
+  transactionCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  transactionCardDark: {
+    backgroundColor: '#2a2a2a',
+    borderColor: 'rgba(255,255,255,0.04)',
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  transactionId: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    flex: 1,
+  },
+  transactionIdDark: {
+    color: '#FFFFFF',
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#C62828',
+    marginTop: 2,
+  },
+  transactionAmountDark: {
+    color: '#EF5350',
+  },
+  transactionDate: {
+    fontSize: 11,
+    color: '#888888',
+    marginTop: 2,
+  },
+  transactionDateDark: {
+    color: '#666666',
+  },
+  transactionStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  transactionStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+
+  // Empty Section
+  emptySection: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptySectionText: {
+    fontSize: 13,
+    color: '#888888',
+    marginTop: 8,
+  },
+  emptySectionTextDark: {
+    color: '#666666',
+  },
+
+  // Stat Items
+  statItem: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#888888',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+
   // Modals
   modalOverlay: {
     flex: 1,
@@ -5821,9 +6946,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     backgroundColor: '#2a2a2a',
   },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  modalLabelDark: {
+    color: '#FFFFFF',
+  },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  audienceSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  audienceOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  audienceOptionActive: {
+    backgroundColor: '#C62828',
+    borderColor: '#C62828',
+  },
+  audienceOptionText: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  audienceOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  durationSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 16,
+  },
+  durationOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  durationOptionActive: {
+    backgroundColor: '#C62828',
+    borderColor: '#C62828',
+  },
+  durationOptionText: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  durationOptionTextActive: {
+    color: '#FFFFFF',
   },
   modalButtons: {
     flexDirection: 'row',

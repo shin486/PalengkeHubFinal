@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFavorites } from '../../hooks/useFavorites';
 import { chatService } from '../../services/chatService';
 import StallMap from '../../components/StallMap';
 
@@ -140,6 +141,7 @@ const getStallCoordinates = (section, stallNumber) => {
 export default function StallDetailsScreen({ navigation, route }) {
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
+  const { isStallFavorite, toggleStallFavorite } = useFavorites();
   const [stall, setStall] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [products, setProducts] = useState([]);
@@ -353,6 +355,19 @@ export default function StallDetailsScreen({ navigation, route }) {
             <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           
+          {/* Favorite Button */}
+          <TouchableOpacity 
+            style={styles.bannerFavButton}
+            onPress={() => toggleStallFavorite(stall)}
+            activeOpacity={0.8}
+          >
+            <Ionicons 
+              name={isStallFavorite(stall?.id) ? 'heart' : 'heart-outline'} 
+              size={24} 
+              color={isStallFavorite(stall?.id) ? '#EF4444' : '#FFFFFF'} 
+            />
+          </TouchableOpacity>
+          
           {/* Banner Content - Bottom */}
           <View style={styles.bannerContent}>
             <Text style={styles.bannerName}>{stall?.stall_name || 'Market Stall'}</Text>
@@ -412,23 +427,22 @@ export default function StallDetailsScreen({ navigation, route }) {
             </View>
             
             {/* ✅ Rating on the Right Side - Clickable */}
-{/* ✅ Rating on the Right Side - Clickable */}
-<TouchableOpacity 
-  style={styles.infoStripRight}
-  onPress={goToReviews}
-  activeOpacity={0.7}
->
-  <View style={styles.infoStripRatingContainer}>
-    <View style={styles.infoStripRating}>
-      <StarRating rating={displayRating} size={14} />
-      <Text style={styles.infoStripRatingText}>{displayRating.toFixed(1)}</Text>
-    </View>
-    {/* ✅ Underline BELOW the number (3.4) - aligned to the right */}
-    <View style={styles.infoStripRatingUnderline} />
-    <Text style={styles.infoStripReviewCount}>{ratingCount} reviews</Text>
-  </View>
-  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
-</TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.infoStripRight}
+              onPress={goToReviews}
+              activeOpacity={0.7}
+            >
+              <View style={styles.infoStripRatingContainer}>
+                <View style={styles.infoStripRating}>
+                  <StarRating rating={displayRating} size={14} />
+                  <Text style={styles.infoStripRatingText}>{displayRating.toFixed(1)}</Text>
+                </View>
+                {/* ✅ Underline BELOW the number (3.4) - aligned to the right */}
+                <View style={styles.infoStripRatingUnderline} />
+                <Text style={styles.infoStripReviewCount}>{ratingCount} reviews</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -626,85 +640,85 @@ export default function StallDetailsScreen({ navigation, route }) {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-{/* ============================================================
-    FULL SCREEN MAP MODAL - FIXED
-============================================================ */}
-<Modal
-  visible={mapModalVisible}
-  animationType="slide"
-  transparent={false}
-  onRequestClose={() => setMapModalVisible(false)}
->
-  <View style={styles.modalContainer}>
-    {/* Modal Header - Outside the map */}
-    <LinearGradient
-      colors={[COLORS.primary, COLORS.primaryDark]}
-      style={styles.modalHeader}
-    >
-      <View style={styles.modalHeaderContent}>
-        <TouchableOpacity 
-          style={styles.modalCloseButton}
-          onPress={() => setMapModalVisible(false)}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={28} color="#FFFFFF" />
-        </TouchableOpacity>
-        <View style={styles.modalHeaderText}>
-          <Text style={styles.modalTitle} numberOfLines={1}>
-            {stall?.stall_name || 'Stall Location'}
-          </Text>
-          <Text style={styles.modalSubtitle}>
-            Stall #{stall?.stall_number} • {stall?.section || 'No section'}
-          </Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.modalShareButton}
-          onPress={() => {
-            // Optional: Add share functionality
-            Alert.alert('Share', 'Share this location');
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="share-outline" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-    </LinearGradient>
-    
-    {/* Full Screen Map - with pointerEvents handling */}
-    <View style={styles.modalMapWrapper}>
-      <StallMap
-        latitude={stallCoords.latitude}
-        longitude={stallCoords.longitude}
-        stallName={stall?.stall_name}
-        stallNumber={stall?.stall_number}
-        section={stall?.section}
-        height={height - 160}
-        interactive={true}
-      />
-    </View>
-    
-    {/* Modal Footer - Fixed at bottom */}
-    <View style={styles.modalFooter}>
-      <TouchableOpacity 
-        style={styles.modalDirectionsButton}
-        onPress={() => {
-          setMapModalVisible(false);
-          openMapsDirections();
-        }}
-        activeOpacity={0.8}
+      {/* ============================================================
+          FULL SCREEN MAP MODAL - FIXED
+      ============================================================ */}
+      <Modal
+        visible={mapModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setMapModalVisible(false)}
       >
-        <LinearGradient
-          colors={[COLORS.primary, COLORS.primaryLight]}
-          style={styles.modalDirectionsGradient}
-        >
-          <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.modalDirectionsText}>Get Directions</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  </View>
-</Modal>
+        <View style={styles.modalContainer}>
+          {/* Modal Header - Outside the map */}
+          <LinearGradient
+            colors={[COLORS.primary, COLORS.primaryDark]}
+            style={styles.modalHeader}
+          >
+            <View style={styles.modalHeaderContent}>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setMapModalVisible(false)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  {stall?.stall_name || 'Stall Location'}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  Stall #{stall?.stall_number} • {stall?.section || 'No section'}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalShareButton}
+                onPress={() => {
+                  // Optional: Add share functionality
+                  Alert.alert('Share', 'Share this location');
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="share-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+          
+          {/* Full Screen Map - with pointerEvents handling */}
+          <View style={styles.modalMapWrapper}>
+            <StallMap
+              latitude={stallCoords.latitude}
+              longitude={stallCoords.longitude}
+              stallName={stall?.stall_name}
+              stallNumber={stall?.stall_number}
+              section={stall?.section}
+              height={height - 160}
+              interactive={true}
+            />
+          </View>
+          
+          {/* Modal Footer - Fixed at bottom */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity 
+              style={styles.modalDirectionsButton}
+              onPress={() => {
+                setMapModalVisible(false);
+                openMapsDirections();
+              }}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryLight]}
+                style={styles.modalDirectionsGradient}
+              >
+                <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.modalDirectionsText}>Get Directions</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -760,6 +774,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Platform.OS === 'ios' ? 52 : 28,
     left: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+
+  // ── Favorite Button ──
+  bannerFavButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 52 : 28,
+    right: 16,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -887,40 +915,38 @@ const styles = StyleSheet.create({
     color: COLORS.text.medium,
     marginTop: 1,
   },
-  
- // ── Rating on Right Side ──
-infoStripRight: {
-  alignItems: 'center',
-  flexDirection: 'row',
-  gap: 8,
-},
-infoStripRatingContainer: {
-  alignItems: 'flex-end',  // ✅ Changed from 'center' to 'flex-end'
-},
-infoStripRating: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 4,
-},
-infoStripRatingText: {
-  fontSize: 16,
-  fontWeight: '700',
-  color: COLORS.warning,
-},
-// ✅ Underline goes below the number (3.4)
-infoStripRatingUnderline: {
-  width: 30,
-  height: 2,
-  backgroundColor: COLORS.primary,
-  borderRadius: 1,
-  marginTop: 2,
-  // ✅ Remove alignSelf: 'center' - let it follow flex-end alignment
-},
-infoStripReviewCount: {
-  fontSize: 11,
-  color: COLORS.text.light,
-  marginTop: 2,
-},
+
+  // ── Rating on Right Side ──
+  infoStripRight: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  infoStripRatingContainer: {
+    alignItems: 'flex-end',
+  },
+  infoStripRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoStripRatingText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.warning,
+  },
+  infoStripRatingUnderline: {
+    width: 30,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    borderRadius: 1,
+    marginTop: 2,
+  },
+  infoStripReviewCount: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 2,
+  },
 
   // ── Section Cards ──
   sectionCard: {
@@ -1176,95 +1202,95 @@ infoStripReviewCount: {
     color: COLORS.primary,
   },
 
- // ── Modal Styles - Updated ──
-modalContainer: {
-  flex: 1,
-  backgroundColor: '#FFFFFF',
-},
-modalHeader: {
-  paddingTop: Platform.OS === 'ios' ? 50 : 20,
-  paddingBottom: 16,
-  paddingHorizontal: 20,
-  zIndex: 10,
-  position: 'relative',
-},
-modalHeaderContent: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-},
-modalHeaderText: {
-  flex: 1,
-  marginHorizontal: 12,
-},
-modalTitle: {
-  fontSize: 18,
-  fontWeight: '700',
-  color: '#FFFFFF',
-  letterSpacing: -0.3,
-  textAlign: 'center',
-},
-modalSubtitle: {
-  fontSize: 13,
-  color: 'rgba(255,255,255,0.85)',
-  textAlign: 'center',
-  marginTop: 2,
-},
-modalCloseButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: 'rgba(255,255,255,0.2)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 20,
-},
-modalShareButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: 'rgba(255,255,255,0.2)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 20,
-},
-modalMapWrapper: {
-  flex: 1,
-  backgroundColor: '#F8F9FB',
-},
-modalFooter: {
-  padding: 16,
-  paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-  borderTopWidth: 1,
-  borderTopColor: COLORS.borderLight,
-  backgroundColor: COLORS.surface,
-  position: 'absolute',
-  bottom: 0,
-  left: 0,
-  right: 0,
-  zIndex: 10,
-},
-modalDirectionsButton: {
-  borderRadius: 12,
-  overflow: 'hidden',
-  shadowColor: COLORS.shadowDark,
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.2,
-  shadowRadius: 8,
-  elevation: 4,
-},
-modalDirectionsGradient: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  paddingVertical: 14,
-},
-modalDirectionsText: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: '#FFFFFF',
-},
+  // ── Modal Styles - Updated ──
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    zIndex: 10,
+    position: 'relative',
+  },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalHeaderText: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  modalShareButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  modalMapWrapper: {
+    flex: 1,
+    backgroundColor: '#F8F9FB',
+  },
+  modalFooter: {
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  modalDirectionsButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalDirectionsGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+  },
+  modalDirectionsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
 
   // ── Bottom Spacer ──
   bottomSpacer: {

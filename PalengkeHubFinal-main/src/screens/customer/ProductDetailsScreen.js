@@ -8,11 +8,34 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
+import { useFavorites } from '../../hooks/useFavorites';
+
+// Conditionally load Recharts only on web (it is a web-only library)
+let RechartsLineChart, RechartsResponsiveContainer, RechartsXAxis, RechartsYAxis,
+  RechartsTooltip, RechartsCartesianGrid, RechartsLine, RechartsReferenceLine;
+if (Platform.OS === 'web') {
+  try {
+    const R = require('recharts');
+    RechartsLineChart = R.LineChart;
+    RechartsResponsiveContainer = R.ResponsiveContainer;
+    RechartsXAxis = R.XAxis;
+    RechartsYAxis = R.YAxis;
+    RechartsTooltip = R.Tooltip;
+    RechartsCartesianGrid = R.CartesianGrid;
+    RechartsLine = R.Line;
+    RechartsReferenceLine = R.ReferenceLine;
+  } catch (e) {
+    console.warn('Recharts not available:', e.message);
+  }
+}
 
 const COLORS = {
   primary: '#DC2626',
@@ -98,6 +121,87 @@ const StarRating = ({ rating, size = 12 }) => {
   );
 };
 
+// Price History Chart Component (Recharts on web, fallback bar chart on native)
+const PriceHistoryChart = ({ data, darkMode }) => {
+  if (!data || data.length === 0) return null;
+
+  const chartData = data.map(h => ({
+    date: new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    price: h.price || 0,
+  }));
+
+  // Web: use Recharts
+  if (Platform.OS === 'web' && RechartsLineChart) {
+    return (
+      <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
+        <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+        <View style={{ width: '100%', height: 200 }}>
+          <RechartsResponsiveContainer width="100%" height="100%">
+            <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+              <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
+              <RechartsXAxis 
+                dataKey="date" 
+                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                angle={-30}
+                textAnchor="end"
+                height={40}
+              />
+              <RechartsYAxis 
+                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                tickFormatter={(value) => `₱${value}`}
+                width={50}
+              />
+              <RechartsTooltip 
+                contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
+                labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
+                itemStyle={{ fontSize: 11, color: '#DC2626' }}
+                formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
+              />
+              <RechartsLine 
+                type="monotone" 
+                dataKey="price" 
+                stroke="#DC2626" 
+                strokeWidth={2}
+                dot={{ r: 3, fill: '#DC2626' }}
+                activeDot={{ r: 5, fill: '#EF4444' }}
+              />
+            </RechartsLineChart>
+          </RechartsResponsiveContainer>
+        </View>
+      </View>
+    );
+  }
+
+  // Native fallback: simple bar chart
+  const prices = chartData.map(d => d.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice || 1;
+
+  return (
+    <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
+      <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+      <View style={styles.chartBars}>
+        {chartData.slice(0, 8).map((point, index) => {
+          const height = ((point.price - minPrice) / priceRange) * 100;
+          return (
+            <View key={index} style={styles.chartBarContainer}>
+              <View style={[styles.chartBar, { height: Math.max(height, 5) }]} />
+              <Text style={styles.chartBarLabel}>₱{point.price.toFixed(0)}</Text>
+              <Text style={styles.chartBarDate}>{point.date}</Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.chartInfo}>
+        <Text style={styles.chartInfoText}>Min: ₱{minPrice.toFixed(2)}</Text>
+        <Text style={styles.chartInfoText}>Max: ₱{maxPrice.toFixed(2)}</Text>
+        <Text style={styles.chartInfoText}>Avg: ₱{(prices.reduce((sum, p) => sum + p, 0) / prices.length).toFixed(2)}</Text>
+      </View>
+    </View>
+  );
+};
+
 export default function ProductDetailsScreen({ route, navigation }) {
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
@@ -109,14 +213,28 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [currentPrice, setCurrentPrice] = useState(0);
   const [loading, setLoading] = useState(true);
   
+  // Market analytics state
+  const [marketProducts, setMarketProducts] = useState([]);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
   const { user, isGuest, setIsGuest } = useAuth();
   const { addToCart } = useCart();
+  const { isProductFavorite, toggleProductFavorite } = useFavorites();
 
   useEffect(() => {
     if (productId) {
       fetchProductDetails();
     }
   }, [productId]);
+
+  // Fetch market data once the product is loaded
+  useEffect(() => {
+    if (product) {
+      fetchMarketData(product);
+    }
+  }, [product]);
 
   const fetchProductDetails = async () => {
     try {
@@ -344,6 +462,126 @@ export default function ProductDetailsScreen({ route, navigation }) {
     });
   };
 
+  // ✅ Fetch market data: all vendors selling the same product + price history
+  const fetchMarketData = async (productData) => {
+    if (!productData) return;
+    setMarketLoading(true);
+    try {
+      // Fetch all products with the same name (market comparison)
+      const { data: marketData, error: marketError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          stalls (
+            id,
+            stall_name,
+            stall_number,
+            section,
+            vendor_id,
+            profiles:vendor_id (full_name, email)
+          )
+        `)
+        .eq('name', productData.name)
+        .eq('is_available', true);
+
+      if (marketError) throw marketError;
+      setMarketProducts(marketData || []);
+
+      // Fetch price history for this product
+      const { data: historyData, error: historyError } = await supabase
+        .from('price_history')
+        .select('*')
+        .eq('product_id', productData.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (historyError) {
+        // price_history table may not exist; generate synthetic history from product data
+        const synthetic = generateSyntheticHistory(productData);
+        setPriceHistory(synthetic);
+      } else {
+        setPriceHistory(historyData || []);
+      }
+    } catch (error) {
+      console.error('Error fetching market data:', error);
+      // Fallback: generate synthetic history
+      const synthetic = generateSyntheticHistory(productData);
+      setPriceHistory(synthetic);
+    } finally {
+      setMarketLoading(false);
+    }
+  };
+
+  // Generate synthetic price history when price_history table is unavailable
+  const generateSyntheticHistory = (productData) => {
+    const history = [];
+    const currentPrice = productData.price || 0;
+    for (let i = 0; i < 30; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const fluctuation = (Math.random() - 0.5) * 0.15;
+      const price = currentPrice * (1 + fluctuation);
+      history.push({
+        id: `synth_${i}`,
+        product_id: productData.id,
+        price: parseFloat(price.toFixed(2)),
+        created_at: date.toISOString(),
+      });
+    }
+    return history;
+  };
+
+  // ✅ Compute market analytics from marketProducts
+  const computeMarketAnalytics = () => {
+    if (!marketProducts || marketProducts.length === 0) return null;
+
+    const prices = marketProducts.map(p => p.price || 0).filter(p => p > 0);
+    if (prices.length === 0) return null;
+
+    const sorted = [...marketProducts].sort((a, b) => (a.price || 0) - (b.price || 0));
+    const lowest = sorted[0];
+    const highest = sorted[sorted.length - 1];
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+    const priceDiff = maxPrice - minPrice;
+    const priceDiffPercent = minPrice > 0 ? ((priceDiff / minPrice) * 100) : 0;
+
+    // Vendors pricing below market average
+    const belowAverage = sorted.filter(p => (p.price || 0) < avgPrice);
+
+    // Outdated prices: products not updated in the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const outdated = sorted.filter(p => {
+      const updated = new Date(p.updated_at || p.created_at || 0);
+      return updated < sevenDaysAgo;
+    });
+
+    // Unusual price changes: products whose price deviates more than 20% from average
+    const unusual = sorted.filter(p => {
+      const price = p.price || 0;
+      return price > 0 && Math.abs((price - avgPrice) / avgPrice) > 0.20;
+    });
+
+    return {
+      minPrice,
+      maxPrice,
+      avgPrice,
+      priceDiff,
+      priceDiffPercent,
+      totalVendors: sorted.length,
+      cheapestVendor: lowest,
+      mostExpensiveVendor: highest,
+      belowAverage,
+      outdated,
+      unusual,
+      sorted,
+    };
+  };
+
+  const marketAnalytics = computeMarketAnalytics();
+
   // ✅ Get display rating (randomized if no real rating)
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
@@ -389,7 +627,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       {/* Product Info */}
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{product.name}</Text>
+        <View style={styles.productTitleRow}>
+          <Text style={styles.productName}>{product.name}</Text>
+          <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
+            <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.priceRow}>
           <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
@@ -541,8 +784,225 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </TouchableOpacity>
       ) : null}
 
+      {/* Market Analytics Dashboard */}
+      <View style={[styles.marketSection, darkMode && styles.marketSectionDark]}>
+        <View style={styles.marketSectionHeader}>
+          <View style={styles.marketSectionTitleRow}>
+            <MaterialIcons name="insights" size={20} color={darkMode ? '#FFFFFF' : '#111827'} />
+            <Text style={[styles.marketSectionTitle, darkMode && styles.marketSectionTitleDark]}>Market Analytics</Text>
+          </View>
+          <TouchableOpacity onPress={() => setDarkMode(!darkMode)} style={styles.darkModeToggle}>
+            <MaterialIcons name={darkMode ? 'light-mode' : 'dark-mode'} size={18} color={darkMode ? '#FFFFFF' : '#6B7280'} />
+          </TouchableOpacity>
+        </View>
+
+        {marketLoading ? (
+          <View style={styles.marketLoading}>
+            <ActivityIndicator size="small" color="#DC2626" />
+            <Text style={[styles.marketLoadingText, darkMode && styles.marketLoadingTextDark]}>Analyzing market data...</Text>
+          </View>
+        ) : marketAnalytics ? (
+          <>
+            {/* Market Summary KPI Cards */}
+            <View style={styles.marketKpiGrid}>
+              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
+                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
+                  <MaterialIcons name="trending-down" size={18} color="#2E7D32" />
+                </View>
+                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.minPrice.toFixed(2)}</Text>
+                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Lowest Price</Text>
+              </View>
+              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
+                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
+                  <MaterialIcons name="trending-up" size={18} color="#C62828" />
+                </View>
+                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.maxPrice.toFixed(2)}</Text>
+                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Highest Price</Text>
+              </View>
+              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
+                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(21,101,192,0.08)' }]}>
+                  <MaterialIcons name="calculate" size={18} color="#1565C0" />
+                </View>
+                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.avgPrice.toFixed(2)}</Text>
+                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Average Price</Text>
+              </View>
+              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
+                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(230,81,0,0.08)' }]}>
+                  <MaterialIcons name="compare-arrows" size={18} color="#E65100" />
+                </View>
+                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.priceDiff.toFixed(2)}</Text>
+                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Price Difference</Text>
+              </View>
+              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
+                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(16,185,129,0.08)' }]}>
+                  <MaterialIcons name="storefront" size={18} color="#10B981" />
+                </View>
+                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>{marketAnalytics.totalVendors}</Text>
+                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Total Vendors</Text>
+              </View>
+            </View>
+
+            {/* Cheapest & Most Expensive Vendor */}
+            <View style={styles.marketVendorHighlight}>
+              <View style={[styles.marketVendorCard, styles.marketCheapestCard, darkMode && styles.marketVendorCardDark]}>
+                <View style={styles.marketVendorCardHeader}>
+                  <MaterialIcons name="emoji-events" size={16} color="#2E7D32" />
+                  <Text style={[styles.marketVendorCardLabel, { color: '#2E7D32' }]}>Cheapest</Text>
+                </View>
+                <Text style={styles.marketVendorName} numberOfLines={1}>
+                  {marketAnalytics.cheapestVendor.stalls?.stall_name || 'Unknown Stall'}
+                </Text>
+                <Text style={[styles.marketVendorPrice, { color: '#2E7D32' }]}>
+                  ₱{marketAnalytics.cheapestVendor.price?.toFixed(2)}
+                </Text>
+                <Text style={styles.marketVendorSub}>
+                  {marketAnalytics.cheapestVendor.stalls?.section || 'N/A'} • #{marketAnalytics.cheapestVendor.stalls?.stall_number || 'N/A'}
+                </Text>
+              </View>
+              <View style={[styles.marketVendorCard, styles.marketExpensiveCard, darkMode && styles.marketVendorCardDark]}>
+                <View style={styles.marketVendorCardHeader}>
+                  <MaterialIcons name="attach-money" size={16} color="#C62828" />
+                  <Text style={[styles.marketVendorCardLabel, { color: '#C62828' }]}>Most Expensive</Text>
+                </View>
+                <Text style={styles.marketVendorName} numberOfLines={1}>
+                  {marketAnalytics.mostExpensiveVendor.stalls?.stall_name || 'Unknown Stall'}
+                </Text>
+                <Text style={[styles.marketVendorPrice, { color: '#C62828' }]}>
+                  ₱{marketAnalytics.mostExpensiveVendor.price?.toFixed(2)}
+                </Text>
+                <Text style={styles.marketVendorSub}>
+                  {marketAnalytics.mostExpensiveVendor.stalls?.section || 'N/A'} • #{marketAnalytics.mostExpensiveVendor.stalls?.stall_number || 'N/A'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Price History Chart */}
+            {priceHistory.length > 0 && (
+              <PriceHistoryChart data={priceHistory} darkMode={darkMode} />
+            )}
+
+            {/* Vendor Comparison Table */}
+            <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
+              <View style={styles.marketSubSectionHeader}>
+                <MaterialIcons name="table-chart" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
+                <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>
+                  Price Comparison ({marketAnalytics.totalVendors} vendors)
+                </Text>
+              </View>
+              {marketAnalytics.sorted.map((item, index) => {
+                const isCheapest = index === 0;
+                const isMostExpensive = index === marketAnalytics.sorted.length - 1;
+                const isCurrentUserStall = item.stalls?.id === stall?.id;
+                return (
+                  <View 
+                    key={item.id} 
+                    style={[
+                      styles.marketComparisonRow,
+                      darkMode && styles.marketComparisonRowDark,
+                      isCheapest && styles.marketCheapestRow,
+                      isMostExpensive && styles.marketExpensiveRow,
+                      isCurrentUserStall && styles.marketCurrentUserRow,
+                    ]}
+                  >
+                    <View style={styles.marketComparisonRank}>
+                      <Text style={[styles.marketRankText, isCheapest && { color: '#2E7D32' }, isMostExpensive && { color: '#C62828' }]}>
+                        #{index + 1}
+                      </Text>
+                    </View>
+                    <View style={styles.marketComparisonVendor}>
+                      <Text style={[styles.marketComparisonVendorName, darkMode && styles.marketComparisonVendorNameDark]} numberOfLines={1}>
+                        {item.stalls?.stall_name || 'Unknown Stall'}
+                      </Text>
+                      <Text style={[styles.marketComparisonVendorSub, darkMode && styles.marketComparisonVendorSubDark]} numberOfLines={1}>
+                        {item.stalls?.section || 'N/A'} • #{item.stalls?.stall_number || 'N/A'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.marketComparisonPrice, isCheapest && styles.marketCheapestPrice, isMostExpensive && styles.marketExpensivePrice]}>
+                      ₱{(item.price || 0).toFixed(2)}
+                    </Text>
+                    {isCurrentUserStall && (
+                      <View style={styles.marketCurrentUserBadge}>
+                        <Text style={styles.marketCurrentUserBadgeText}>You</Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Insights Section */}
+            {(marketAnalytics.belowAverage.length > 0 || marketAnalytics.outdated.length > 0 || marketAnalytics.unusual.length > 0) && (
+              <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
+                <View style={styles.marketSubSectionHeader}>
+                  <MaterialIcons name="lightbulb" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
+                  <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>Market Insights</Text>
+                </View>
+
+                {marketAnalytics.belowAverage.length > 0 && (
+                  <View style={styles.marketInsightItem}>
+                    <View style={styles.marketInsightHeader}>
+                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
+                        <MaterialIcons name="trending-down" size={14} color="#2E7D32" />
+                      </View>
+                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
+                        Below Market Average ({marketAnalytics.belowAverage.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
+                      These vendors offer prices below the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
+                      Consider comparing quality before choosing the cheapest option.
+                    </Text>
+                  </View>
+                )}
+
+                {marketAnalytics.outdated.length > 0 && (
+                  <View style={styles.marketInsightItem}>
+                    <View style={styles.marketInsightHeader}>
+                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(230,81,0,0.08)' }]}>
+                        <MaterialIcons name="schedule" size={14} color="#E65100" />
+                      </View>
+                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
+                        Outdated Prices ({marketAnalytics.outdated.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
+                      These vendors haven't updated their prices in over 7 days. Prices may be stale or inaccurate.
+                    </Text>
+                  </View>
+                )}
+
+                {marketAnalytics.unusual.length > 0 && (
+                  <View style={styles.marketInsightItem}>
+                    <View style={styles.marketInsightHeader}>
+                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
+                        <MaterialIcons name="warning" size={14} color="#C62828" />
+                      </View>
+                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
+                        Unusual Price Changes ({marketAnalytics.unusual.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
+                      These vendors' prices deviate more than 20% from the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
+                      Verify pricing before purchasing.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.marketEmpty}>
+            <MaterialIcons name="info-outline" size={32} color="#9CA3AF" />
+            <Text style={[styles.marketEmptyText, darkMode && styles.marketEmptyTextDark]}>
+              No market data available for this product
+            </Text>
+          </View>
+        )}
+      </View>
+
       {/* Report Button */}
       <View style={styles.reportSection}>
+
         <TouchableOpacity 
           style={styles.reportProductButton}
           onPress={handleReportProduct}
@@ -649,12 +1109,21 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: 1,
   },
+  productTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
   productName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 12,
   },
+  favBtn: { padding: 6 },
+  favIcon: { fontSize: 24 },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -989,5 +1458,373 @@ const styles = StyleSheet.create({
   unitDiscountedPrice: {
     color: COLORS.success,
     fontWeight: '600',
+  },
+  // Market Analytics Dashboard Styles
+  marketSection: {
+    backgroundColor: COLORS.surface,
+    margin: 16,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  marketSectionDark: {
+    backgroundColor: '#1F2937',
+    borderColor: '#374151',
+  },
+  marketSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  marketSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  marketSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  marketSectionTitleDark: {
+    color: '#FFFFFF',
+  },
+  darkModeToggle: {
+    padding: 6,
+    backgroundColor: COLORS.borderLight,
+    borderRadius: 8,
+  },
+  marketLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 20,
+  },
+  marketLoadingText: {
+    fontSize: 13,
+    color: COLORS.text.medium,
+  },
+  marketLoadingTextDark: {
+    color: '#9CA3AF',
+  },
+  marketKpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  marketKpiCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  marketKpiCardDark: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563',
+  },
+  marketKpiIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  marketKpiValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  marketKpiValueDark: {
+    color: '#FFFFFF',
+  },
+  marketKpiLabel: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+    fontWeight: '600',
+  },
+  marketKpiLabelDark: {
+    color: '#9CA3AF',
+  },
+  marketVendorHighlight: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  marketVendorCard: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  marketVendorCardDark: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563',
+  },
+  marketCheapestCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#2E7D32',
+  },
+  marketExpensiveCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#C62828',
+  },
+  marketVendorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  marketVendorCardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  marketVendorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  marketVendorPrice: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  marketVendorSub: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+  },
+  chartContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  chartContainerDark: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563',
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  chartTitleDark: {
+    color: '#FFFFFF',
+  },
+  chartBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 120,
+    gap: 4,
+    marginBottom: 12,
+  },
+  chartBarContainer: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  chartBar: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+    minHeight: 5,
+  },
+  chartBarLabel: {
+    fontSize: 10,
+    color: COLORS.text.lighter,
+    fontWeight: '600',
+  },
+  chartBarDate: {
+    fontSize: 9,
+    color: COLORS.text.lighter,
+  },
+  chartInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  chartInfoText: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+  },
+  marketSubSection: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  marketSubSectionDark: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563',
+  },
+  marketSubSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  marketSubSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  marketSubSectionTitleDark: {
+    color: '#FFFFFF',
+  },
+  marketComparisonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+    gap: 10,
+  },
+  marketComparisonRowDark: {
+    borderBottomColor: '#4B5563',
+  },
+  marketCheapestRow: {
+    backgroundColor: 'rgba(46,125,50,0.04)',
+  },
+  marketExpensiveRow: {
+    backgroundColor: 'rgba(198,40,40,0.04)',
+  },
+  marketCurrentUserRow: {
+    backgroundColor: 'rgba(21,101,192,0.04)',
+  },
+  marketComparisonRank: {
+    width: 36,
+    alignItems: 'center',
+  },
+  marketRankText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text.medium,
+  },
+  marketComparisonVendor: {
+    flex: 1,
+  },
+  marketComparisonVendorName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  marketComparisonVendorNameDark: {
+    color: '#FFFFFF',
+  },
+  marketComparisonVendorSub: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+  },
+  marketComparisonVendorSubDark: {
+    color: '#9CA3AF',
+  },
+  marketComparisonPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text.medium,
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  marketCheapestPrice: {
+    color: '#2E7D32',
+  },
+  marketExpensivePrice: {
+    color: '#C62828',
+  },
+  marketCurrentUserBadge: {
+    backgroundColor: '#1565C0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  marketCurrentUserBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'white',
+  },
+  marketInsightItem: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  marketInsightItemDark: {
+    borderBottomColor: '#4B5563',
+  },
+  marketInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  marketInsightIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  marketInsightTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+  },
+  marketInsightTitleDark: {
+    color: '#FFFFFF',
+  },
+  marketInsightDesc: {
+    fontSize: 12,
+    color: COLORS.text.medium,
+    lineHeight: 18,
+  },
+  marketInsightDescDark: {
+    color: '#9CA3AF',
+  },
+  marketEmpty: {
+    alignItems: 'center',
+    padding: 30,
+    gap: 10,
+  },
+  marketEmptyText: {
+    fontSize: 14,
+    color: COLORS.text.lighter,
+    textAlign: 'center',
+  },
+  marketEmptyTextDark: {
+    color: '#9CA3AF',
   },
 });

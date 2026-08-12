@@ -13,6 +13,7 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import {
@@ -55,11 +56,11 @@ const formatTime = (dateStr) => {
 
 const getTimeline = (status) => {
   const steps = [
-    { key: 'pending', label: 'Order Placed', icon: '📝' },
-    { key: 'confirmed', label: 'Order Confirmed', icon: '✅' },
-    { key: 'preparing', label: 'Preparing', icon: '👨‍🍳' },
-    { key: 'ready', label: 'Ready for Pickup', icon: '🛎️' },
-    { key: 'completed', label: 'Completed', icon: '📦' },
+    { key: 'pending', label: 'Order Placed', icon: 'document-text-outline' },
+    { key: 'confirmed', label: 'Order Confirmed', icon: 'checkmark-circle-outline' },
+    { key: 'preparing', label: 'Preparing', icon: 'restaurant-outline' },
+    { key: 'ready', label: 'Ready for Pickup', icon: 'flag-outline' },
+    { key: 'completed', label: 'Completed', icon: 'checkmark-done-outline' },
   ];
   const idx = steps.findIndex(s => s.key === status);
   return { steps, currentIdx: idx === -1 ? -1 : idx };
@@ -133,9 +134,9 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       // Notify customer
       const statusMessages = {
         confirmed: 'Your order has been confirmed by the vendor!',
-        preparing: 'Your order is now being prepared. 🍳',
-        ready: 'Your order is ready for pickup! 🛎️',
-        completed: 'Your order has been completed. Thank you! 🎉',
+        preparing: 'Your order is now being prepared.',
+        ready: 'Your order is ready for pickup!',
+        completed: 'Your order has been completed. Thank you!',
       };
 
       if (statusMessages[newStatus]) {
@@ -177,7 +178,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,
-        title: 'Payment Verified ✅',
+        title: 'Payment Verified',
         message: `Your payment for order #${order.order_number?.slice(-8)} has been verified. Your order is now being prepared!`,
         type: 'payment',
         data: { order_id: order.id, type: 'payment_verified' },
@@ -219,7 +220,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,
-        title: 'Payment Rejected ❌',
+        title: 'Payment Rejected',
         message: `Your payment for order #${order.order_number?.slice(-8)} was rejected. Reason: ${rejectReason}`,
         type: 'payment',
         data: { order_id: order.id, type: 'payment_rejected' },
@@ -259,7 +260,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,
-        title: 'Order Cancelled ❌',
+        title: 'Order Cancelled',
         message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${rejectReason}`,
         type: 'order',
         data: { order_id: order.id, type: 'cancellation' },
@@ -293,7 +294,9 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       <View style={styles.container}>
         <Header title="Order Details" showBack onBackPress={() => navigation.goBack()} />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorEmoji}>⚠️</Text>
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={vendorColors.danger} />
+          </View>
           <Text style={styles.errorTitle}>Unable to load order</Text>
           <Text style={styles.errorText}>{error || 'Order not found'}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchOrder(); }}>
@@ -344,7 +347,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                     idx <= currentIdx && styles.timelineDotActive,
                     idx === currentIdx && styles.timelineDotCurrent,
                   ]}>
-                    <Text style={styles.timelineIcon}>{step.icon}</Text>
+                    <Ionicons name={step.icon} size={14} color={idx <= currentIdx ? vendorColors.primary : vendorColors.text.tertiary} />
                   </View>
                   <Text style={[
                     styles.timelineLabel,
@@ -366,28 +369,28 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
         {/* Customer Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="👤 Customer" />
+          <VendorSectionHeader title="Customer" />
           <View style={styles.customerInfoCard}>
             <View style={styles.customerAvatar}>
               {order.profiles?.avatar_url ? (
                 <Image source={{ uri: order.profiles.avatar_url }} style={styles.customerAvatarImg} />
               ) : (
                 <Text style={styles.customerAvatarText}>
-                  {order.profiles?.full_name?.charAt(0)?.toUpperCase() || '👤'}
+                  {order.profiles?.full_name?.charAt(0)?.toUpperCase() || 'C'}
                 </Text>
               )}
             </View>
             <View style={styles.customerDetails}>
               <Text style={styles.customerName}>{order.profiles?.full_name || 'Customer'}</Text>
-              {order.profiles?.phone && <Text style={styles.customerSub}>📞 {order.profiles.phone}</Text>}
-              {order.profiles?.email && <Text style={styles.customerSub}>✉️ {order.profiles.email}</Text>}
+              {order.profiles?.phone && <Text style={styles.customerSub}>{order.profiles.phone}</Text>}
+              {order.profiles?.email && <Text style={styles.customerSub}>{order.profiles.email}</Text>}
             </View>
           </View>
         </View>
 
         {/* Items Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="🛒 Items" subtitle={`${(order.items || []).length} items`} />
+          <VendorSectionHeader title="Items" subtitle={`${(order.items || []).length} items`} />
           {(order.items || []).map((item, idx) => (
             <View key={idx} style={styles.itemRow}>
               <View style={styles.itemInfo}>
@@ -408,7 +411,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
         {/* Pickup Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="🛎️ Pickup" />
+          <VendorSectionHeader title="Pickup" />
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Scheduled Pickup</Text>
             <Text style={styles.infoValue}>{formatTime(order.pickup_time)}</Text>
@@ -424,7 +427,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         {/* Payment Section */}
         {order.payment_status && (
           <View style={styles.section}>
-            <VendorSectionHeader title="💳 Payment" />
+            <VendorSectionHeader title="Payment" />
             
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Amount</Text>
@@ -455,7 +458,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 style={styles.receiptButton}
                 onPress={() => setShowReceipt(true)}
               >
-                <Text style={styles.receiptButtonText}>📷 View Payment Receipt</Text>
+                <Text style={styles.receiptButtonText}>View Payment Receipt</Text>
               </TouchableOpacity>
             )}
 
@@ -474,7 +477,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                   disabled={updating}
                 >
                   <Text style={styles.verifyBtnText}>
-                    {updating ? 'Processing...' : '✓ Approve Payment'}
+                    {updating ? 'Processing...' : 'Approve Payment'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -482,7 +485,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                   onPress={handleRejectPayment}
                   disabled={updating}
                 >
-                  <Text style={styles.verifyBtnText}>✗ Reject Payment</Text>
+                  <Text style={styles.verifyBtnText}>Reject Payment</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -492,7 +495,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         {/* Special Instructions */}
         {order.special_instructions && (
           <View style={styles.section}>
-            <VendorSectionHeader title="📝 Special Instructions" />
+            <VendorSectionHeader title="Special Instructions" />
             <View style={styles.instructionsBox}>
               <Text style={styles.instructionsText}>{order.special_instructions}</Text>
             </View>
@@ -509,14 +512,14 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                   onPress={() => handleUpdateStatus('confirmed')}
                   disabled={updating}
                 >
-                  <Text style={styles.mainActionText}>✓ Accept Order</Text>
+                  <Text style={styles.mainActionText}>Accept Order</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.mainActionBtn, styles.rejectBtn]}
                   onPress={() => setShowRejectModal(true)}
                   disabled={updating}
                 >
-                  <Text style={styles.mainActionText}>✗ Reject Order</Text>
+                  <Text style={styles.mainActionText}>Reject Order</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -527,7 +530,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 onPress={() => handleUpdateStatus('preparing')}
                 disabled={updating}
               >
-                <Text style={styles.fullActionText}>👨‍🍳 Mark as Preparing</Text>
+                <Text style={styles.fullActionText}>Mark as Preparing</Text>
               </TouchableOpacity>
             )}
 
@@ -537,7 +540,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 onPress={() => handleUpdateStatus('ready')}
                 disabled={updating}
               >
-                <Text style={styles.fullActionText}>🛎️ Ready for Pickup</Text>
+                <Text style={styles.fullActionText}>Ready for Pickup</Text>
               </TouchableOpacity>
             )}
 
@@ -547,7 +550,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 onPress={() => handleUpdateStatus('completed')}
                 disabled={updating}
               >
-                <Text style={styles.fullActionText}>📦 Complete Order</Text>
+                <Text style={styles.fullActionText}>Complete Order</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -949,8 +952,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
-  errorEmoji: {
-    fontSize: 48,
+  errorIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: vendorColors.dangerLight,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 12,
   },
   errorTitle: {

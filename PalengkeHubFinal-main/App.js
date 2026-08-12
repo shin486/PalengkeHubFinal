@@ -9,13 +9,16 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { CartProvider } from './src/contexts/CartContext';
+import { I18nProvider } from './src/contexts/i18nContext';
+import { ThemeProvider } from './src/contexts/ThemeContext';
+import { registerPushToken, setupNotificationListeners } from './src/services/notificationService';
 import { Header } from './src/components/Header'; 
 import { LoadingSpinner } from './src/components/LoadingSpinner';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
@@ -24,7 +27,10 @@ import NotificationScreen from './src/screens/customer/NotificationScreen';
 import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import AdminVendorApplicationsScreen from './src/screens/admin/AdminVendorApplicationsScreen';
 import AdminStallsManagementScreen from './src/screens/admin/AdminStallsManagementScreen';
+import AdminStallDetailsScreen from './src/screens/admin/AdminStallDetailsScreen';
 import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
+import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
+import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -40,6 +46,7 @@ import CartScreen from './src/screens/customer/CartScreen';
 import SearchScreen from './src/screens/customer/SearchScreen';
 import OrdersScreen from './src/screens/customer/OrdersScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
+import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import ChatListScreen from './src/screens/customer/ChatListScreen';
@@ -310,6 +317,8 @@ function VendorTabNavigator() {
 // ============================================================
 function AppStack({ isGuest }) {
   const [activeRouteName, setActiveRouteName] = useState('Home');
+  const { user } = useAuth();
+  const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -325,6 +334,25 @@ function AppStack({ isGuest }) {
       }
     };
     fetchUnreadCount();
+
+    // Register push notifications
+    if (user && !isGuest) {
+      registerPushToken(user.id);
+    }
+
+    // Setup notification listeners for navigation
+    const cleanup = setupNotificationListeners(null, (response) => {
+      const data = response.notification.request.content.data;
+      if (data.type === 'order_update') {
+        navigation.navigate('Orders');
+      } else if (data.type === 'promotion' && data.stallId) {
+        navigation.navigate('StallDetails', { stallId: data.stallId });
+      } else if (data.type === 'chat') {
+        navigation.navigate('ChatList');
+      }
+    });
+
+    return cleanup;
   }, []);
 
   // ✅ Updated: All screens that should hide the header
@@ -360,6 +388,8 @@ function AppStack({ isGuest }) {
         return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
         return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
+      case 'Favorites':
+        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
       case 'Notifications':
         return { title: 'Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
@@ -421,6 +451,7 @@ function AppStack({ isGuest }) {
         
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
       </Stack.Navigator>
     </View>
   );
@@ -505,6 +536,7 @@ function RootNavigator() {
         <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
         <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
+
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
@@ -513,7 +545,10 @@ function RootNavigator() {
         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
         <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />
         <Stack.Screen name="AdminStallsManagement" component={AdminStallsManagementScreen} />
+        <Stack.Screen name="AdminStallDetails" component={AdminStallDetailsScreen} />
         <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
+        <Stack.Screen name="AdminAuditTrail" component={AdminAuditTrailScreen} />
+        <Stack.Screen name="AdminPriceMonitoring" component={AdminPriceMonitoringScreen} />
         
         {/* Customer / Guest App */}
         <Stack.Screen name="App">
@@ -547,9 +582,13 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <AuthProvider>
-          <CartProvider>
-            <RootNavigator />
-          </CartProvider>
+          <I18nProvider>
+            <ThemeProvider>
+              <CartProvider>
+                <RootNavigator />
+              </CartProvider>
+            </ThemeProvider>
+          </I18nProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

@@ -1,56 +1,43 @@
 // Cloudflare Worker for admin.palengkehub.site
-// Proxies the admin login and dashboard from the main site (palengkehub.site)
-// and rewrites asset paths so CSS/images load correctly on the subdomain.
+// Proxies requests to the React admin app deployed on Cloudflare Pages.
 
-// Map of local paths → main-site pages to serve
-const PAGE_MAP: Record<string, string> = {
-  '/': 'admin-login.html',
-  '/admin-login.html': 'admin-login.html',
-  '/admin.html': 'admin.html',
-};
+const PAGES_URL = 'https://f30d3c32.palengkehub-admin.pages.dev';
 
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     // Strip query parameters — prevents credentials from showing in the URL bar
-    // (e.g. if the form submits via GET fallback, redirect to clean URL)
     if (url.search && url.search.length > 0) {
       return Response.redirect(url.origin + url.pathname, 302);
     }
 
-    // Determine which page to serve
-    const page = PAGE_MAP[url.pathname];
-    if (!page) {
-      // Unknown path — redirect to admin login
-      return Response.redirect('https://admin.palengkehub.site/', 302);
+    // Redirect root to admin login page
+    if (url.pathname === '/' || url.pathname === '') {
+      return Response.redirect('https://admin.palengkehub.site/admin-login', 302);
     }
 
-    // Fetch the actual page from the main site
-    const response = await fetch(`https://palengkehub.site/${page}`, {
-      headers: { 'User-Agent': 'Cloudflare-Admin-Worker/1.0' },
+    // Proxy all requests to the React app on Cloudflare Pages
+    // The React app handles routing client-side (react-router-dom)
+    const targetUrl = PAGES_URL + url.pathname + url.search;
+
+    const response = await fetch(targetUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
     });
 
-    if (!response.ok) {
-      return new Response('Admin page temporarily unavailable', {
-        status: 502,
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    }
+    // Return the response from Pages — pass through all headers
+    const newHeaders = new Headers();
+    response.headers.forEach((value, key) => {
+      newHeaders.set(key, value);
+    });
+    newHeaders.set('Cache-Control', 'no-store');
+    newHeaders.set('Access-Control-Allow-Origin', '*');
 
-    let html = await response.text();
-
-    // Rewrite relative asset paths to absolute URLs pointing to the main site
-    // so CSS (style.css, pages.css) and images (palengkehublogo.jpg) load correctly
-    html = html.replace(/href="(style\.css|pages\.css)"/g, 'href="https://palengkehub.site/$1"');
-    html = html.replace(/src="([^"]+\.(jpg|png|svg|gif|ico))"/g, 'src="https://palengkehub.site/$1"');
-
-    return new Response(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=300',
-        'Access-Control-Allow-Origin': '*',
-      },
+    return new Response(response.body, {
+      status: response.status,
+      headers: newHeaders,
     });
   },
 };

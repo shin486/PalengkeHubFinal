@@ -1,6 +1,6 @@
 // src/screens/customer/ProfileScreen.js
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,16 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/i18nContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,9 +55,40 @@ const COLORS = {
 
 export default function ProfileScreen({ navigation }) {
   const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
+  const { t, locale, changeLanguage } = useI18n();
+  const { themeMode, setTheme } = useTheme();
+  const { getFavoriteCount } = useFavorites();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [ordersCount, setOrdersCount] = useState(0);
+  const [ratingsCount, setRatingsCount] = useState(0);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+    }
+  }, [user]);
+
+  const fetchUserStats = async () => {
+    try {
+      const { count: orderCount } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('consumer_id', user.id);
+      setOrdersCount(orderCount || 0);
+
+      const { count: reviewCount } = await supabase
+        .from('ratings')
+        .select('*', { count: 'exact', head: true })
+        .eq('consumer_id', user.id);
+      setRatingsCount(reviewCount || 0);
+    } catch (err) {
+      console.warn('Error fetching user stats:', err);
+    }
+  };
 
   const uploadAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -74,11 +109,9 @@ export default function ProfileScreen({ navigation }) {
       try {
         const uri = result.assets[0].uri;
         
-        // Fetch the image
         const response = await fetch(uri);
         const blob = await response.blob();
         
-        // Convert to base64
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
@@ -89,7 +122,6 @@ export default function ProfileScreen({ navigation }) {
           reader.readAsDataURL(blob);
         });
         
-        // Upload to ImgBB
         const formData = new FormData();
         formData.append('image', base64);
         
@@ -101,7 +133,6 @@ export default function ProfileScreen({ navigation }) {
         const avatarUrl = uploadResponse.data.data.url;
         console.log('✅ Avatar uploaded:', avatarUrl);
         
-        // Update profile in Supabase
         const { error } = await supabase
           .from('profiles')
           .update({ avatar_url: avatarUrl })
@@ -109,7 +140,6 @@ export default function ProfileScreen({ navigation }) {
         
         if (error) throw error;
         
-        // Refresh user profile
         await checkUser();
         setAvatarError(false);
         Alert.alert('Success', 'Profile picture updated!');
@@ -162,7 +192,6 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    // For web, use browser confirm
     if (Platform.OS === 'web') {
       const confirmLogout = window.confirm('Are you sure you want to logout?');
       if (confirmLogout) {
@@ -173,7 +202,6 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
     
-    // For mobile, use Alert
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -422,18 +450,18 @@ export default function ProfileScreen({ navigation }) {
         {/* Stats Section */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Orders</Text>
+            <Text style={styles.statNumber}>{ordersCount}</Text>
+            <Text style={styles.statLabel}>{t('profile.orders')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Ratings</Text>
+            <Text style={styles.statNumber}>{ratingsCount}</Text>
+            <Text style={styles.statLabel}>{t('profile.ratings')}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Favorites</Text>
+            <Text style={styles.statNumber}>{getFavoriteCount()}</Text>
+            <Text style={styles.statLabel}>{t('profile.favorites_count')}</Text>
           </View>
         </View>
 
@@ -466,6 +494,57 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Menu Items */}
+        <View style={styles.menuSection}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
+            <Text style={styles.menuItemIcon}>❤️</Text>
+            <Text style={styles.menuItemText}>{t('favorites.title')}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
+            <Text style={styles.menuItemIcon}>📋</Text>
+            <Text style={styles.menuItemText}>{t('orders.title')}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          {/* Theme Selector */}
+          <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemePicker(true)}>
+            <Text style={styles.menuItemIcon}>{themeMode === 'dark' ? '🌙' : '☀️'}</Text>
+            <Text style={styles.menuItemText}>Theme</Text>
+            <Text style={styles.languageValue}>
+              {themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'System'}
+            </Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          {/* Language Selector */}
+          <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguagePicker(true)}>
+            <Text style={styles.menuItemIcon}>🌐</Text>
+            <Text style={styles.menuItemText}>{t('profile.language')}</Text>
+            <Text style={styles.languageValue}>{locale === 'en' ? 'English' : 'Filipino'}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuItemIcon}>📍</Text>
+            <Text style={styles.menuItemText}>Saved Addresses</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuItemIcon}>❓</Text>
+            <Text style={styles.menuItemText}>Help & Support</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem}>
+            <Text style={styles.menuItemIcon}>🔒</Text>
+            <Text style={styles.menuItemText}>Privacy Policy</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Vendor Dashboard Button (only for vendors) */}
         {profile?.role === 'vendor' && (
           <TouchableOpacity 
@@ -486,7 +565,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.switchGuestText}>Switch to Guest Mode</Text>
         </TouchableOpacity>
 
-        {/* LOGOUT BUTTON - Works on both web and mobile */}
+        {/* LOGOUT BUTTON */}
         {Platform.OS === 'web' ? (
           <button
             onClick={async () => {
@@ -533,6 +612,71 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Theme Picker Modal */}
+      <Modal visible={showThemePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Choose Theme</Text>
+            <TouchableOpacity
+              style={[styles.langOption, themeMode === 'light' && styles.langOptionActive]}
+              onPress={() => { setTheme('light'); setShowThemePicker(false); }}
+            >
+              <Text style={styles.langOptionText}>☀️  Light</Text>
+              {themeMode === 'light' && <Text style={styles.langCheck}>✓</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langOption, themeMode === 'dark' && styles.langOptionActive]}
+              onPress={() => { setTheme('dark'); setShowThemePicker(false); }}
+            >
+              <Text style={styles.langOptionText}>🌙  Dark</Text>
+              {themeMode === 'dark' && <Text style={styles.langCheck}>✓</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langOption, themeMode === 'system' && styles.langOptionActive]}
+              onPress={() => { setTheme('system'); setShowThemePicker(false); }}
+            >
+              <Text style={styles.langOptionText}>📱  System Default</Text>
+              {themeMode === 'system' && <Text style={styles.langCheck}>✓</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.langCancelBtn}
+              onPress={() => setShowThemePicker(false)}
+            >
+              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Language Picker Modal */}
+      <Modal visible={showLanguagePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('profile.select_language')}</Text>
+            <TouchableOpacity
+              style={[styles.langOption, locale === 'en' && styles.langOptionActive]}
+              onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
+            >
+              <Text style={styles.langOptionText}>🇺🇸  English</Text>
+              {locale === 'en' && <Text style={styles.langCheck}>✓</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langOption, locale === 'fil' && styles.langOptionActive]}
+              onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
+            >
+              <Text style={styles.langOptionText}>🇵🇭  Filipino</Text>
+              {locale === 'fil' && <Text style={styles.langCheck}>✓</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.langCancelBtn}
+              onPress={() => setShowLanguagePicker(false)}
+            >
+              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -542,43 +686,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 30,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 30 },
+  avatarSection: { alignItems: 'center', marginTop: 20, marginBottom: 20 },
+  avatarContainer: { position: 'relative', marginBottom: 16 },
   avatarGradient: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#DC2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: '#DC2626',
-  },
-  avatarEmoji: {
-    fontSize: 48,
-  },
+  avatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#DC2626' },
+  avatarEmoji: { fontSize: 48 },
   editAvatarBadge: {
     position: 'absolute',
     bottom: 0,
@@ -618,7 +735,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
   },
-  // ❌ REMOVED: changePhotoBtn and changePhotoBtnText styles (no longer needed)
   guestName: {
     fontSize: 24,
     fontWeight: '800',
@@ -664,215 +780,72 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   benefitsCard: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 20,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, padding: 20, borderRadius: 20,
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
+    borderWidth: 1, borderColor: COLORS.borderLight,
   },
-  benefitsTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.text.dark,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  benefitItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
+  benefitsTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.dark, marginBottom: 20, textAlign: 'center' },
+  benefitItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   benefitIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: COLORS.accentSoft,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
+    width: 48, height: 48, backgroundColor: COLORS.accentSoft, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16,
   },
-  benefitIcon: {
-    fontSize: 24,
-  },
-  benefitContent: {
-    flex: 1,
-  },
-  benefitText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-    marginBottom: 2,
-  },
-  benefitSubtext: {
-    fontSize: 13,
-    color: COLORS.text.medium,
-  },
-  actionSection: {
-    marginHorizontal: 16,
-    marginBottom: 30,
-  },
-  signInButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 12,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  signInGradient: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  signInButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  signUpButton: {
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.surface,
-  },
-  signUpButtonText: {
-    color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  benefitIcon: { fontSize: 24 },
+  benefitContent: { flex: 1 },
+  benefitText: { fontSize: 16, fontWeight: '700', color: COLORS.text.dark, marginBottom: 2 },
+  benefitSubtext: { fontSize: 13, color: COLORS.text.medium },
+  actionSection: { marginHorizontal: 16, marginBottom: 30 },
+  signInButton: { borderRadius: 16, overflow: 'hidden', marginBottom: 12, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  signInGradient: { paddingVertical: 16, alignItems: 'center' },
+  signInButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  signUpButton: { paddingVertical: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.primary, backgroundColor: COLORS.surface },
+  signUpButtonText: { color: COLORS.primary, fontSize: 16, fontWeight: '700' },
   statsCard: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    padding: 16,
-    borderRadius: 20,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    flexDirection: 'row', backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 20,
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
+    borderWidth: 1, borderColor: COLORS.borderLight,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.text.medium,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 8,
-  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
+  statLabel: { fontSize: 12, color: COLORS.text.medium },
+  statDivider: { width: 1, backgroundColor: COLORS.border, marginHorizontal: 8 },
   infoCard: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 20,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, padding: 20, borderRadius: 20,
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
+    borderWidth: 1, borderColor: COLORS.borderLight,
   },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.text.dark,
-    marginBottom: 16,
+  infoTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.dark, marginBottom: 16 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  infoLabel: { fontSize: 14, color: COLORS.text.medium },
+  infoValue: { fontSize: 14, color: COLORS.text.dark, fontWeight: '600' },
+  vendorButton: { marginHorizontal: 16, marginBottom: 16, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  vendorGradient: { paddingVertical: 14, alignItems: 'center' },
+  vendorButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  switchGuestButton: { marginHorizontal: 16, marginBottom: 12, paddingVertical: 14, borderRadius: 16, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.primary, backgroundColor: COLORS.surface },
+  switchGuestText: { color: COLORS.primary, fontSize: 16, fontWeight: '700' },
+  logoutButton: { marginHorizontal: 16, marginBottom: 30, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  logoutGradient: { paddingVertical: 14, alignItems: 'center' },
+  logoutButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  // Menu styles
+  menuSection: { backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, borderRadius: 20, overflow: 'hidden' },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: COLORS.borderLight,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+  menuItemIcon: { fontSize: 20, width: 28, textAlign: 'center' },
+  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: '#333' },
+  languageValue: { fontSize: 13, color: '#1a5f28', fontWeight: '600', marginRight: 8 },
+  chevron: { fontSize: 20, color: '#ccc' },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  langOption: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16,
+    borderRadius: 12, marginBottom: 8, backgroundColor: '#f5f5f5',
   },
-  infoLabel: {
-    fontSize: 14,
-    color: COLORS.text.medium,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: COLORS.text.dark,
-    fontWeight: '600',
-  },
-  vendorButton: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  vendorGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  vendorButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  switchGuestButton: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.surface,
-  },
-  switchGuestText: {
-    color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  logoutButton: {
-    marginHorizontal: 16,
-    marginBottom: 30,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  logoutGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  langOptionActive: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#1a5f28' },
+  langOptionText: { fontSize: 16, fontWeight: '500' },
+  langCheck: { fontSize: 18, color: '#1a5f28', fontWeight: '700' },
+  langCancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
+  langCancelText: { color: '#888', fontSize: 15 },
 });

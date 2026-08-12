@@ -11,18 +11,32 @@ export const vendorColors = {
   accentSoft: '#FEF2F2',
   background: '#F8F9FA',
   surface: '#FFFFFF',
+  surfaceAlt: '#F9FAFB',
+  divider: '#F3F4F6',
   text: {
+    primary: '#111827',
     dark: '#111827',
     medium: '#374151',
+    secondary: '#6B7280',
     light: '#6B7280',
+    tertiary: '#9CA3AF',
     lighter: '#9CA3AF',
+    quaternary: '#D1D5DB',
     white: '#FFFFFF',
   },
   border: '#E5E7EB',
   borderLight: '#F3F4F6',
   success: '#10B981',
+  successLight: '#D1FAE5',
   error: '#DC2626',
+  danger: '#EF4444',
+  dangerLight: '#FEE2E2',
   warning: '#F59E0B',
+  warningLight: '#FEF3C7',
+  info: '#3B82F6',
+  infoLight: '#DBEAFE',
+  purple: '#7C3AED',
+  purpleLight: '#EDE9FE',
   shadow: 'rgba(0, 0, 0, 0.08)',
   shadowDark: 'rgba(0, 0, 0, 0.12)',
   gcash: '#007DFE',
@@ -45,17 +59,18 @@ export const vendorBorderRadius = {
   lg: 16,
   xl: 20,
   xxl: 24,
+  full: 999,
 };
 
 export const vendorTypography = {
-  h1: { fontSize: 28, fontWeight: 'bold', color: vendorColors.text.dark },
-  h2: { fontSize: 22, fontWeight: 'bold', color: vendorColors.text.dark },
-  h3: { fontSize: 18, fontWeight: 'bold', color: vendorColors.text.dark },
-  h4: { fontSize: 16, fontWeight: '600', color: vendorColors.text.dark },
-  body: { fontSize: 14, color: vendorColors.text.dark },
-  bodySmall: { fontSize: 12, color: vendorColors.text.light },
-  caption: { fontSize: 11, color: vendorColors.text.lighter },
-  label: { fontSize: 14, fontWeight: '600', color: vendorColors.text.dark, marginBottom: 8 },
+  h1: { fontSize: 28, fontWeight: 'bold', color: vendorColors.text.primary },
+  h2: { fontSize: 22, fontWeight: 'bold', color: vendorColors.text.primary },
+  h3: { fontSize: 18, fontWeight: 'bold', color: vendorColors.text.primary },
+  h4: { fontSize: 16, fontWeight: '600', color: vendorColors.text.primary },
+  body: { fontSize: 14, color: vendorColors.text.primary },
+  bodySmall: { fontSize: 12, color: vendorColors.text.secondary },
+  caption: { fontSize: 11, color: vendorColors.text.tertiary },
+  label: { fontSize: 14, fontWeight: '600', color: vendorColors.text.primary, marginBottom: 8 },
 };
 
 export const vendorShadows = {
@@ -84,14 +99,14 @@ export const vendorShadows = {
 
 // Gradient pairs matching customer module
 export const vendorGradients = {
-  primary: ['#FF6B6B', '#FF8E8E'],
+  primary: ['#DC2626', '#EF4444'],
   success: ['#10B981', '#059669'],
   warning: ['#F59E0B', '#D97706'],
   info: ['#3B82F6', '#2563EB'],
   purple: ['#8B5CF6', '#7C3AED'],
   danger: ['#EF4444', '#DC2626'],
   map: ['#4CAF50', '#45A049'],
-  directions: ['#FF6B6B', '#FF8E8E'],
+  directions: ['#DC2626', '#EF4444'],
 };
 
 export const getStatusColor = (status) => {
@@ -101,33 +116,33 @@ export const getStatusColor = (status) => {
     confirmed: vendorColors.info,
     preparing: vendorColors.purple,
     ready: vendorColors.success,
-    completed: vendorColors.text.lighter,
+    completed: vendorColors.text.tertiary,
     cancelled: vendorColors.error,
-    expired: vendorColors.text.light,
+    expired: vendorColors.text.secondary,
     rejected: vendorColors.error,
     paid: vendorColors.success,
     awaiting_verification: vendorColors.warning,
     verified: vendorColors.success,
     rejected_payment: vendorColors.error,
   };
-  return statusMap[status] || vendorColors.text.light;
+  return statusMap[status] || vendorColors.text.secondary;
 };
 
 export const getStatusLabel = (status) => {
   const labelMap = {
-    pending: '⏳ Pending',
-    accepted: '✅ Accepted',
-    confirmed: '✅ Confirmed',
-    preparing: '👨‍🍳 Preparing',
-    ready: '🛎️ Ready for Pickup',
-    completed: '📦 Completed',
-    cancelled: '❌ Cancelled',
-    expired: '⏰ Expired',
-    rejected: '🚫 Rejected',
-    paid: '💳 Paid',
-    awaiting_verification: '⏳ Awaiting Verification',
-    verified: '✅ Verified',
-    rejected_payment: '🚫 Payment Rejected',
+    pending: 'Pending',
+    accepted: 'Accepted',
+    confirmed: 'Confirmed',
+    preparing: 'Preparing',
+    ready: 'Ready for Pickup',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    rejected: 'Rejected',
+    paid: 'Paid',
+    awaiting_verification: 'Awaiting Verification',
+    verified: 'Verified',
+    rejected_payment: 'Payment Rejected',
   };
   return labelMap[status] || status;
 };
@@ -141,10 +156,25 @@ export const getPaymentStatusColor = (status) => {
     paid: vendorColors.success,
     rejected: vendorColors.error,
     refunded: vendorColors.info,
-    expired: vendorColors.text.light,
-    cancelled: vendorColors.text.light,
+    expired: vendorColors.text.secondary,
+    cancelled: vendorColors.text.secondary,
   };
-  return map[status] || vendorColors.text.light;
+  return map[status] || vendorColors.text.secondary;
+};
+
+export const getPaymentStatusLabel = (status) => {
+  const map = {
+    pending: 'Pending',
+    awaiting_payment: 'Awaiting Payment',
+    awaiting_verification: 'Awaiting Verification',
+    verified: 'Verified',
+    paid: 'Paid',
+    rejected: 'Rejected',
+    refunded: 'Refunded',
+    expired: 'Expired',
+    cancelled: 'Cancelled',
+  };
+  return map[status] || status;
 };
 
 export const vendorCardStyle = {

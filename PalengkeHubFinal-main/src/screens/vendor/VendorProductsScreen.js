@@ -243,13 +243,22 @@ export default function VendorProductsScreen({ navigation }) {
 
       {/* Add Product Button */}
       <View style={styles.addButtonContainer}>
-        <TouchableOpacity 
-          style={styles.addButton} 
+        <TouchableOpacity
+          style={styles.addButton}
           onPress={() => setShowAddModal(true)}
           activeOpacity={0.8}
         >
           <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add New Product</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.promotionsButton}
+          onPress={() => navigation.navigate('VendorPromotions')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="pricetag-outline" size={20} color={COLORS.primary} />
+          <Text style={styles.promotionsButtonText}>Special Prices</Text>
         </TouchableOpacity>
       </View>
 
@@ -422,6 +431,23 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  promotionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    paddingVertical: 14,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginTop: SPACING.sm,
+  },
+  promotionsButtonText: {
+    color: COLORS.primary,
     fontSize: 15,
     fontWeight: '600',
   },
