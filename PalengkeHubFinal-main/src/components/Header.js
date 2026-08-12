@@ -7,14 +7,62 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
-export const Header = ({ title, subtitle, showBack = false, onBackPress }) => {
+// ============================================================
+// COLORS - Matching PalengkeHub Branding
+// ============================================================
+const COLORS = {
+  primary: '#C62828',
+  primaryLight: '#E53935',
+  primaryDark: '#B71C1C',
+  primarySurface: '#FFEBEE',
+  background: '#FFFFFF',
+  text: {
+    white: '#FFFFFF',
+    whiteOpacity: 'rgba(255,255,255,0.85)',
+    whiteLight: 'rgba(255,255,255,0.6)',
+  },
+  shadow: 'rgba(198,40,40,0.25)',
+};
+
+// ============================================================
+// SPACING CONSTANTS
+// ============================================================
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+};
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
+export const Header = ({
+  title,
+  subtitle,
+  showBack = false,
+  onBackPress,
+  showNotifications = false,
+  showCart = false,
+  cartCount = 0,
+  onNotificationPress,
+  onCartPress,
+  rightComponent,
+}) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleBack = () => {
     if (onBackPress) {
@@ -24,90 +72,221 @@ export const Header = ({ title, subtitle, showBack = false, onBackPress }) => {
     }
   };
 
+  // Determine if we should show right actions
+  const showRightActions = showNotifications || showCart || rightComponent;
+
   return (
-    <LinearGradient
-      colors={['#DC2626', '#EF4444', '#F87171']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={styles.header}
-    >
-      <View style={styles.headerContent}>
-        {showBack && (
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
-        )}
-        <View style={[styles.logoContainer, showBack && styles.logoWithBack]}>
-          <Image
-            source={require('../assets/palengkehublogo.jpg')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <View style={styles.textContainer}>
-            <Text style={styles.title}>{title}</Text>
-            {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    <>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      <LinearGradient
+        colors={[COLORS.primary, COLORS.primaryLight]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + SPACING.md,
+            paddingBottom: SPACING.lg,
+          },
+        ]}
+      >
+        <View style={styles.headerContent}>
+          {/* Left Section: Back Button + Logo */}
+          <View style={styles.leftSection}>
+            {showBack && (
+              <TouchableOpacity
+                onPress={handleBack}
+                style={styles.backButton}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+
+            <View style={[styles.logoContainer, showBack && styles.logoWithBack]}>
+              <View style={styles.logoWrapper}>
+                <Image
+                  source={require('../assets/palengkehublogo.jpg')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
           </View>
+
+          {/* Center Section: Title + Subtitle */}
+          <View style={styles.centerSection}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title || 'PalengkeHub'}
+            </Text>
+            {subtitle && (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            )}
+          </View>
+
+          {/* Right Section: Action Buttons */}
+          {showRightActions && (
+            <View style={styles.rightSection}>
+              {showNotifications && (
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={onNotificationPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {showCart && (
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={onCartPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="cart-outline" size={22} color="#FFFFFF" />
+                  {cartCount > 0 && (
+                    <View style={styles.cartBadge}>
+                      <Text style={styles.cartBadgeText}>
+                        {cartCount > 9 ? '9+' : cartCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {rightComponent}
+            </View>
+          )}
         </View>
-      </View>
-    </LinearGradient>
+      </LinearGradient>
+    </>
   );
 };
 
+// ============================================================
+// STYLES
+// ============================================================
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-    shadowColor: '#DC2626',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 6,
+    paddingHorizontal: SPACING.lg,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 52,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  backText: {
-    fontSize: 24,
-    color: 'white',
-    fontWeight: '600',
-  },
-  logoContainer: {
+  
+  // ── Left Section ──
+  leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginRight: SPACING.sm,
+  },
+  logoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logoWithBack: {
-    marginLeft: 8,
+    marginLeft: SPACING.xs,
+  },
+  logoWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   logo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  textContainer: {
+
+  // ── Center Section ──
+  centerSection: {
     flex: 1,
+    marginHorizontal: SPACING.md,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    includeFontPadding: false,
   },
   subtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 1,
+    includeFontPadding: false,
+  },
+
+  // ── Right Section ──
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    position: 'relative',
+  },
+
+  // ── Cart Badge ──
+  cartBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  cartBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
+
+// ============================================================
+// DEFAULT EXPORT
+// ============================================================
+export default Header;

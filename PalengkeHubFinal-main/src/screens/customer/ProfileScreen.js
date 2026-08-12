@@ -1,4 +1,5 @@
 // src/screens/customer/ProfileScreen.js
+
 import React, { useState } from 'react';
 import {
   View,
@@ -14,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
@@ -51,6 +53,7 @@ export default function ProfileScreen({ navigation }) {
   const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
 
   const uploadAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -118,6 +121,44 @@ export default function ProfileScreen({ navigation }) {
         setUploadingAvatar(false);
       }
     }
+  };
+
+  // ✅ NEW: Remove Profile Photo Function
+  const removeProfilePhoto = async () => {
+    Alert.alert(
+      'Remove Profile Photo',
+      'Are you sure you want to remove your profile photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingPhoto(true);
+            try {
+              // Update profile in Supabase - set avatar_url to null
+              const { error } = await supabase
+                .from('profiles')
+                .update({ avatar_url: null })
+                .eq('id', user.id);
+              
+              if (error) throw error;
+              
+              // Refresh user profile
+              await checkUser();
+              setAvatarError(false);
+              Alert.alert('Success', 'Profile photo removed successfully');
+              
+            } catch (error) {
+              console.error('Remove photo error:', error);
+              Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
+            } finally {
+              setRemovingPhoto(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleLogout = async () => {
@@ -210,8 +251,6 @@ export default function ProfileScreen({ navigation }) {
   if (isGuest) {
     return (
       <SafeAreaView style={styles.container}>
-      
-
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -318,10 +357,10 @@ export default function ProfileScreen({ navigation }) {
   }
 
   // ========== LOGGED IN USER ==========
+  const hasProfilePhoto = profile?.avatar_url && !avatarError;
+
   return (
     <SafeAreaView style={styles.container}>
-
-
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -334,7 +373,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.avatarGradient}>
                 <ActivityIndicator size="large" color="white" />
               </View>
-            ) : profile?.avatar_url && !avatarError ? (
+            ) : hasProfilePhoto ? (
               <Image 
                 source={{ uri: profile.avatar_url }} 
                 style={styles.avatarImage}
@@ -362,11 +401,22 @@ export default function ProfileScreen({ navigation }) {
               {profile?.role === 'vendor' ? '🛍️ Vendor' : '🛒 Shopper'}
             </Text>
           </View>
-          <TouchableOpacity onPress={uploadAvatar} disabled={uploadingAvatar} style={styles.changePhotoBtn}>
-            <Text style={styles.changePhotoBtnText}>
-              {uploadingAvatar ? 'Uploading...' : 'Change Profile Photo'}
-            </Text>
-          </TouchableOpacity>
+
+          {/* ✅ REMOVED: The duplicate "Change Profile Photo" text button */}
+          {/* ✅ ADDED: "Remove Photo" button - only shows when user has a profile photo */}
+          {hasProfilePhoto && (
+            <TouchableOpacity 
+              style={styles.removePhotoBtn}
+              onPress={removeProfilePhoto}
+              disabled={removingPhoto}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.removePhotoBtnText}>
+                {removingPhoto ? 'Removing...' : 'Remove Photo'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Stats Section */}
@@ -550,18 +600,25 @@ const styles = StyleSheet.create({
   editAvatarBadgeText: {
     fontSize: 16,
   },
-  changePhotoBtn: {
+  // ✅ NEW STYLES: Remove Photo Button
+  removePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 8,
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: COLORS.borderLight,
+    backgroundColor: COLORS.accentSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accentLight,
   },
-  changePhotoBtnText: {
-    fontSize: 12,
+  removePhotoBtnText: {
+    fontSize: 13,
     color: COLORS.primary,
     fontWeight: '600',
   },
+  // ❌ REMOVED: changePhotoBtn and changePhotoBtnText styles (no longer needed)
   guestName: {
     fontSize: 24,
     fontWeight: '800',

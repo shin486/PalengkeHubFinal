@@ -1,16 +1,17 @@
+// App.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
   Dimensions,
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -25,6 +26,13 @@ import AdminVendorApplicationsScreen from './src/screens/admin/AdminVendorApplic
 import AdminStallsManagementScreen from './src/screens/admin/AdminStallsManagementScreen';
 import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
+import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
+import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
+import VendorProductsScreen from './src/screens/vendor/VendorProductsScreen';
+import VendorReportsScreen from './src/screens/vendor/VendorReportsScreen';
+import VendorNotificationsScreen from './src/screens/vendor/VendorNotificationsScreen';
+import VendorProfileScreen from './src/screens/vendor/VendorProfileScreen';
+import VendorBottomNavigation from './src/components/vendor/VendorBottomNavigation';
 import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
 import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
 import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
@@ -37,34 +45,39 @@ import CategoryProductsScreen from './src/screens/customer/CategoryProductsScree
 import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
 import VendorChatDetailScreen from './src/screens/vendor/VendorChatDetailScreen';
+import VendorChatListScreen from './src/screens/vendor/VendorChatListScreen';
 import { useCart } from './src/hooks/useCart';
 import VendorRatingsScreen from './src/screens/vendor/VendorRatingsScreen';
 
-// ✅ NEW: Customer Report Screens
+// Customer Report Screens
 import ReportIssueScreen from './src/screens/customer/ReportIssueScreen';
 import CustomerReportsScreen from './src/screens/customer/CustomerReportsScreen';
 
-// ✅ NEW: Vendor Report Screens
+// Vendor Report Screens
 import VendorReportIssueScreen from './src/screens/vendor/VendorReportIssueScreen';
 import VendorReportsListScreen from './src/screens/vendor/VendorReportsListScreen';
 
-// ✅ IMPORT THE REDESIGNED HOMESCREEN
+// Import the redesigned HomeScreen
 import HomeScreen from './src/screens/customer/HomeScreen';
+
+// Import the redesigned BottomNavigation
+import BottomNavigation from './src/components/BottomNavigation';
 
 const { width } = Dimensions.get('window');
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
 
 const colors = {
-  primary: '#6366F1',
-  secondary: '#8B5CF6',
-  accent: '#EC4899',
-  success: '#10B981',
+  primary: '#C62828',
+  secondary: '#E53935',
+  accent: '#FFEBEE',
+  success: '#22C55E',
   warning: '#F59E0B',
   danger: '#EF4444',
-  background: '#F9FAFB',
+  background: '#F8F9FB',
   surface: '#FFFFFF',
   text: {
-    primary: '#111827',
+    primary: '#1F2937',
     secondary: '#6B7280',
     tertiary: '#9CA3AF',
   },
@@ -109,36 +122,194 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Custom hook to get current route name
-function useCurrentRoute() {
-  const navigation = useNavigation();
-  const [route, setRoute] = useState(null);
-
-  useEffect(() => {
-    if (!navigation) return;
-
-    const getCurrentRoute = () => {
-      const state = navigation.getState();
-      if (state && state.routes) {
-        const current = state.routes[state.index];
-        setRoute(current);
-      }
-    };
-
-    getCurrentRoute();
-    const unsubscribe = navigation.addListener('state', getCurrentRoute);
-    return unsubscribe;
-  }, [navigation]);
-
-  return route;
+// Helper to get the active route name from a navigation state
+function getActiveRouteName(state) {
+  if (!state) return null;
+  const route = state.routes[state.index];
+  if (route.state) {
+    return getActiveRouteName(route.state);
+  }
+  return route.name;
 }
 
-// Main App Stack Navigator (Customer)
-function AppStack({ isGuest }) {
+// ============================================================
+// CUSTOMER BOTTOM TAB NAVIGATOR
+// ============================================================
+function CustomerTabNavigator({ isGuest, onRouteChange }) {
   const { cartCount } = useCart();
-  const navigation = useNavigation();
-  const currentRoute = useCurrentRoute();
-  
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnreadChatCount = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('conversations')
+          .select('id, customer_unread_count')
+          .eq('customer_id', user.id)
+          .gt('customer_unread_count', 0);
+        
+        if (!error && data) {
+          const total = data.reduce((sum, conv) => sum + (conv.customer_unread_count || 0), 0);
+          setUnreadChatCount(total);
+        }
+      }
+    };
+    fetchUnreadChatCount();
+
+    const channel = supabase
+      .channel('chat-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => fetchUnreadChatCount()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => fetchUnreadChatCount()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarHideOnKeyboard: true,
+      }}
+      tabBar={(props) => (
+        <BottomNavigation
+          {...props}
+          cartCount={cartCount}
+          unreadChatCount={unreadChatCount}
+        />
+      )}
+    >
+      <Tab.Screen 
+        name="Home" 
+        component={HomeScreen}
+        initialParams={{ isGuest }}
+        listeners={{
+          focus: () => onRouteChange?.('Home')
+        }}
+      />
+      <Tab.Screen 
+        name="Cart" 
+        component={CartScreen}
+        listeners={{
+          focus: () => onRouteChange?.('Cart')
+        }}
+      />
+      <Tab.Screen 
+        name="Orders" 
+        component={OrdersScreen}
+        listeners={{
+          focus: () => onRouteChange?.('Orders')
+        }}
+      />
+      <Tab.Screen 
+        name="Chats" 
+        component={ChatListScreen}
+        listeners={{
+          focus: () => onRouteChange?.('Chats')
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        listeners={{
+          focus: () => onRouteChange?.('Profile')
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// ============================================================
+// VENDOR BOTTOM TAB NAVIGATOR
+// ============================================================
+function VendorTabNavigator() {
+  const [pendingCount, setPendingCount] = useState(0);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get stall
+      const { data: stall } = await supabase
+        .from('stalls')
+        .select('id')
+        .eq('vendor_id', user.id)
+        .single();
+
+      if (stall) {
+        const { count: pending } = await supabase
+          .from('orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('stall_id', stall.id)
+          .eq('status', 'pending');
+        setPendingCount(pending || 0);
+
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('vendor_unread_count')
+          .eq('stall_id', stall.id)
+          .gt('vendor_unread_count', 0);
+        const total = (convs || []).reduce((sum, c) => sum + (c.vendor_unread_count || 0), 0);
+        setUnreadChatCount(total);
+      }
+    };
+    fetchCounts();
+
+    const channel = supabase
+      .channel('vendor-tab-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchCounts())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchCounts())
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  return (
+    <Tab.Navigator
+      screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true }}
+      tabBar={(props) => (
+        <VendorBottomNavigation
+          {...props}
+          pendingCount={pendingCount}
+          unreadChatCount={unreadChatCount}
+        />
+      )}
+    >
+      <Tab.Screen name="VendorDashboard" component={VendorDashboardScreen} />
+      <Tab.Screen name="VendorOrders" component={VendorOrdersScreen} />
+      <Tab.Screen name="VendorProducts" component={VendorProductsScreen} />
+      <Tab.Screen name="VendorChats" component={VendorChatListScreen} />
+      <Tab.Screen name="VendorProfile" component={VendorProfileScreen} />
+    </Tab.Navigator>
+  );
+}
+
+// ============================================================
+// MAIN APP STACK
+// ============================================================
+function AppStack({ isGuest }) {
+  const [activeRouteName, setActiveRouteName] = useState('Home');
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -156,113 +327,101 @@ function AppStack({ isGuest }) {
     fetchUnreadCount();
   }, []);
 
+  // ✅ Updated: All screens that should hide the header
   const getHeaderProps = () => {
-    const routeName = currentRoute?.name;
+    const routeName = activeRouteName;
+    
+    // Complete list of screens where header should be hidden
+    const hiddenScreens = [
+      'Home',
+      'ChatDetail',
+      'ChatList',
+      'StallDetails',
+      'ProductDetails',
+      'Search',
+      'CategoryProducts',
+    ];
+    
+    const isHeaderHidden = hiddenScreens.includes(routeName);
+    
+    if (isHeaderHidden) {
+      console.log('🚫 Hiding header on:', routeName);
+      return null;
+    }
+    
+    console.log('✅ Showing header on:', routeName);
     
     switch (routeName) {
-      case 'Home':
-        return { title: '🛒 PalengkeHub', subtitle: 'Lipa City Public Market' };
-      case 'Search':
-        return { title: '🔍 Search', subtitle: 'Find products and stalls' };
       case 'Cart':
-        return { 
-          title: '🛒 Your Cart', 
-          subtitle: cartCount > 0 ? `${cartCount} item${cartCount > 1 ? 's' : ''}` : 'Add items to get started' 
-        };
+        return { title: 'My PalengKart', subtitle: '' };
       case 'Orders':
-        return { title: '📋 My Orders', subtitle: 'Track your orders here' };
+        return { title: 'My Orders', subtitle: 'Track your orders here' };
       case 'Profile':
-        return { title: '👤 My Profile', subtitle: 'Manage your account' };
+        return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
-        return { title: '🏪 Stalls Directory', subtitle: 'Browse all market stalls' };
-      case 'ProductDetails':
-        return { title: '🛍️ Product Details', subtitle: 'View item details' };
-      case 'StallDetails':
-        return { title: '🏪 Stall Details', subtitle: 'View stall information' };
-      case 'CategoryProducts':
-        return { title: '📂 Category', subtitle: 'Browse products' };
-      case 'ChatList':
-        return { title: '💬 Messages', subtitle: 'Chat with stalls' };
-      case 'ChatDetail':
-        return { title: '💬 Chat', subtitle: 'Conversation' };
+        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'Notifications':
-        return { title: '🔔 Notifications', subtitle: 'Your alerts' };
+        return { title: 'Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
-        return { title: '🚩 Report Issue', subtitle: 'Help us improve' };
+        return { title: 'Report Issue', subtitle: 'Help us improve' };
       case 'CustomerReports':
-        return { title: '📋 My Reports', subtitle: 'Track your reports' };
+        return { title: 'My Reports', subtitle: 'Track your reports' };
       default:
-        return { title: '🛒 PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
     }
   };
 
-  const { title, subtitle } = getHeaderProps();
+  const headerProps = getHeaderProps();
+
+  console.log('🔍 AppStack - activeRouteName:', activeRouteName);
+  console.log('🔍 AppStack - headerProps:', headerProps);
 
   return (
     <View style={styles.container}>
-      <Header title={title} subtitle={subtitle} />
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'none' }}>
-        <Stack.Screen name="Home">
-          {props => <HomeScreen {...props} isGuest={isGuest} />}
+      {/* ✅ Only show global Header if NOT on hidden screens */}
+      {headerProps && (
+        <Header title={headerProps.title} subtitle={headerProps.subtitle} />
+      )}
+      
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, animation: 'none' }}
+        onStateChange={(state) => {
+          const routeName = getActiveRouteName(state);
+          console.log('🔄 StackNavigator - route changed to:', routeName);
+          // ✅ Update activeRouteName for ALL routes, including MainTabs
+          setActiveRouteName(routeName);
+        }}
+      >
+        <Stack.Screen name="MainTabs">
+          {props => (
+            <CustomerTabNavigator
+              {...props}
+              isGuest={isGuest}
+              onRouteChange={(tabName) => {
+                console.log('🔄 Tab changed to:', tabName);
+                setActiveRouteName(tabName);
+              }}
+            />
+          )}
         </Stack.Screen>
         
         <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
         <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
-        <Stack.Screen name="Cart" component={CartScreen} />
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
-        <Stack.Screen name="Orders" component={OrdersScreen} />
-        <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
-        <Stack.Screen name="ChatList" component={ChatListScreen} />
-        <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
         
-        {/* ✅ NEW: Customer Report Screens */}
+        <Stack.Screen 
+          name="ChatDetail" 
+          component={ChatDetailScreen} 
+          options={{ headerShown: false }}
+        />
+        
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
       </Stack.Navigator>
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
-          <Text style={styles.navIcon}>🏠</Text>
-          <Text style={styles.navText}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.navIcon}>🔍</Text>
-          <Text style={styles.navText}>Search</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Cart')}>
-          <Text style={styles.navIcon}>🛒</Text>
-          <Text style={styles.navText}>Cart</Text>
-          {cartCount > 0 && (
-            <View style={styles.navBadge}>
-              <Text style={styles.navBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Orders')}>
-          <Text style={styles.navIcon}>📋</Text>
-          <Text style={styles.navText}>Orders</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatList')}>
-          <Text style={styles.navIcon}>💬</Text>
-          <Text style={styles.navText}>Chats</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.navIcon}>🔔</Text>
-          <Text style={styles.navText}>Alerts</Text>
-          {unreadCount > 0 && (
-            <View style={styles.navBadge}>
-              <Text style={styles.navBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -270,7 +429,9 @@ function AppStack({ isGuest }) {
 // Global navigation ref
 let navigationContainerRef = null;
 
-// Root Navigator
+// ============================================================
+// ROOT NAVIGATOR
+// ============================================================
 function RootNavigator() {
   const { user, loading, isGuest, setIsGuest, profile } = useAuth();
 
@@ -286,8 +447,6 @@ function RootNavigator() {
     }
   }, [isGuest]);
 
-  // Redirect to the correct dashboard whenever auth state changes
-  // (covers normal login AND SMS/OTP auto-login after verification).
   useEffect(() => {
     if (loading || !user || !global.navigationRef) return;
 
@@ -308,7 +467,6 @@ function RootNavigator() {
     return <LoadingSpinner />;
   }
 
-  // Determine initial route
   let initialRoute = 'Login';
   
   if (isGuest) {
@@ -342,11 +500,12 @@ function RootNavigator() {
         </Stack.Screen>
         
         {/* Vendor screens */}
-        <Stack.Screen name="VendorDashboard" component={VendorDashboardScreen} />
+        <Stack.Screen name="VendorDashboard" component={VendorTabNavigator} />
+        <Stack.Screen name="VendorOrderDetail" component={VendorOrderDetailScreen} />
+        <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
+        <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
-        
-        {/* ✅ NEW: Vendor Report Screens */}
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
         
@@ -355,7 +514,6 @@ function RootNavigator() {
         <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />
         <Stack.Screen name="AdminStallsManagement" component={AdminStallsManagementScreen} />
         <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
-        <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
         
         {/* Customer / Guest App */}
         <Stack.Screen name="App">
@@ -381,7 +539,9 @@ export const resetToLogin = () => {
   }
 };
 
-// Main App Export
+// ============================================================
+// MAIN APP EXPORT
+// ============================================================
 export default function App() {
   return (
     <ErrorBoundary>
@@ -396,46 +556,12 @@ export default function App() {
   );
 }
 
+// ============================================================
+// STYLES
+// ============================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 5,
-    position: 'relative',
-  },
-  navIcon: {
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  navText: {
-    fontSize: 11,
-    color: colors.text.secondary,
-  },
-  navBadge: {
-    position: 'absolute',
-    top: 0,
-    right: '20%',
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: 'white',
   },
 });

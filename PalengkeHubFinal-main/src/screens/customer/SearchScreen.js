@@ -1,3 +1,5 @@
+// src/screens/customer/SearchScreen.js
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -11,8 +13,11 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
@@ -22,9 +27,7 @@ const COLORS = {
   primary: '#DC2626',
   primaryLight: '#EF4444',
   primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
+  primarySurface: '#FEF2F2',
   background: '#F8F9FA',
   surface: '#FFFFFF',
   text: {
@@ -39,35 +42,26 @@ const COLORS = {
   success: '#10B981',
   error: '#DC2626',
   warning: '#F59E0B',
+  gold: '#F59E0B',
   shadow: 'rgba(0, 0, 0, 0.08)',
   shadowDark: 'rgba(0, 0, 0, 0.12)',
 };
 
 // Generate a stable pseudo-random rating seeded by stall id
-// This ensures the same stall always gets the same "random" rating
 const getStallRating = (stallId, realRating) => {
-  // If there's a real rating from users, use it
   if (realRating && realRating > 0) return realRating;
-  
-  // Otherwise generate a deterministic random rating based on stall ID
-  // This ensures the rating doesn't change every time you load the page
   const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  
-  // Ratings between 2.5 and 5.0 stars
   const rating = 2.5 + (randomValue * 2.5);
-  return Math.round(rating * 10) / 10; // Round to 1 decimal
+  return Math.round(rating * 10) / 10;
 };
 
-// Helper function to get random rating count
 const getRandomRatingCount = (stallId) => {
   const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  // Between 5 and 200 reviews
   return Math.floor(5 + (randomValue * 195));
 };
 
-// Helper function to get random star distribution (for visual stars)
 const getStarDistribution = (rating) => {
   const fullStars = Math.floor(rating);
   const halfStar = (rating % 1) >= 0.5;
@@ -75,7 +69,6 @@ const getStarDistribution = (rating) => {
   return { fullStars, halfStar, emptyStars };
 };
 
-// Helper function to calculate discounted price
 const getDiscountedPrice = (originalPrice, promotion) => {
   if (!promotion) return originalPrice;
   if (promotion.discount_type === 'percentage') {
@@ -85,20 +78,22 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   }
 };
 
-// Star rating component
+// Star rating component with Ionicons
 const StarRating = ({ rating, size = 12 }) => {
-  const { fullStars, halfStar, emptyStars } = getStarDistribution(rating);
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
   
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {[...Array(fullStars)].map((_, i) => (
-        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+        <Ionicons key={`full-${i}`} name="star" size={size} color={COLORS.gold} />
       ))}
-      {halfStar && (
-        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+      {hasHalfStar && (
+        <Ionicons name="star-half" size={size} color={COLORS.gold} />
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color="#D1D5DB" />
       ))}
     </View>
   );
@@ -112,11 +107,17 @@ export default function SearchScreen({ navigation }) {
   const [searchType, setSearchType] = useState('products');
   const [recentSearches, setRecentSearches] = useState([]);
   const [showRecent, setShowRecent] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const debounceTimer = useRef(null);
 
   useEffect(() => {
     loadRecentSearches();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   useEffect(() => {
@@ -154,7 +155,6 @@ export default function SearchScreen({ navigation }) {
 
   const saveRecentSearch = async (query) => {
     if (!query.trim()) return;
-
     try {
       const updated = [query, ...recentSearches.filter(s => s !== query)];
       const trimmed = updated.slice(0, MAX_RECENT_SEARCHES);
@@ -191,12 +191,10 @@ export default function SearchScreen({ navigation }) {
 
   const performSearch = async () => {
     if (!searchQuery.trim()) return;
-
     setLoading(true);
 
     try {
       if (searchType === 'products') {
-        // Fetch products with stall info
         const { data, error } = await supabase
           .from('products')
           .select(`
@@ -219,7 +217,6 @@ export default function SearchScreen({ navigation }) {
         if (error) throw error;
 
         if (data && data.length > 0) {
-          // Fetch promotions for all products in one query
           const productIds = data.map(p => p.id);
           const now = new Date().toISOString();
           const { data: promotions } = await supabase
@@ -230,7 +227,6 @@ export default function SearchScreen({ navigation }) {
             .lte('start_date', now)
             .gte('end_date', now);
 
-          // Create a map of product_id -> promotion
           const promoMap = new Map();
           if (promotions) {
             promotions.forEach(promo => {
@@ -238,7 +234,6 @@ export default function SearchScreen({ navigation }) {
             });
           }
 
-          // Add promotion and discounted price to each product
           const productsWithPromo = data.map(product => {
             const promotion = promoMap.get(product.id);
             const discountedPrice = getDiscountedPrice(product.price, promotion);
@@ -251,7 +246,6 @@ export default function SearchScreen({ navigation }) {
             };
           });
 
-          // Group by product name
           const grouped = {};
           productsWithPromo.forEach(product => {
             if (!grouped[product.name]) {
@@ -260,7 +254,6 @@ export default function SearchScreen({ navigation }) {
             grouped[product.name].push(product);
           });
 
-          // Build flat list with headers and products, sorted by discounted price
           const results = [];
           for (const [productName, variants] of Object.entries(grouped)) {
             variants.sort((a, b) => a.price - b.price);
@@ -273,8 +266,7 @@ export default function SearchScreen({ navigation }) {
         } else {
           setProductsData([]);
         }
-      } 
-      else if (searchType === 'stalls') {
+      } else if (searchType === 'stalls') {
         const { data, error } = await supabase
           .from('stalls')
           .select('*')
@@ -284,7 +276,6 @@ export default function SearchScreen({ navigation }) {
 
         if (error) throw error;
         
-        // Add randomized ratings to stalls
         const stallsWithRatings = (data || []).map(stall => ({
           ...stall,
           displayRating: getStallRating(stall.id, stall.average_rating),
@@ -332,8 +323,15 @@ export default function SearchScreen({ navigation }) {
     if (item.type === 'header') {
       return (
         <View style={styles.comparisonHeader}>
-          <Text style={styles.comparisonHeaderText}>{item.name}</Text>
-          <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
+          <View style={styles.comparisonHeaderLeft}>
+            <Text style={styles.comparisonHeaderText}>{item.name}</Text>
+            <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
+          </View>
+          <View style={styles.comparisonHeaderBadge}>
+            <Text style={styles.comparisonHeaderBadgeText}>
+              {productsData.filter(i => i.type === 'product' && i.data.name === item.name).length} stalls
+            </Text>
+          </View>
         </View>
       );
     }
@@ -343,24 +341,27 @@ export default function SearchScreen({ navigation }) {
     const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
     const isCheapest = groupItems.length > 0 && product.price === Math.min(...groupItems.map(i => i.data.price));
     
-    // Get stall rating
     const stallRating = getStallRating(stall.id, stall.average_rating);
     const ratingCount = getRandomRatingCount(stall.id);
 
     return (
       <TouchableOpacity
-        style={styles.comparisonCard}
+        style={[styles.comparisonCard, isCheapest && styles.comparisonCardBestDeal]}
         onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
         activeOpacity={0.7}
       >
         {isCheapest && (
           <View style={styles.bestDealBadge}>
+            <Ionicons name="ribbon" size={12} color="#FFFFFF" />
             <Text style={styles.bestDealText}>Best Deal</Text>
           </View>
         )}
         <View style={styles.comparisonContent}>
           <View style={styles.comparisonStallInfo}>
-            <Text style={styles.comparisonStallName}>{stall.stall_name || 'Market Stall'}</Text>
+            <View style={styles.comparisonStallHeader}>
+              <Ionicons name="storefront-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.comparisonStallName}>{stall.stall_name || 'Market Stall'}</Text>
+            </View>
             <Text style={styles.comparisonStallNumber}>Stall #{stall.stall_number}</Text>
             <Text style={styles.comparisonSection}>{stall.section}</Text>
             <View style={styles.ratingRow}>
@@ -370,12 +371,13 @@ export default function SearchScreen({ navigation }) {
             </View>
           </View>
           <View style={styles.comparisonPriceSection}>
-            {/* Show original price with strikethrough if promotion exists */}
             {product.hasPromotion && (
               <Text style={styles.originalPrice}>₱{product.originalPrice.toFixed(2)}</Text>
             )}
-            <Text style={styles.comparisonPrice}>₱{product.price.toFixed(2)}</Text>
-            <Text style={styles.comparisonUnit}>per {product.unit}</Text>
+            <Text style={[styles.comparisonPrice, isCheapest && styles.comparisonPriceBest]}>
+              ₱{product.price.toFixed(2)}
+            </Text>
+            <Text style={styles.comparisonUnit}>/ {product.unit}</Text>
             {product.hasPromotion && (
               <View style={styles.promoMiniBadge}>
                 <Text style={styles.promoMiniText}>
@@ -390,7 +392,7 @@ export default function SearchScreen({ navigation }) {
             style={styles.addToCartButton}
             onPress={() => addToCartFromComparison(product, stall)}
           >
-            <Text style={styles.addToCartButtonText}>Add</Text>
+            <Ionicons name="add" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -409,13 +411,15 @@ export default function SearchScreen({ navigation }) {
       >
         <View style={styles.cardContent}>
           <View style={styles.stallIcon}>
-            <Text style={styles.stallEmoji}>🏪</Text>
+            <Ionicons name="storefront" size={24} color={COLORS.primary} />
           </View>
           <View style={styles.cardInfo}>
             <Text style={styles.resultName}>Stall #{item.stall_number}</Text>
             <Text style={styles.resultStallName}>{item.stall_name || 'Market Stall'}</Text>
             <View style={styles.cardMeta}>
-              <Text style={styles.resultSection}>{item.section}</Text>
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>{item.section}</Text>
+              </View>
               <View style={styles.ratingContainer}>
                 <StarRating rating={displayRating} size={10} />
                 <Text style={styles.resultRating}> {displayRating.toFixed(1)}</Text>
@@ -423,23 +427,28 @@ export default function SearchScreen({ navigation }) {
               </View>
             </View>
           </View>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.text.light} />
         </View>
       </TouchableOpacity>
     );
   };
 
   const renderRecentSearches = () => (
-    <View style={styles.recentSection}>
+    <Animated.View style={[styles.recentSection, { opacity: fadeAnim }]}>
       <View style={styles.recentHeader}>
-        <Text style={styles.recentTitle}>Recent Searches</Text>
+        <View style={styles.recentHeaderLeft}>
+          <Ionicons name="time-outline" size={18} color={COLORS.primary} />
+          <Text style={styles.recentTitle}>Recent Searches</Text>
+        </View>
         {recentSearches.length > 0 && (
-          <TouchableOpacity onPress={clearRecentSearches}>
+          <TouchableOpacity onPress={clearRecentSearches} activeOpacity={0.7}>
             <Text style={styles.clearRecentText}>Clear All</Text>
           </TouchableOpacity>
         )}
       </View>
       {recentSearches.length === 0 ? (
         <View style={styles.noRecentContainer}>
+          <Ionicons name="search-outline" size={48} color={COLORS.text.lighter} />
           <Text style={styles.noRecentText}>No recent searches</Text>
           <Text style={styles.noRecentSubtext}>Your searches will appear here</Text>
         </View>
@@ -449,26 +458,29 @@ export default function SearchScreen({ navigation }) {
             key={index}
             style={styles.recentItem}
             onPress={() => handleRecentSearch(item)}
+            activeOpacity={0.7}
           >
             <View style={styles.recentItemContent}>
-              <Text style={styles.recentItemIcon}>🔍</Text>
+              <Ionicons name="search-outline" size={16} color={COLORS.primary} />
               <Text style={styles.recentItemText}>{item}</Text>
             </View>
             <TouchableOpacity
               onPress={() => removeRecentSearch(item)}
               style={styles.removeRecentButton}
             >
-              <Text style={styles.removeRecentText}>✕</Text>
+              <Ionicons name="close" size={16} color={COLORS.text.lighter} />
             </TouchableOpacity>
           </TouchableOpacity>
         ))
       )}
-    </View>
+    </Animated.View>
   );
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>🔍</Text>
+      <View style={styles.emptyIconContainer}>
+        <Ionicons name="search-outline" size={56} color={COLORS.primary} />
+      </View>
       <Text style={styles.emptyTitle}>No results found</Text>
       <Text style={styles.emptyText}>Try searching with a different keyword</Text>
     </View>
@@ -476,15 +488,16 @@ export default function SearchScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search-outline" size={20} color={COLORS.primary} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search products or stalls..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.text.lighter}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={handleSearchSubmit}
@@ -492,13 +505,14 @@ export default function SearchScreen({ navigation }) {
             autoFocus
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.clearIcon}>✕</Text>
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={20} color={COLORS.text.lighter} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
+      {/* Tabs */}
       <View style={styles.typeToggle}>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'products' && styles.toggleButtonActive]}
@@ -506,10 +520,17 @@ export default function SearchScreen({ navigation }) {
             setSearchType('products');
             if (searchQuery) performSearch();
           }}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.toggleText, searchType === 'products' && styles.toggleTextActive]}>
-            Products
-          </Text>
+          <LinearGradient
+            colors={searchType === 'products' ? [COLORS.primary, COLORS.primaryLight] : ['transparent', 'transparent']}
+            style={[styles.toggleGradient, searchType === 'products' && styles.toggleGradientActive]}
+          >
+            <Ionicons name="cube-outline" size={16} color={searchType === 'products' ? '#FFFFFF' : COLORS.text.medium} />
+            <Text style={[styles.toggleText, searchType === 'products' && styles.toggleTextActive]}>
+              Products
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'stalls' && styles.toggleButtonActive]}
@@ -517,13 +538,21 @@ export default function SearchScreen({ navigation }) {
             setSearchType('stalls');
             if (searchQuery) performSearch();
           }}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.toggleText, searchType === 'stalls' && styles.toggleTextActive]}>
-            Stalls
-          </Text>
+          <LinearGradient
+            colors={searchType === 'stalls' ? [COLORS.primary, COLORS.primaryLight] : ['transparent', 'transparent']}
+            style={[styles.toggleGradient, searchType === 'stalls' && styles.toggleGradientActive]}
+          >
+            <Ionicons name="storefront-outline" size={16} color={searchType === 'stalls' ? '#FFFFFF' : COLORS.text.medium} />
+            <Text style={[styles.toggleText, searchType === 'stalls' && styles.toggleTextActive]}>
+              Stalls
+            </Text>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
+      {/* Content */}
       {showRecent && !searchQuery ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -534,7 +563,7 @@ export default function SearchScreen({ navigation }) {
         </ScrollView>
       ) : loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B6B" />
+          <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Searching...</Text>
         </View>
       ) : searchType === 'products' ? (
@@ -567,62 +596,68 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 12,
   },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
     elevation: 2,
-  },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: 10,
-    color: '#FF6B6B',
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     fontSize: 16,
-    color: '#111827',
+    color: COLORS.text.dark,
   },
-  clearIcon: {
-    fontSize: 16,
-    color: '#9CA3AF',
-    padding: 8,
+  clearButton: {
+    padding: 4,
   },
   typeToggle: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 12,
+    gap: 10,
   },
   toggleButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 25,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface,
+  },
+  toggleGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 6,
+  },
+  toggleGradientActive: {
+    borderWidth: 0,
   },
   toggleButtonActive: {
-    backgroundColor: '#FF6B6B',
+    borderColor: COLORS.primary,
   },
   toggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.text.medium,
   },
   toggleTextActive: {
-    color: 'white',
+    color: COLORS.text.white,
   },
   scrollContent: {
     flex: 1,
@@ -632,23 +667,28 @@ const styles = StyleSheet.create({
   },
   recentSection: {
     paddingHorizontal: 16,
+    paddingTop: 8,
   },
   recentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 8,
+    marginBottom: 14,
+  },
+  recentHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   recentTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.dark,
   },
   clearRecentText: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    fontWeight: '500',
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
   recentItem: {
     flexDirection: 'row',
@@ -656,38 +696,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    marginBottom: 10,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 1,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 1,
   },
   recentItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  recentItemIcon: {
-    fontSize: 16,
-    marginRight: 12,
-    color: '#FF6B6B',
+    gap: 12,
   },
   recentItemText: {
     fontSize: 15,
-    color: '#111827',
+    color: COLORS.text.dark,
     flex: 1,
   },
   removeRecentButton: {
     padding: 8,
-  },
-  removeRecentText: {
-    fontSize: 14,
-    color: '#9CA3AF',
   },
   noRecentContainer: {
     alignItems: 'center',
@@ -695,12 +727,12 @@ const styles = StyleSheet.create({
   },
   noRecentText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.medium,
     marginBottom: 4,
   },
   noRecentSubtext: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
   },
   loadingContainer: {
     flex: 1,
@@ -709,7 +741,8 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: '#6B7280',
+    color: COLORS.text.medium,
+    fontSize: 14,
   },
   resultsList: {
     paddingHorizontal: 16,
@@ -729,34 +762,31 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderLight,
   },
   stallIcon: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#EFF6FF',
+    width: 48,
+    height: 48,
+    backgroundColor: COLORS.primarySurface,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  stallEmoji: {
-    fontSize: 24,
-  },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 14,
   },
   cardInfo: {
     flex: 1,
   },
   resultName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '700',
+    color: COLORS.text.dark,
     marginBottom: 2,
   },
   resultStallName: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.medium,
     marginBottom: 4,
   },
   cardMeta: {
@@ -765,13 +795,16 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
-  resultSection: {
-    fontSize: 12,
-    backgroundColor: '#FEF3F2',
+  sectionBadge: {
+    backgroundColor: COLORS.primarySurface,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
-    color: '#FF6B6B',
+    borderRadius: 8,
+  },
+  sectionBadgeText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '500',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -779,12 +812,12 @@ const styles = StyleSheet.create({
   },
   resultRating: {
     fontSize: 12,
-    color: '#F59E0B',
+    color: COLORS.gold,
     fontWeight: '500',
   },
   ratingCountSmall: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
     marginLeft: 2,
   },
   ratingRow: {
@@ -794,52 +827,77 @@ const styles = StyleSheet.create({
   },
   ratingCount: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
     marginLeft: 2,
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 60,
+    justifyContent: 'center',
+    paddingVertical: 80,
   },
-  emptyIcon: {
-    fontSize: 60,
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+    marginBottom: 6,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.medium,
     textAlign: 'center',
   },
   comparisonHeader: {
-    backgroundColor: '#FEF3F2',
-    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.primarySurface,
+    padding: 14,
     borderRadius: 12,
     marginBottom: 12,
     marginTop: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF6B6B',
+    borderLeftColor: COLORS.primary,
+  },
+  comparisonHeaderLeft: {
+    flex: 1,
   },
   comparisonHeaderText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: '700',
+    color: COLORS.text.dark,
   },
   comparisonHeaderSubtext: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.medium,
     marginTop: 2,
+  },
+  comparisonHeaderBadge: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  comparisonHeaderBadgeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.primary,
   },
   comparisonCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
     marginBottom: 12,
-    padding: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     position: 'relative',
@@ -849,19 +907,26 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  comparisonCardBestDeal: {
+    borderColor: COLORS.success,
+    borderWidth: 1.5,
+  },
   bestDealBadge: {
     position: 'absolute',
     top: -8,
     right: 12,
-    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.success,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     zIndex: 1,
+    gap: 4,
   },
   bestDealText: {
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: 'white',
   },
   comparisonContent: {
@@ -872,24 +937,29 @@ const styles = StyleSheet.create({
   comparisonStallInfo: {
     flex: 2,
   },
+  comparisonStallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   comparisonStallName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.dark,
   },
   comparisonStallNumber: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.medium,
     marginTop: 2,
   },
   comparisonSection: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
     marginTop: 2,
   },
   comparisonRating: {
     fontSize: 11,
-    color: '#F59E0B',
+    color: COLORS.gold,
     fontWeight: '500',
   },
   comparisonPriceSection: {
@@ -899,18 +969,21 @@ const styles = StyleSheet.create({
   },
   originalPrice: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.lighter,
     textDecorationLine: 'line-through',
     marginBottom: 2,
   },
   comparisonPrice: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  comparisonPriceBest: {
+    color: COLORS.success,
   },
   comparisonUnit: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.medium,
   },
   promoMiniBadge: {
     marginTop: 4,
@@ -922,18 +995,20 @@ const styles = StyleSheet.create({
   promoMiniText: {
     fontSize: 9,
     fontWeight: '500',
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   addToCartButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     marginLeft: 8,
-  },
-  addToCartButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });

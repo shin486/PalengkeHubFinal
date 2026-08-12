@@ -1,5 +1,5 @@
 // src/screens/customer/StallDetailsScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,31 +14,31 @@ import {
   Linking,
   Platform,
   Image,
+  Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { chatService } from '../../services/chatService';
-import { Header } from '../../components/Header';
 import StallMap from '../../components/StallMap';
 
 const { width, height } = Dimensions.get('window');
 
+// ============================================================
+// COLORS - Clean Red & White Palette
+// ============================================================
 const COLORS = {
   primary: '#DC2626',
   primaryLight: '#EF4444',
   primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
+  primarySurface: '#FEF2F2',
+  background: '#F8F9FB',
   surface: '#FFFFFF',
   text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
+    dark: '#1F2937',
+    medium: '#6B7280',
+    light: '#9CA3AF',
     white: '#FFFFFF',
   },
   border: '#E5E7EB',
@@ -46,28 +46,33 @@ const COLORS = {
   success: '#10B981',
   error: '#DC2626',
   warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
+  shadow: 'rgba(0, 0, 0, 0.06)',
+  shadowDark: 'rgba(0, 0, 0, 0.10)',
 };
 
-// ✅ Generate consistent random rating based on stall ID
-const getStallRating = (stallId, realRating) => {
-  if (realRating && realRating > 0) return realRating;
-  
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  const rating = 2.5 + (randomValue * 2.5);
-  return Math.round(rating * 10) / 10;
+// ============================================================
+// SPACING CONSTANTS
+// ============================================================
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
 };
 
-// ✅ Generate random review count
-const getRandomRatingCount = (stallId) => {
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  return Math.floor(5 + (randomValue * 195));
+const RADIUS = {
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 24,
 };
 
-// ✅ Star Rating Component
+// ============================================================
+// STAR RATING COMPONENT
+// ============================================================
 const StarRating = ({ rating, size = 14 }) => {
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
@@ -76,18 +81,62 @@ const StarRating = ({ rating, size = 14 }) => {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {[...Array(fullStars)].map((_, i) => (
-        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+        <Ionicons key={`full-${i}`} name="star" size={size} color="#F59E0B" />
       ))}
       {hasHalfStar && (
-        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+        <Ionicons name="star-half" size={size} color="#F59E0B" />
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color="#D1D5DB" />
       ))}
     </View>
   );
 };
 
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+const getStallRating = (stallId, realRating) => {
+  if (realRating && realRating > 0) return realRating;
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  const rating = 2.5 + (randomValue * 2.5);
+  return Math.round(rating * 10) / 10;
+};
+
+const getRandomRatingCount = (stallId) => {
+  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
+  return Math.floor(5 + (randomValue * 195));
+};
+
+const getStallCoordinates = (section, stallNumber) => {
+  const baseLat = 13.9417;
+  const baseLng = 121.1642;
+  
+  const sectionOffsets = {
+    'Meat Section': { lat: 0.0008, lng: -0.0012 },
+    'Vegetable Section': { lat: 0.0002, lng: -0.0008 },
+    'Fish Section': { lat: -0.0003, lng: 0.0005 },
+    'Fruit Section': { lat: 0.0005, lng: 0.0002 },
+    'Dry Goods': { lat: -0.0001, lng: -0.0015 },
+    'Poultry Section': { lat: 0.0010, lng: -0.0005 },
+    'Rice Section': { lat: 0.0003, lng: -0.0003 },
+    'Dairy Section': { lat: -0.0002, lng: 0.0008 },
+  };
+  
+  const offset = sectionOffsets[section] || { lat: 0, lng: 0 };
+  const stallOffset = (parseInt(stallNumber) || 0) * 0.00002;
+  
+  return {
+    latitude: baseLat + offset.lat + stallOffset,
+    longitude: baseLng + offset.lng + stallOffset,
+  };
+};
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 export default function StallDetailsScreen({ navigation, route }) {
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
@@ -98,73 +147,32 @@ export default function StallDetailsScreen({ navigation, route }) {
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [stallImageError, setStallImageError] = useState(false);
   const [vendorAvatarError, setVendorAvatarError] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Stall location mapping based on section
-  const getStallCoordinates = (section, stallNumber) => {
-    const baseLat = 13.9417;
-    const baseLng = 121.1642;
-    
-    const sectionOffsets = {
-      'Meat Section': { lat: 0.0008, lng: -0.0012 },
-      'Vegetable Section': { lat: 0.0002, lng: -0.0008 },
-      'Fish Section': { lat: -0.0003, lng: 0.0005 },
-      'Fruit Section': { lat: 0.0005, lng: 0.0002 },
-      'Dry Goods': { lat: -0.0001, lng: -0.0015 },
-      'Poultry Section': { lat: 0.0010, lng: -0.0005 },
-      'Rice Section': { lat: 0.0003, lng: -0.0003 },
-      'Dairy Section': { lat: -0.0002, lng: 0.0008 },
-    };
-    
-    const offset = sectionOffsets[section] || { lat: 0, lng: 0 };
-    const stallOffset = (parseInt(stallNumber) || 0) * 0.00002;
-    
-    return {
-      latitude: baseLat + offset.lat + stallOffset,
-      longitude: baseLng + offset.lng + stallOffset,
-    };
-  };
-
-  const openMapsDirections = () => {
-    const coords = getStallCoordinates(stall?.section, stall?.stall_number);
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}&travelmode=walking`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open maps');
-    });
-  };
-
-  const showFullMap = () => {
-    setMapModalVisible(true);
-  };
-
-  const handleReportVendor = () => {
-    if (!user) {
-      Alert.alert(
-        'Login Required',
-        'Please login to report a vendor',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
-            onPress: () => {
-              if (setIsGuest) setIsGuest(false);
-            }
-          }
-        ]
-      );
-      return;
+  // ✅ HIDE THE GLOBAL HEADER
+  useEffect(() => {
+    console.log('📱 StallDetailsScreen mounted - hiding header');
+    if (global.setShowHeader) {
+      global.setShowHeader(false);
     }
-
-    navigation.navigate('ReportIssue', {
-      type: 'vendor',
-      targetId: stall.id,
-      targetName: stall?.stall_name || `Stall #${stall?.stall_number}`,
-      targetType: 'vendor'
+    navigation.setOptions({
+      headerShown: false,
     });
-  };
+    return () => {
+      console.log('📱 StallDetailsScreen unmounted - showing header');
+      if (global.setShowHeader) {
+        global.setShowHeader(true);
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    fetchStallDetails();
-  }, [stallId]);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const fetchStallDetails = async () => {
     try {
@@ -178,7 +186,6 @@ export default function StallDetailsScreen({ navigation, route }) {
       
       if (stallError) throw stallError;
       
-      // Fetch vendor profile
       if (stallData?.vendor_id) {
         const { data: vendorData, error: vendorError } = await supabase
           .from('profiles')
@@ -191,17 +198,11 @@ export default function StallDetailsScreen({ navigation, route }) {
         }
       }
       
-      // Check if stall is inactive
       if (stallData && !stallData.is_active) {
         Alert.alert(
           'Stall Unavailable',
           'This stall is currently inactive and not accepting orders.',
-          [
-            { 
-              text: 'Go Back', 
-              onPress: () => navigation.goBack()
-            }
-          ]
+          [{ text: 'Go Back', onPress: () => navigation.goBack() }]
         );
         setLoading(false);
         return;
@@ -225,6 +226,10 @@ export default function StallDetailsScreen({ navigation, route }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchStallDetails();
+  }, [stallId]);
 
   const startChat = async () => {
     if (!user) {
@@ -251,26 +256,74 @@ export default function StallDetailsScreen({ navigation, route }) {
     }
   };
 
-  // ✅ Get display rating (randomized if no real rating)
+  const handleReportVendor = () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please login to report a vendor',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => { if (setIsGuest) setIsGuest(false); } }
+        ]
+      );
+      return;
+    }
+
+    navigation.navigate('ReportIssue', {
+      type: 'vendor',
+      targetId: stall.id,
+      targetName: stall?.stall_name || `Stall #${stall?.stall_number}`,
+      targetType: 'vendor'
+    });
+  };
+
+  const openMapsDirections = () => {
+    const coords = getStallCoordinates(stall?.section, stall?.stall_number);
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}&travelmode=walking`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open maps');
+    });
+  };
+
+  const showFullMap = () => {
+    setMapModalVisible(true);
+  };
+
+  const goToReviews = () => {
+    // Navigate to reviews screen - you can implement this later
+    Alert.alert('Reviews', 'Navigate to reviews screen');
+    // navigation.navigate('Reviews', { stallId: stall.id });
+  };
+
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
+  const stallCoords = getStallCoordinates(stall?.section, stall?.stall_number);
+
+  // Navigate back
+  const goBack = () => {
+    navigation.goBack();
+  };
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#DC2626" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
 
-  const stallCoords = getStallCoordinates(stall?.section, stall?.stall_number);
-
   return (
-    <SafeAreaView style={styles.container}>
-     
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        
-        {/* STALL BANNER IMAGE */}
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* ============================================================
+            HERO BANNER
+        ============================================================ */}
         <View style={styles.bannerContainer}>
           {stall?.image_url && !stallImageError ? (
             <Image 
@@ -281,110 +334,165 @@ export default function StallDetailsScreen({ navigation, route }) {
             />
           ) : (
             <LinearGradient
-              colors={['#DC2626', '#EF4444', '#F87171']}
+              colors={[COLORS.primary, COLORS.primaryDark]}
               style={styles.bannerPlaceholder}
             >
-              <Text style={styles.bannerPlaceholderText}>🏪</Text>
+              <Ionicons name="storefront-outline" size={72} color="rgba(255,255,255,0.2)" />
             </LinearGradient>
           )}
+          
+          {/* Dark Overlay for readability */}
+          <View style={styles.bannerOverlay} />
+          
+          {/* Back Button */}
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={goBack}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+          
+          {/* Banner Content - Bottom */}
+          <View style={styles.bannerContent}>
+            <Text style={styles.bannerName}>{stall?.stall_name || 'Market Stall'}</Text>
+            <Text style={styles.bannerSubtitle}>
+              Stall #{stall?.stall_number} • {stall?.section || 'No Section'}
+            </Text>
+            <View style={styles.bannerChips}>
+              <View style={styles.bannerChip}>
+                <Ionicons name="star" size={12} color="#F59E0B" />
+                <Text style={styles.bannerChipText}>{displayRating.toFixed(1)}</Text>
+              </View>
+              <View style={[
+                styles.bannerChip,
+                stall?.is_temporarily_closed ? styles.bannerChipClosed : styles.bannerChipOpen
+              ]}>
+                <View style={[
+                  styles.bannerDot,
+                  stall?.is_temporarily_closed ? styles.bannerDotClosed : styles.bannerDotOpen
+                ]} />
+                <Text style={[
+                  styles.bannerChipText,
+                  stall?.is_temporarily_closed ? styles.bannerChipTextClosed : styles.bannerChipTextOpen
+                ]}>
+                  {stall?.is_temporarily_closed ? 'Closed' : 'Open'}
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        {/* Stall Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.stallHeader}>
-            {/* VENDOR AVATAR */}
-            <View style={styles.avatarContainer}>
+        {/* ============================================================
+            VENDOR INFO STRIP - with Rating on the Right
+        ============================================================ */}
+        <View style={styles.infoStrip}>
+          <View style={styles.infoStripContent}>
+            <View style={styles.infoStripLeft}>
               {vendor?.avatar_url && !vendorAvatarError ? (
                 <Image 
                   source={{ uri: vendor.avatar_url }} 
-                  style={styles.vendorAvatar}
+                  style={styles.infoStripAvatar}
                   onError={() => setVendorAvatarError(true)}
                 />
               ) : (
                 <LinearGradient
-                  colors={['#DC2626', '#EF4444']}
-                  style={styles.avatarGradient}
+                  colors={[COLORS.primary, COLORS.primaryLight]}
+                  style={styles.infoStripAvatarGradient}
                 >
-                  <Text style={styles.avatarEmoji}>
-                    {vendor?.full_name?.charAt(0)?.toUpperCase() || '👤'}
-                  </Text>
+                  <Ionicons name="person-outline" size={24} color="#FFFFFF" />
                 </LinearGradient>
               )}
-            </View>
-            <View style={styles.stallInfo}>
-              <Text style={styles.stallName}>{stall?.stall_name || 'Market Stall'}</Text>
-              <Text style={styles.stallNumber}>Stall #{stall?.stall_number}</Text>
-              <Text style={styles.stallSection}>{stall?.section}</Text>
-              {vendor?.full_name && (
-                <Text style={styles.vendorName}>👨‍🍳 {vendor.full_name}</Text>
-              )}
-            </View>
-          </View>
-          
-          {/* ✅ Updated Rating Section with Stars */}
-          <View style={styles.ratingContainer}>
-            <Text style={styles.ratingTitle}>⭐ Rating</Text>
-            <View style={styles.ratingRow}>
-              <StarRating rating={displayRating} size={20} />
-              <Text style={styles.ratingValue}>{displayRating.toFixed(1)}</Text>
-              <Text style={styles.ratingTotal}>/ 5.0</Text>
-              <Text style={styles.ratingCount}>({ratingCount} reviews)</Text>
-            </View>
-          </View>
-          
-          {/* Temporarily Closed Warning */}
-          {stall?.is_temporarily_closed && (
-            <View style={styles.closedWarning}>
-              <Text style={styles.closedWarningIcon}>⚠️</Text>
-              <View style={styles.closedWarningContent}>
-                <Text style={styles.closedWarningTitle}>Temporarily Closed</Text>
-                <Text style={styles.closedWarningText}>
-                  This stall is currently closed. Please check back later.
-                </Text>
+              <View style={styles.infoStripText}>
+                <Text style={styles.infoStripName}>{vendor?.full_name || 'Vendor'}</Text>
+                {vendor?.email && (
+                  <Text style={styles.infoStripEmail}>{vendor.email}</Text>
+                )}
               </View>
             </View>
-          )}
-          
-          {stall?.description && (
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.descriptionTitle}>About</Text>
-              <Text style={styles.descriptionText}>{stall.description}</Text>
-            </View>
-          )}
-          
-          {/* Message Button */}
-          {!stall?.is_temporarily_closed && stall?.is_active && (
-            <TouchableOpacity style={styles.messageButton} onPress={startChat}>
-              <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.messageGradient}>
-                <Text style={styles.messageButtonText}>💬 Message Stall</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-
-          {/* Report Vendor Button */}
-          <TouchableOpacity style={styles.reportVendorButton} onPress={handleReportVendor}>
-            <LinearGradient 
-              colors={['#FEF2F2', '#FEE2E2']} 
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.reportVendorGradient}
-            >
-              <Text style={styles.reportIcon}>🏪</Text>
-              <Text style={styles.reportButtonText}>Report this Vendor</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <Text style={styles.reportNote}>
-            Found an issue with this vendor? Let us know so we can investigate.
-          </Text>
+            
+            {/* ✅ Rating on the Right Side - Clickable */}
+{/* ✅ Rating on the Right Side - Clickable */}
+<TouchableOpacity 
+  style={styles.infoStripRight}
+  onPress={goToReviews}
+  activeOpacity={0.7}
+>
+  <View style={styles.infoStripRatingContainer}>
+    <View style={styles.infoStripRating}>
+      <StarRating rating={displayRating} size={14} />
+      <Text style={styles.infoStripRatingText}>{displayRating.toFixed(1)}</Text>
+    </View>
+    {/* ✅ Underline BELOW the number (3.4) - aligned to the right */}
+    <View style={styles.infoStripRatingUnderline} />
+    <Text style={styles.infoStripReviewCount}>{ratingCount} reviews</Text>
+  </View>
+  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+</TouchableOpacity>
+          </View>
         </View>
 
-        {/* Map Section */}
-        <View style={styles.mapCard}>
-          <Text style={styles.sectionTitle}>📍 Location</Text>
+        {/* ============================================================
+            ABOUT SECTION
+        ============================================================ */}
+        {stall?.description && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
+              </View>
+              <Text style={styles.sectionTitle}>About this Stall</Text>
+            </View>
+            <Text style={styles.descriptionText}>{stall.description}</Text>
+          </View>
+        )}
+
+        {/* ============================================================
+            VENDOR INFORMATION
+        ============================================================ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons name="person-circle-outline" size={20} color={COLORS.primary} />
+            </View>
+            <Text style={styles.sectionTitle}>Vendor Information</Text>
+          </View>
+          
+          <View style={styles.vendorInfoGrid}>
+            <View style={styles.vendorInfoItem}>
+              <Text style={styles.vendorInfoLabel}>Vendor Name</Text>
+              <Text style={styles.vendorInfoValue}>{vendor?.full_name || 'Not Available'}</Text>
+            </View>
+            {vendor?.email && (
+              <View style={styles.vendorInfoItem}>
+                <Text style={styles.vendorInfoLabel}>Email</Text>
+                <Text style={styles.vendorInfoValue}>{vendor.email}</Text>
+              </View>
+            )}
+            {vendor?.phone && (
+              <View style={styles.vendorInfoItem}>
+                <Text style={styles.vendorInfoLabel}>Phone</Text>
+                <Text style={styles.vendorInfoValue}>{vendor.phone}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ============================================================
+            LOCATION SECTION
+        ============================================================ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons name="location-outline" size={20} color={COLORS.primary} />
+            </View>
+            <Text style={styles.sectionTitle}>Location</Text>
+          </View>
+          
           <TouchableOpacity 
-            style={styles.mapPreview}
+            style={styles.mapContainer}
             onPress={showFullMap}
-            activeOpacity={0.8}
+            activeOpacity={0.95}
           >
             <StallMap
               latitude={stallCoords.latitude}
@@ -392,362 +500,494 @@ export default function StallDetailsScreen({ navigation, route }) {
               stallName={stall?.stall_name}
               stallNumber={stall?.stall_number}
               section={stall?.section}
-              height={180}
+              height={200}
               interactive={false}
             />
             <View style={styles.mapOverlay}>
-              <Text style={styles.mapOverlayText}>Tap to expand map</Text>
+              <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.mapOverlayText}>Tap to expand</Text>
             </View>
           </TouchableOpacity>
           
           <View style={styles.locationInfo}>
             <Text style={styles.locationAddress}>
-              📍 {stall?.section} - Stall #{stall?.stall_number}
+              {stall?.section || 'No section'} • Stall #{stall?.stall_number || 'N/A'}
             </Text>
             {stall?.location_notes && (
-              <Text style={styles.locationNotes}>📝 {stall.location_notes}</Text>
+              <Text style={styles.locationNotes}>{stall.location_notes}</Text>
             )}
           </View>
           
-          <TouchableOpacity style={styles.directionsButton} onPress={openMapsDirections}>
-            <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.directionsGradient}>
-              <Text style={styles.directionsButtonText}>📍 Get Directions</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Products Section */}
-        <View style={styles.productsCard}>
-          <Text style={styles.productsTitle}>Products ({products.length})</Text>
-          {products.length === 0 ? (
-            <Text style={styles.noProductsText}>No products available</Text>
-          ) : (
-            products.map(product => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.productItem}
-                onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
-              >
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <Text style={styles.productPrice}>₱{product.price} / {product.unit}</Text>
-                </View>
-                <Text style={styles.viewArrow}>→</Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Full Screen Map Modal */}
-      <Modal
-        visible={mapModalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setMapModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{stall?.stall_name || 'Stall Location'}</Text>
-            <Text style={styles.modalSubtitle}>
-              Stall #{stall?.stall_number} - {stall?.section}
-            </Text>
+          <View style={styles.locationActions}>
             <TouchableOpacity 
-              style={styles.modalCloseButton}
-              onPress={() => setMapModalVisible(false)}
-            >
-              <Text style={styles.modalCloseText}>✕ Close</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <StallMap
-            latitude={stallCoords.latitude}
-            longitude={stallCoords.longitude}
-            stallName={stall?.stall_name}
-            stallNumber={stall?.stall_number}
-            section={stall?.section}
-            height={height - 150}
-            interactive={true}
-          />
-          
-          <View style={styles.modalFooter}>
-            <TouchableOpacity 
-              style={styles.modalDirectionsButton}
-              onPress={() => {
-                setMapModalVisible(false);
-                openMapsDirections();
-              }}
+              style={[styles.locationButton, styles.directionsButton]}
+              onPress={openMapsDirections}
+              activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#DC2626', '#EF4444']}
-                style={styles.modalDirectionsGradient}
+                colors={[COLORS.primary, COLORS.primaryLight]}
+                style={styles.locationButtonGradient}
               >
-                <Text style={styles.modalDirectionsText}>📍 Get Directions</Text>
+                <Ionicons name="navigate-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.locationButtonText}>Directions</Text>
               </LinearGradient>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.locationButton, styles.expandButton]}
+              onPress={showFullMap}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="map-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.expandButtonText}>Expand Map</Text>
+            </TouchableOpacity>
           </View>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+        </View>
+
+        {/* ============================================================
+            PRODUCTS SECTION
+        ============================================================ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionIcon}>
+              <Ionicons name="cube-outline" size={20} color={COLORS.primary} />
+            </View>
+            <Text style={styles.sectionTitle}>Products ({products.length})</Text>
+          </View>
+          
+          {products.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyStateIcon}>
+                <Ionicons name="cube-outline" size={40} color="#D1D5DB" />
+              </View>
+              <Text style={styles.emptyStateTitle}>No Products Available</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                This vendor has not listed any products yet.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.productsList}>
+              {products.map((product, index) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={[
+                    styles.productItem,
+                    index === products.length - 1 && styles.productItemLast
+                  ]}
+                  onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.productLeft}>
+                    <View style={styles.productIcon}>
+                      <Ionicons name="cube-outline" size={20} color={COLORS.primary} />
+                    </View>
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
+                      <Text style={styles.productMeta}>₱{product.price} / {product.unit}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* ============================================================
+            ACTION BUTTONS
+        ============================================================ */}
+        {!stall?.is_temporarily_closed && stall?.is_active && (
+          <View style={styles.actionContainer}>
+            <TouchableOpacity 
+              style={styles.primaryButton}
+              onPress={startChat}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryLight]}
+                style={styles.primaryButtonGradient}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.primaryButtonText}>Message Vendor</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.secondaryButton}
+              onPress={handleReportVendor}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="flag-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.secondaryButtonText}>Report Vendor</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+{/* ============================================================
+    FULL SCREEN MAP MODAL - FIXED
+============================================================ */}
+<Modal
+  visible={mapModalVisible}
+  animationType="slide"
+  transparent={false}
+  onRequestClose={() => setMapModalVisible(false)}
+>
+  <View style={styles.modalContainer}>
+    {/* Modal Header - Outside the map */}
+    <LinearGradient
+      colors={[COLORS.primary, COLORS.primaryDark]}
+      style={styles.modalHeader}
+    >
+      <View style={styles.modalHeaderContent}>
+        <TouchableOpacity 
+          style={styles.modalCloseButton}
+          onPress={() => setMapModalVisible(false)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+        <View style={styles.modalHeaderText}>
+          <Text style={styles.modalTitle} numberOfLines={1}>
+            {stall?.stall_name || 'Stall Location'}
+          </Text>
+          <Text style={styles.modalSubtitle}>
+            Stall #{stall?.stall_number} • {stall?.section || 'No section'}
+          </Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.modalShareButton}
+          onPress={() => {
+            // Optional: Add share functionality
+            Alert.alert('Share', 'Share this location');
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="share-outline" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
+    
+    {/* Full Screen Map - with pointerEvents handling */}
+    <View style={styles.modalMapWrapper}>
+      <StallMap
+        latitude={stallCoords.latitude}
+        longitude={stallCoords.longitude}
+        stallName={stall?.stall_name}
+        stallNumber={stall?.stall_number}
+        section={stall?.section}
+        height={height - 160}
+        interactive={true}
+      />
+    </View>
+    
+    {/* Modal Footer - Fixed at bottom */}
+    <View style={styles.modalFooter}>
+      <TouchableOpacity 
+        style={styles.modalDirectionsButton}
+        onPress={() => {
+          setMapModalVisible(false);
+          openMapsDirections();
+        }}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={[COLORS.primary, COLORS.primaryLight]}
+          style={styles.modalDirectionsGradient}
+        >
+          <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.modalDirectionsText}>Get Directions</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+    </View>
   );
 }
 
+// ============================================================
+// STYLES - Clean Red & White
+// ============================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
-  // Banner Image Styles
+
+  // ── Hero Banner ──
   bannerContainer: {
     width: '100%',
-    height: 200,
+    height: 280,
+    position: 'relative',
   },
   bannerImage: {
     width: '100%',
-    height: 200,
+    height: 280,
   },
   bannerPlaceholder: {
     width: '100%',
-    height: 200,
+    height: 280,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bannerPlaceholderText: {
-    fontSize: 60,
+  bannerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  // Info Card Styles
-  infoCard: {
-    backgroundColor: 'white',
+
+  // ── Back Button Only ──
+  backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 52 : 28,
+    left: 16,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 20,
-    margin: 16,
-    marginTop: -30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  stallHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
-    overflow: 'hidden',
+    zIndex: 10,
   },
-  avatarGradient: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
+
+  // ── Banner Content ──
+  bannerContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    zIndex: 5,
   },
-  vendorAvatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: '#DC2626',
-  },
-  avatarEmoji: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  stallInfo: {
-    flex: 1,
-  },
-  stallName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  stallNumber: {
-    fontSize: 14,
-    color: '#DC2626',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  stallSection: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  vendorName: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '500',
-  },
-  // ✅ Updated Rating Container
-  ratingContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  ratingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  ratingValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#F59E0B',
-  },
-  ratingTotal: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  ratingCount: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
-  },
-  closedWarning: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.accentSoft,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.accentLight,
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  closedWarningIcon: {
+  bannerName: {
     fontSize: 24,
-  },
-  closedWarningContent: {
-    flex: 1,
-  },
-  closedWarningTitle: {
-    fontSize: 15,
     fontWeight: '700',
-    color: COLORS.error,
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
     marginBottom: 2,
   },
-  closedWarningText: {
+  bannerSubtitle: {
     fontSize: 13,
-    color: COLORS.text.medium,
-    lineHeight: 18,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 6,
   },
-  descriptionContainer: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  descriptionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: COLORS.text.medium,
-    lineHeight: 22,
-  },
-  messageButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginTop: 8,
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  messageGradient: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  messageButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  reportVendorButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: COLORS.accentLight,
-  },
-  reportVendorGradient: {
+  bannerChips: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
     gap: 8,
   },
-  reportIcon: {
-    fontSize: 18,
+  bannerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  reportButtonText: {
-    fontSize: 14,
+  bannerChipOpen: {
+    backgroundColor: 'rgba(16,185,129,0.25)',
+  },
+  bannerChipClosed: {
+    backgroundColor: 'rgba(220,38,38,0.25)',
+  },
+  bannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  bannerDotOpen: {
+    backgroundColor: COLORS.success,
+  },
+  bannerDotClosed: {
+    backgroundColor: COLORS.error,
+  },
+  bannerChipText: {
+    fontSize: 11,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: '#FFFFFF',
   },
-  reportNote: {
-    fontSize: 12,
-    color: COLORS.text.lighter,
-    marginTop: 8,
-    textAlign: 'center',
+  bannerChipTextOpen: {
+    color: COLORS.success,
   },
-  // Map Card Styles
-  mapCard: {
+  bannerChipTextClosed: {
+    color: COLORS.error,
+  },
+
+  // ── Info Strip ──
+  infoStrip: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 16,
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginTop: -16,
+    borderRadius: 16,
+    padding: 16,
     shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  infoStripContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  infoStripLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  infoStripAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  infoStripAvatarGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoStripText: {
+    flex: 1,
+  },
+  infoStripName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.text.dark,
+  },
+  infoStripEmail: {
+    fontSize: 12,
+    color: COLORS.text.medium,
+    marginTop: 1,
+  },
+  
+ // ── Rating on Right Side ──
+infoStripRight: {
+  alignItems: 'center',
+  flexDirection: 'row',
+  gap: 8,
+},
+infoStripRatingContainer: {
+  alignItems: 'flex-end',  // ✅ Changed from 'center' to 'flex-end'
+},
+infoStripRating: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+},
+infoStripRatingText: {
+  fontSize: 16,
+  fontWeight: '700',
+  color: COLORS.warning,
+},
+// ✅ Underline goes below the number (3.4)
+infoStripRatingUnderline: {
+  width: 30,
+  height: 2,
+  backgroundColor: COLORS.primary,
+  borderRadius: 1,
+  marginTop: 2,
+  // ✅ Remove alignSelf: 'center' - let it follow flex-end alignment
+},
+infoStripReviewCount: {
+  fontSize: 11,
+  color: COLORS.text.light,
+  marginTop: 2,
+},
+
+  // ── Section Cards ──
+  sectionCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     marginBottom: 12,
   },
-  mapPreview: {
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+  },
+
+  // ── Description ──
+  descriptionText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: COLORS.text.medium,
+  },
+
+  // ── Vendor Info ──
+  vendorInfoGrid: {
+    gap: 12,
+  },
+  vendorInfoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  vendorInfoLabel: {
+    fontSize: 13,
+    color: COLORS.text.light,
+  },
+  vendorInfoValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.dark,
+  },
+
+  // ── Location ──
+  mapContainer: {
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -758,13 +998,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
   },
   mapOverlayText: {
-    color: 'white',
-    fontSize: 12,
+    fontSize: 11,
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   locationInfo: {
@@ -772,131 +1015,259 @@ const styles = StyleSheet.create({
   },
   locationAddress: {
     fontSize: 14,
-    color: '#374151',
-    marginBottom: 4,
+    color: COLORS.text.medium,
   },
   locationNotes: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
+    color: COLORS.text.light,
     fontStyle: 'italic',
+    marginTop: 2,
   },
-  directionsButton: {
+  locationActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  locationButton: {
+    flex: 1,
     borderRadius: 12,
     overflow: 'hidden',
   },
-  directionsGradient: {
-    paddingVertical: 10,
+  locationButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
   },
-  directionsButtonText: {
-    color: 'white',
-    fontSize: 14,
+  locationButtonText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
-  // Products Card Styles
-  productsCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+  expandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
   },
-  productsTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.text.dark,
-    marginBottom: 16,
+  expandButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.primary,
   },
-  noProductsText: {
-    fontSize: 14,
-    color: COLORS.text.lighter,
-    textAlign: 'center',
-    paddingVertical: 20,
+
+  // ── Products ──
+  productsList: {
+    gap: 0,
   },
   productItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
+  },
+  productItemLast: {
+    borderBottomWidth: 0,
+  },
+  productLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  productIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   productInfo: {
     flex: 1,
   },
   productName: {
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.dark,
+  },
+  productMeta: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.primary,
+    marginTop: 1,
+  },
+
+  // ── Empty State ──
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+  emptyStateIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.text.dark,
     marginBottom: 4,
   },
-  productPrice: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '600',
+  emptyStateSubtitle: {
+    fontSize: 13,
+    color: COLORS.text.medium,
+    textAlign: 'center',
   },
-  viewArrow: {
-    fontSize: 18,
-    color: COLORS.text.lighter,
+
+  // ── Action Buttons ──
+  actionContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    gap: 12,
   },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
-    paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: '#DC2626',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 50,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  modalCloseText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  modalDirectionsButton: {
-    borderRadius: 12,
+  primaryButton: {
+    borderRadius: 14,
     overflow: 'hidden',
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  modalDirectionsGradient: {
-    paddingVertical: 14,
+  primaryButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
   },
-  modalDirectionsText: {
-    color: 'white',
+  primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+
+ // ── Modal Styles - Updated ──
+modalContainer: {
+  flex: 1,
+  backgroundColor: '#FFFFFF',
+},
+modalHeader: {
+  paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  paddingBottom: 16,
+  paddingHorizontal: 20,
+  zIndex: 10,
+  position: 'relative',
+},
+modalHeaderContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+},
+modalHeaderText: {
+  flex: 1,
+  marginHorizontal: 12,
+},
+modalTitle: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#FFFFFF',
+  letterSpacing: -0.3,
+  textAlign: 'center',
+},
+modalSubtitle: {
+  fontSize: 13,
+  color: 'rgba(255,255,255,0.85)',
+  textAlign: 'center',
+  marginTop: 2,
+},
+modalCloseButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 20,
+},
+modalShareButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 20,
+},
+modalMapWrapper: {
+  flex: 1,
+  backgroundColor: '#F8F9FB',
+},
+modalFooter: {
+  padding: 16,
+  paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+  borderTopWidth: 1,
+  borderTopColor: COLORS.borderLight,
+  backgroundColor: COLORS.surface,
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  zIndex: 10,
+},
+modalDirectionsButton: {
+  borderRadius: 12,
+  overflow: 'hidden',
+  shadowColor: COLORS.shadowDark,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.2,
+  shadowRadius: 8,
+  elevation: 4,
+},
+modalDirectionsGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  paddingVertical: 14,
+},
+modalDirectionsText: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#FFFFFF',
+},
+
+  // ── Bottom Spacer ──
+  bottomSpacer: {
+    height: 20,
   },
 });

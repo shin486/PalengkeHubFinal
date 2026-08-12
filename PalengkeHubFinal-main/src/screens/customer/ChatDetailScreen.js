@@ -1,4 +1,5 @@
 // src/screens/customer/ChatDetailScreen.js
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -8,7 +9,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
@@ -16,11 +16,13 @@ import {
   Modal,
   ScrollView,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../hooks/useChat';
-import { Header } from '../../components/Header';
+// ✅ REMOVED: import { Header } from '../../components/Header';
 
 export default function ChatDetailScreen({ navigation, route }) {
   const { conversationId, stall, vendor, userRole = 'customer' } = route.params;
@@ -40,33 +42,79 @@ export default function ChatDetailScreen({ navigation, route }) {
     refreshMessages,
   } = useChat(conversationId, user, userRole);
 
-  const chatTitle = userRole === 'admin'
-    ? vendor?.name || stall?.stall_name || 'Vendor Chat'
-    : stall?.stall_name || 'Chat';
+  // Get chat partner info for the header
+  const chatPartnerName = userRole === 'admin' 
+    ? vendor?.name || stall?.stall_name || 'Vendor'
+    : stall?.stall_number
+      ? `Stall #${stall.stall_number} - ${stall?.stall_name || 'Vendor'}`
+      : stall?.stall_name || 'Vendor';
 
-  const chatSubtitle = userRole === 'admin'
+  const chatPartnerSubtitle = userRole === 'admin'
     ? `${stall?.stall_number ? `Stall #${stall.stall_number}` : ''}${stall?.section ? ` • ${stall.section}` : ''}`.trim()
-    : 'Conversation';
+    : stall?.section || 'Conversation';
+
+  // ✅ Hide the default header and manage route name
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+
+    // ✅ Set route to ChatDetail when focused
+    const updateRoute = () => {
+      console.log('💬 ChatDetailScreen - setting route to ChatDetail');
+      if (global.updateRouteName) {
+        global.updateRouteName('ChatDetail');
+      }
+      if (global.setActiveRouteName) {
+        global.setActiveRouteName('ChatDetail');
+      }
+    };
+
+    // ✅ Reset route when leaving
+    const resetRoute = () => {
+      console.log('💬 ChatDetailScreen - resetting route to Home');
+      if (global.updateRouteName) {
+        global.updateRouteName('Home');
+      }
+      if (global.setActiveRouteName) {
+        global.setActiveRouteName('Home');
+      }
+    };
+
+    // Update immediately when mounted
+    updateRoute();
+
+    // ✅ Listen for focus and blur events
+    const unsubscribeFocus = navigation.addListener('focus', updateRoute);
+    const unsubscribeBlur = navigation.addListener('blur', resetRoute);
+
+    // ✅ Also listen for beforeRemove to handle back button
+    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
+      console.log('💬 ChatDetailScreen - beforeRemove, resetting route');
+      resetRoute();
+    });
+
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+      unsubscribeBeforeRemove();
+      // Also reset on unmount
+      resetRoute();
+    };
+  }, [navigation]);
 
   // ✅ Suggested quick reply messages
   const suggestedMessages = [
-    { id: 1, text: "📋 Ask for details about the Order", emoji: "📋" },
-    { id: 2, text: "📷 Send me the QR Code", emoji: "📷" },
-    { id: 3, text: "✅ Confirm Payment", emoji: "✅" },
-    { id: 4, text: "❓ Ask about Availability", emoji: "❓" },
-    { id: 5, text: "💰 Ask for Total Amount", emoji: "💰" },
-    { id: 6, text: "⏰ Confirm Pickup Time", emoji: "⏰" },
+    { id: 1, text: "Ask about Order" },
+    { id: 2, text: "Send QR Code" },
+    { id: 3, text: "Confirm Payment" },
+    { id: 4, text: "Check Availability" },
+    { id: 5, text: "Total Amount" },
+    { id: 6, text: "Pickup Time" },
   ];
 
   const handleSend = async () => {
     const trimmedMessage = messageText.trim();
-    console.log('Admin chat send attempt', {
-      conversationId,
-      userId: user?.id,
-      userRole,
-      messageText,
-      trimmedMessage,
-    });
     if (!trimmedMessage) return;
     if (!conversationId) {
       Alert.alert('Send failed', 'Chat conversation is not available.');
@@ -150,18 +198,50 @@ export default function ChatDetailScreen({ navigation, route }) {
 
   if (!conversationId) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Header title={chatTitle} subtitle={chatSubtitle} showBack onBackPress={() => navigation.goBack()} />
+      <View style={styles.container}>
         <View style={styles.centerContainer}>
           <Text>Loading conversation...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title={chatTitle} subtitle={chatSubtitle} showBack onBackPress={() => navigation.goBack()} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* ✅ CUSTOM HEADER - Replaces the global Header */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={28} color="#1F2937" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerInfo}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {chatPartnerName?.charAt(0)?.toUpperCase() || 'S'}
+            </Text>
+          </View>
+          <View style={styles.headerText}>
+            <Text style={styles.vendorName} numberOfLines={1}>
+              {chatPartnerName}
+            </Text>
+            <Text style={styles.vendorStatus} numberOfLines={1}>
+              {chatPartnerSubtitle}
+            </Text>
+          </View>
+        </View>
+        
+        <TouchableOpacity style={styles.headerAction} activeOpacity={0.7}>
+          <Ionicons name="ellipsis-vertical" size={22} color="#6B7280" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Messages */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#DC2626" />
@@ -177,20 +257,21 @@ export default function ChatDetailScreen({ navigation, route }) {
         />
       )}
       
+      {/* Input Area */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* ✅ Suggested Messages Row */}
+        {/* Suggested Messages Row */}
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
           style={styles.suggestedContainer}
           contentContainerStyle={styles.suggestedContent}
         >
-          {suggestedMessages.map((suggested) => (
+          {suggestedMessages.map((suggested, index) => (
             <TouchableOpacity
-              key={suggested.id}
+              key={index}
               style={styles.suggestedButton}
               onPress={() => handleSuggestedMessage(suggested.text)}
             >
@@ -224,7 +305,7 @@ export default function ChatDetailScreen({ navigation, route }) {
               {uploadingImage ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.imageText}>📷</Text>
+                <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -241,13 +322,14 @@ export default function ChatDetailScreen({ navigation, route }) {
               {sending ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.sendText}>📤</Text>
+                <Ionicons name="send" size={22} color="#FFFFFF" />
               )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
+      {/* Image Modal */}
       <Modal
         visible={imageModalVisible}
         transparent={true}
@@ -258,7 +340,7 @@ export default function ChatDetailScreen({ navigation, route }) {
             style={styles.modalCloseButton}
             onPress={() => setImageModalVisible(false)}
           >
-            <Text style={styles.modalCloseText}>✕</Text>
+            <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           {selectedImage && (
             <Image 
@@ -276,7 +358,7 @@ export default function ChatDetailScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8F9FA',
   },
   centerContainer: {
     flex: 1,
@@ -288,6 +370,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ── Custom Header ──
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: 8,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#DC2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  headerText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  vendorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  vendorStatus: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  headerAction: {
+    padding: 8,
+  },
+
+  // ── Messages ──
   messagesList: {
     padding: 16,
     paddingBottom: 20,
@@ -337,7 +475,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     backgroundColor: '#f0f0f0',
   },
-  // ✅ Suggested Messages Styles
+
+  // ── Suggested Messages ──
   suggestedContainer: {
     backgroundColor: 'white',
     borderTopWidth: 1,
@@ -359,6 +498,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#374151',
   },
+
+  // ── Input ──
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
@@ -387,9 +528,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageText: {
-    fontSize: 20,
-  },
   sendButton: {
     borderRadius: 25,
     overflow: 'hidden',
@@ -403,9 +541,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendText: {
-    fontSize: 20,
-  },
+
+  // ── Image Modal ──
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.9)',
@@ -417,17 +554,12 @@ const styles = StyleSheet.create({
     top: 50,
     right: 20,
     zIndex: 1,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalCloseText: {
-    fontSize: 20,
-    color: '#DC2626',
-    fontWeight: 'bold',
   },
   modalImage: {
     width: '100%',
