@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+// src/screens/customer/OrdersScreen.js
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,8 +15,12 @@ import {
   Modal,
   Dimensions,
   Linking,
+  Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrders } from '../../hooks/useOrders';
 import { useCart } from '../../hooks/useCart';
@@ -46,6 +52,26 @@ const COLORS = {
   warning: '#F59E0B',
   shadow: 'rgba(0, 0, 0, 0.08)',
   shadowDark: 'rgba(0, 0, 0, 0.12)',
+  gcash: '#007DFE',
+  gcashLight: '#E8F4FF',
+};
+
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+};
+
+const RADIUS = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
 };
 
 // Quick cancel reasons for the customer
@@ -77,6 +103,16 @@ export default function OrdersScreen({ navigation }) {
   const [cancelReasonId, setCancelReasonId] = useState(null);
   const [cancelCustomMessage, setCancelCustomMessage] = useState('');
   const [cancelling, setCancelling] = useState(false);
+
+  // GCash Pay Now states
+  const [payNowModalVisible, setPayNowModalVisible] = useState(false);
+  const [payNowOrder, setPayNowOrder] = useState(null);
+  const [payNowReferenceNumber, setPayNowReferenceNumber] = useState('');
+  const [payNowReceiptUri, setPayNowReceiptUri] = useState(null);
+  const [payNowSubmitting, setPayNowSubmitting] = useState(false);
+  const [payNowReceiptUploading, setPayNowReceiptUploading] = useState(false);
+  const [payNowCountdown, setPayNowCountdown] = useState(600);
+  const payNowTimerRef = useRef(null);
 
   // Stall location mapping
   const getStallCoordinates = (section, stallNumber) => {
@@ -130,6 +166,183 @@ export default function OrdersScreen({ navigation }) {
       Vibration.vibrate(200);
     }
   }, [newOrderAlert]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (payNowTimerRef.current) {
+        clearInterval(payNowTimerRef.current);
+      }
+    };
+  }, []);
+
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  // Handle Pay Now - Only for unpaid orders
+  const handlePayNow = (order) => {
+    // Check if order is already paid
+    if (order.payment_status === 'paid') {
+      Alert.alert('Already Paid', 'This order has already been paid.');
+      return;
+    }
+    
+    // Check if order is expired
+    if (order.payment_status === 'expired' || order.status === 'cancelled') {
+      Alert.alert('Order Expired', 'This order is no longer available for payment.');
+      return;
+    }
+    
+    setPayNowOrder(order);
+    setPayNowReferenceNumber('');
+    setPayNowReceiptUri(null);
+    setPayNowCountdown(600);
+    setPayNowSubmitting(false);
+    setPayNowModalVisible(true);
+    
+    // Start timer
+    if (payNowTimerRef.current) clearInterval(payNowTimerRef.current);
+    payNowTimerRef.current = setInterval(() => {
+      setPayNowCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(payNowTimerRef.current);
+          handlePayNowTimeout(order);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Handle Pay Now timeout
+  const handlePayNowTimeout = async (order) => {
+    if (!order) return;
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'cancelled', payment_status: 'expired' })
+        .eq('id', order.id);
+      
+      if (error) console.error('Error cancelling order:', error);
+      
+      setPayNowModalVisible(false);
+      Alert.alert(
+        '⏰ Payment Time Expired',
+        'Your payment window of 10 minutes has expired. This order has been cancelled.',
+        [{ text: 'OK', onPress: () => refreshOrders() }]
+      );
+    } catch (error) {
+      console.error('Pay Now timeout error:', error);
+    }
+  };
+
+  // Pick GCash receipt for Pay Now
+  const pickPayNowReceipt = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setPayNowReceiptUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking receipt:', error);
+      Alert.alert('Error', 'Failed to select receipt image.');
+    }
+  };
+
+  // Upload receipt for Pay Now
+  const uploadPayNowReceipt = async (uri) => {
+    if (!uri) return null;
+    setPayNowReceiptUploading(true);
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileName = `receipt_${Date.now()}_${payNowOrder.id}.jpg`;
+      const folder = `gcash_receipts/${user.id}/${payNowOrder.stall_id}`;
+      const { data, error } = await supabase.storage
+        .from('vendor_documents')
+        .upload(`${folder}/${fileName}`, blob, {
+          cacheControl: '3600',
+          contentType: 'image/jpeg',
+        });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage
+        .from('vendor_documents')
+        .getPublicUrl(data.path);
+      return urlData?.publicUrl || null;
+    } catch (error) {
+      console.error('Error uploading receipt:', error);
+      Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
+      return null;
+    } finally {
+      setPayNowReceiptUploading(false);
+    }
+  };
+
+  // Submit Pay Now payment
+  const handlePayNowSubmit = async () => {
+    if (!payNowReferenceNumber || payNowReferenceNumber.trim().length < 6) {
+      Alert.alert('Missing Reference Number', 'Please enter the GCash reference number from your payment.');
+      return;
+    }
+    if (!payNowReceiptUri) {
+      Alert.alert('Missing Receipt', 'Please upload a screenshot of your GCash receipt.');
+      return;
+    }
+    
+    setPayNowSubmitting(true);
+    try {
+      const receiptUrl = await uploadPayNowReceipt(payNowReceiptUri);
+      if (!receiptUrl) {
+        setPayNowSubmitting(false);
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'confirmed',
+          payment_status: 'paid',
+          payment_reference: payNowReferenceNumber.trim(),
+          payment_receipt_url: receiptUrl,
+          paid_at: new Date().toISOString(),
+        })
+        .eq('id', payNowOrder.id);
+      
+      if (error) throw error;
+      
+      // Stop timer
+      if (payNowTimerRef.current) clearInterval(payNowTimerRef.current);
+      
+      setPayNowModalVisible(false);
+      Alert.alert(
+        '✅ Payment Submitted! 🎉',
+        'Your GCash payment has been submitted successfully. The vendor will verify your payment and confirm your order.',
+        [
+          { text: 'View Orders', onPress: () => refreshOrders() }
+        ]
+      );
+      await refreshOrders();
+      
+    } catch (error) {
+      console.error('Error submitting payment:', error);
+      Alert.alert('Error', 'Failed to submit payment. Please try again.');
+    } finally {
+      setPayNowSubmitting(false);
+    }
+  };
 
   // ORDER AGAIN
   const handleOrderAgain = async (order) => {
@@ -287,9 +500,14 @@ export default function OrdersScreen({ navigation }) {
 
     setCancelling(true);
     try {
+      // Update order status to cancelled
       const { error: updateError } = await supabase
         .from('orders')
-        .update({ status: 'cancelled' })
+        .update({ 
+          status: 'cancelled',
+          // If payment was awaiting, also update payment status
+          payment_status: orderToCancel.payment_status === 'awaiting_payment' ? 'cancelled' : undefined
+        })
         .eq('id', orderToCancel.id)
         .eq('consumer_id', user.id);
       if (updateError) throw updateError;
@@ -352,116 +570,109 @@ export default function OrdersScreen({ navigation }) {
   };
 
   // ========== HANDLE PROPOSAL RESPONSES ==========
-const handleAcceptProposal = async (order, proposalData) => {
-  try {
-    // Update order items with new quantity, unit, and price
-    const updatedItems = order.items.map(item => {
-      if (item.id === proposalData.item_id) {
-        return {
-          ...item,
-          quantity: proposalData.proposed_quantity,
-          unit: proposalData.proposed_unit,
-          price: proposalData.price_per_unit, // Use price_per_unit from proposal
-        };
-      }
-      return item;
-    });
-    
-    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
-    // Update order in database
-    const { error } = await supabase
-      .from('orders')
-      .update({
-        items: updatedItems,
-        total_amount: newTotal,
-        proposed_changes: { ...proposalData, status: 'accepted' }
-      })
-      .eq('id', order.id);
-    
-    if (error) throw error;
-    
-    // Get conversation ID
-    let { data: conversation } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('customer_id', user.id)
-      .eq('stall_id', order.stall_id)
-      .maybeSingle();
-    
-    if (conversation) {
-      await supabase.from('messages').insert({
-        conversation_id: conversation.id,
-        sender_id: user.id,
-        sender_role: 'customer',
-        message: `✅ I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
-        is_read: false,
+  const handleAcceptProposal = async (order, proposalData) => {
+    try {
+      const updatedItems = order.items.map(item => {
+        if (item.id === proposalData.item_id) {
+          return {
+            ...item,
+            quantity: proposalData.proposed_quantity,
+            unit: proposalData.proposed_unit,
+            price: proposalData.price_per_unit,
+          };
+        }
+        return item;
       });
       
-      await supabase
-        .from('conversations')
+      const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      const { error } = await supabase
+        .from('orders')
         .update({
-          last_message: `✅ Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
-          last_message_time: new Date(),
-          vendor_unread_count: 1,
+          items: updatedItems,
+          total_amount: newTotal,
+          proposed_changes: { ...proposalData, status: 'accepted' }
         })
-        .eq('id', conversation.id);
+        .eq('id', order.id);
+      
+      if (error) throw error;
+      
+      let { data: conversation } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('customer_id', user.id)
+        .eq('stall_id', order.stall_id)
+        .maybeSingle();
+      
+      if (conversation) {
+        await supabase.from('messages').insert({
+          conversation_id: conversation.id,
+          sender_id: user.id,
+          sender_role: 'customer',
+          message: `✅ I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+          is_read: false,
+        });
+        
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: `✅ Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+            last_message_time: new Date(),
+            vendor_unread_count: 1,
+          })
+          .eq('id', conversation.id);
+      }
+      
+      await refreshOrders();
+      Alert.alert('Order Updated', `Order updated to ${proposalData.proposed_quantity} ${proposalData.proposed_unit} of ${proposalData.item_name}`);
+      
+    } catch (error) {
+      console.error('Accept proposal error:', error);
+      Alert.alert('Error', 'Failed to accept proposal');
     }
-    
-    await refreshOrders();
-    Alert.alert('Order Updated', `Order updated to ${proposalData.proposed_quantity} ${proposalData.proposed_unit} of ${proposalData.item_name}`);
-    
-  } catch (error) {
-    console.error('Accept proposal error:', error);
-    Alert.alert('Error', 'Failed to accept proposal');
-  }
-};
+  };
 
   const handleRejectProposal = async (order, proposalData) => {
-  try {
-    // Get conversation ID
-    let { data: conversation } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('customer_id', user.id)
-      .eq('stall_id', order.stall_id)
-      .maybeSingle();
-    
-    if (conversation) {
-      // Send rejection message
-      await supabase.from('messages').insert({
-        conversation_id: conversation.id,
-        sender_id: user.id,
-        sender_role: 'customer',
-        message: `❌ I do not accept the proposal. Please fulfill the original order or cancel.`,
-        is_read: false,
-      });
-      
-      // Update conversation
-      await supabase
+    try {
+      let { data: conversation } = await supabase
         .from('conversations')
-        .update({
-          last_message: `❌ Customer rejected the proposal. Please fulfill original order.`,
-          last_message_time: new Date(),
-          vendor_unread_count: 1,
-        })
-        .eq('id', conversation.id);
+        .select('id')
+        .eq('customer_id', user.id)
+        .eq('stall_id', order.stall_id)
+        .maybeSingle();
+      
+      if (conversation) {
+        await supabase.from('messages').insert({
+          conversation_id: conversation.id,
+          sender_id: user.id,
+          sender_role: 'customer',
+          message: `❌ I do not accept the proposal. Please fulfill the original order or cancel.`,
+          is_read: false,
+        });
+        
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: `❌ Customer rejected the proposal. Please fulfill original order.`,
+            last_message_time: new Date(),
+            vendor_unread_count: 1,
+          })
+          .eq('id', conversation.id);
+      }
+      
+      await supabase
+        .from('orders')
+        .update({ proposed_changes: { ...proposalData, status: 'rejected' } })
+        .eq('id', order);
+      
+      await refreshOrders();
+      Alert.alert('Proposal Rejected', 'The vendor has been notified of your decision');
+      
+    } catch (error) {
+      console.error('Reject proposal error:', error);
+      Alert.alert('Error', 'Failed to reject proposal');
     }
-    
-    // Update order - mark proposal as rejected (keep original order unchanged)
-    await supabase
-      .from('orders')
-      .update({ proposed_changes: { ...proposalData, status: 'rejected' } })
-      .eq('id', order.id);
-    
-    await refreshOrders();
-    Alert.alert('Proposal Rejected', 'The vendor has been notified of your decision');
-    
-  } catch (error) {
-    console.error('Reject proposal error:', error);
-    Alert.alert('Error', 'Failed to reject proposal');
-  }
-};
+  };
 
   // UI helpers
   const getStatusColor = (status) => {
@@ -533,6 +744,9 @@ const handleAcceptProposal = async (order, proposalData) => {
     const isPending = order.status === 'pending';
     const isConfirmed = order.status === 'confirmed';
     
+    // Check if order is awaiting payment (unpaid)
+    const isAwaitingPayment = order.payment_status === 'awaiting_payment' && order.status === 'pending';
+    
     // Check for pending proposal
     const hasPendingProposal = order.proposed_changes && order.proposed_changes.status === 'pending';
     const proposalData = order.proposed_changes;
@@ -561,47 +775,75 @@ const handleAcceptProposal = async (order, proposalData) => {
           </View>
         </View>
 
-        {/* PROPOSAL BANNER - shows when vendor proposed a change */}
+        {/* PAY NOW BUTTON - Only for unpaid orders (awaiting_payment) */}
+        {isAwaitingPayment && (
+          <View style={styles.payNowContainer}>
+            <View style={styles.payNowHeader}>
+              <Ionicons name="alert-circle" size={18} color={COLORS.warning} />
+              <Text style={styles.payNowHeaderText}>Payment Pending</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.payNowButton}
+              onPress={() => handlePayNow(order)}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryLight]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.payNowGradient}
+              >
+                <Ionicons name="wallet-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.payNowText}>Pay Now</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <Text style={styles.payNowHint}>
+              Complete your GCash payment within 10 minutes
+            </Text>
+          </View>
+        )}
+
+        {/* PROPOSAL BANNER */}
         {hasPendingProposal && proposalData && (
-  <View style={styles.proposalContainer}>
-    <View style={styles.proposalBanner}>
-      <Text style={styles.proposalTitle}>📝 Vendor Proposed a Change</Text>
-      <Text style={styles.proposalText}>
-        {proposalData.item_name}:
-      </Text>
-      <Text style={styles.proposalText}>
-        Original: {proposalData.original_quantity} {proposalData.original_unit}
-      </Text>
-      <Text style={styles.proposalText}>
-        Proposed: {proposalData.proposed_quantity} {proposalData.proposed_unit}
-      </Text>
-      <Text style={styles.proposalPrice}>
-        New total: ₱{proposalData.proposed_price.toFixed(2)} 
-        (was ₱{proposalData.original_price.toFixed(2)})
-      </Text>
-    </View>
-       <View style={styles.proposalButtons}>
-      <TouchableOpacity 
-        style={styles.rejectProposalBtn}
-        onPress={() => handleRejectProposal(order, proposalData)}
-      >
-        <Text style={styles.rejectProposalBtnText}>❌ Reject</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity 
-        style={styles.acceptProposalBtn}
-        onPress={() => handleAcceptProposal(order, proposalData)}
-      >
-        <LinearGradient
-          colors={['#10B981', '#059669']}
-          style={styles.acceptProposalGradient}
-        >
-          <Text style={styles.acceptProposalBtnText}>✅ Accept</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
+          <View style={styles.proposalContainer}>
+            <View style={styles.proposalBanner}>
+              <Text style={styles.proposalTitle}>📝 Vendor Proposed a Change</Text>
+              <Text style={styles.proposalText}>
+                {proposalData.item_name}:
+              </Text>
+              <Text style={styles.proposalText}>
+                Original: {proposalData.original_quantity} {proposalData.original_unit}
+              </Text>
+              <Text style={styles.proposalText}>
+                Proposed: {proposalData.proposed_quantity} {proposalData.proposed_unit}
+              </Text>
+              <Text style={styles.proposalPrice}>
+                New total: ₱{proposalData.proposed_price.toFixed(2)} 
+                (was ₱{proposalData.original_price.toFixed(2)})
+              </Text>
+            </View>
+            <View style={styles.proposalButtons}>
+              <TouchableOpacity 
+                style={styles.rejectProposalBtn}
+                onPress={() => handleRejectProposal(order, proposalData)}
+              >
+                <Text style={styles.rejectProposalBtnText}>❌ Reject</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.acceptProposalBtn}
+                onPress={() => handleAcceptProposal(order, proposalData)}
+              >
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={styles.acceptProposalGradient}
+                >
+                  <Text style={styles.acceptProposalBtnText}>✅ Accept</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         <View style={styles.stallInfo}>
           <Text style={styles.stallName}>
@@ -611,15 +853,15 @@ const handleAcceptProposal = async (order, proposalData) => {
         </View>
 
         <View style={styles.itemsContainer}>
-  {order.items?.map((item, idx) => (
-    <View key={idx} style={styles.itemRow}>
-      <Text style={styles.itemName}>
-        {item.quantity}x {item.name} ({item.unit})
-      </Text>
-      <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
-    </View>
-  ))}
-</View>
+          {order.items?.map((item, idx) => (
+            <View key={idx} style={styles.itemRow}>
+              <Text style={styles.itemName}>
+                {item.quantity}x {item.name} ({item.unit})
+              </Text>
+              <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+            </View>
+          ))}
+        </View>
 
         <View style={styles.pickupContainer}>
           <Text style={styles.pickupLabel}>⏰ Pickup Time:</Text>
@@ -638,6 +880,7 @@ const handleAcceptProposal = async (order, proposalData) => {
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
+        {/* ✅ CANCEL ORDER BUTTON - Shows for ALL pending orders */}
         {isPending && (
           <TouchableOpacity
             style={styles.cancelOrderButton}
@@ -1058,28 +1301,210 @@ const handleAcceptProposal = async (order, proposalData) => {
           </View>
         </View>
       </Modal>
+
+      {/* PAY NOW GCASH MODAL */}
+      <Modal
+        visible={payNowModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.gcashModalOverlay}>
+          {/* Close Button */}
+          <TouchableOpacity 
+            style={styles.gcashModalCloseButton} 
+            onPress={() => {
+              Alert.alert(
+                'Payment Pending',
+                'You can continue paying or close this window. Your order will remain pending.',
+                [
+                  { text: 'Continue Paying', style: 'cancel' },
+                  { 
+                    text: 'Close', 
+                    onPress: () => {
+                      if (payNowTimerRef.current) clearInterval(payNowTimerRef.current);
+                      setPayNowModalVisible(false);
+                    }
+                  }
+                ]
+              );
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <ScrollView 
+            style={styles.gcashModalScroll} 
+            contentContainerStyle={styles.gcashModalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.gcashModalContent}>
+              {/* Header */}
+              <View style={styles.gcashModalHeader}>
+                <View style={styles.gcashModalHeaderIcon}>
+                  <Ionicons name="wallet" size={28} color="#FFFFFF" />
+                </View>
+                <Text style={styles.gcashModalTitle}>GCash Payment</Text>
+                <Text style={styles.gcashModalSubtitle}>
+                  Pay for Order #{payNowOrder?.order_number?.slice(-8)}
+                </Text>
+              </View>
+
+              {/* Timer */}
+              <View style={[
+                styles.gcashTimerSection, 
+                payNowCountdown <= 60 && styles.gcashTimerUrgentBg
+              ]}>
+                <Ionicons 
+                  name={payNowCountdown <= 60 ? "time" : "hourglass-outline"} 
+                  size={22} 
+                  color={payNowCountdown <= 60 ? '#EF4444' : COLORS.primary} 
+                />
+                <Text style={styles.gcashTimerLabel}>Time Remaining</Text>
+                <Text style={[
+                  styles.gcashTimerValue,
+                  payNowCountdown <= 60 && styles.gcashTimerValueUrgent
+                ]}>
+                  {formatCountdown(payNowCountdown)}
+                </Text>
+              </View>
+
+              {/* Order Summary */}
+              {payNowOrder && (
+                <View style={styles.payNowOrderSummary}>
+                  <Text style={styles.payNowOrderVendor}>
+                    {payNowOrder.stall?.stall_name || 'Market Stall'}
+                  </Text>
+                  <Text style={styles.payNowOrderAmount}>
+                    Amount: ₱{payNowOrder.total_amount?.toFixed(2)}
+                  </Text>
+                  <View style={styles.payNowOrderItems}>
+                    {payNowOrder.items?.map((item, idx) => (
+                      <Text key={idx} style={styles.payNowOrderItem}>
+                        {item.quantity}x {item.name} ({item.unit})
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* QR Code - Vendor's GCash QR */}
+              <View style={styles.gcashQRContainer}>
+                <Text style={styles.gcashQRTitle}>Scan to Pay</Text>
+                <View style={styles.gcashQRBox}>
+                  {payNowOrder?.stall?.gcash_qr_url ? (
+                    <Image 
+                      source={{ uri: payNowOrder.stall.gcash_qr_url }} 
+                      style={styles.gcashQRImage} 
+                      resizeMode="contain" 
+                    />
+                  ) : (
+                    <View style={styles.gcashQRPlaceholder}>
+                      <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
+                      <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
+                      <Text style={styles.gcashQRPlaceholderSubtext}>
+                        GCash: {payNowOrder?.stall?.gcash_number || '0917 123 4567'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.gcashQRVendor}>
+                  {payNowOrder?.stall?.stall_name || 'Market Stall'}
+                </Text>
+                <Text style={styles.gcashQRPrice}>
+                  Amount: ₱{payNowOrder?.total_amount?.toFixed(2)}
+                </Text>
+                <Text style={styles.gcashQRHint}>
+                  Open GCash, scan QR, send exact amount
+                </Text>
+              </View>
+
+              {/* Reference Number Input */}
+              <View style={styles.gcashInputSection}>
+                <Text style={styles.gcashInputLabel}>
+                  <Ionicons name="document-text-outline" size={16} color={COLORS.text.dark} /> Reference Number
+                </Text>
+                <TextInput
+                  style={styles.gcashInput}
+                  placeholder="Enter GCash reference number"
+                  placeholderTextColor={COLORS.text.lighter}
+                  value={payNowReferenceNumber}
+                  onChangeText={setPayNowReferenceNumber}
+                  keyboardType="numeric"
+                  maxLength={20}
+                />
+              </View>
+
+              {/* Receipt Upload */}
+              <View style={styles.gcashReceiptSection}>
+                <Text style={styles.gcashInputLabel}>
+                  <Ionicons name="camera-outline" size={16} color={COLORS.text.dark} /> Payment Receipt
+                </Text>
+                <TouchableOpacity 
+                  style={styles.gcashReceiptButton} 
+                  onPress={pickPayNowReceipt} 
+                  disabled={payNowReceiptUploading} 
+                  activeOpacity={0.7}
+                >
+                  {payNowReceiptUri ? (
+                    <View style={styles.gcashReceiptPreviewContainer}>
+                      <Image source={{ uri: payNowReceiptUri }} style={styles.gcashReceiptPreview} />
+                      <Text style={styles.gcashReceiptChangeText}>
+                        <Ionicons name="refresh-outline" size={14} /> Tap to change
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.gcashReceiptPlaceholder}>
+                      <Ionicons name="cloud-upload-outline" size={36} color={COLORS.gcash} />
+                      <Text style={styles.gcashReceiptText}>
+                        {payNowReceiptUploading ? 'Uploading...' : 'Upload Receipt'}
+                      </Text>
+                      <Text style={styles.gcashReceiptHint}>Tap to select from gallery</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[
+                  styles.gcashSubmitButton,
+                  payNowSubmitting && styles.gcashSubmitButtonDisabled
+                ]}
+                onPress={handlePayNowSubmit}
+                disabled={payNowSubmitting}
+                activeOpacity={0.8}
+              >
+                <LinearGradient 
+                  colors={[COLORS.gcash, '#005BB5']} 
+                  start={{ x: 0, y: 0 }} 
+                  end={{ x: 1, y: 0 }} 
+                  style={styles.gcashSubmitGradient}
+                >
+                  {payNowSubmitting ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.gcashSubmitText}>Confirm Payment</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // ... (styles remain the same as before)
   container: { flex: 1, backgroundColor: COLORS.background },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   guestContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  guestIconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.accentSoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
   guestIcon: { fontSize: 56 },
   guestTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text.dark, marginBottom: 12, textAlign: 'center' },
   guestText: { fontSize: 15, color: COLORS.text.medium, textAlign: 'center', marginBottom: 32, lineHeight: 22 },
@@ -1123,6 +1548,49 @@ const styles = StyleSheet.create({
   cardDeleteIcon: { marginLeft: 6, padding: 6 },
   cardDeleteIconText: { fontSize: 18, fontWeight: '700', color: COLORS.error },
   
+  // PAY NOW STYLES
+  payNowContainer: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  payNowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  payNowHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  payNowButton: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  payNowGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  payNowText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  payNowHint: {
+    fontSize: 11,
+    color: '#92400E',
+    textAlign: 'center',
+  },
+
   stallInfo: { backgroundColor: COLORS.background, padding: 12, borderRadius: 12, marginBottom: 12 },
   stallName: { fontSize: 15, fontWeight: '700', color: COLORS.text.dark, marginBottom: 2 },
   stallSection: { fontSize: 13, color: COLORS.text.medium },
@@ -1161,20 +1629,6 @@ const styles = StyleSheet.create({
   pickupButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
 
   emptyContainer: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 24 },
-  emptyIconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.accentSoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
   emptyIcon: { fontSize: 56 },
   emptyTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text.dark, marginBottom: 8, textAlign: 'center' },
   emptyText: { fontSize: 15, color: COLORS.text.medium, textAlign: 'center', marginBottom: 32, lineHeight: 22 },
@@ -1251,7 +1705,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
   },
-   proposalUnitNote: {           // ← ADD THIS
+  proposalUnitNote: {
     fontSize: 12,
     color: '#78350F',
     marginTop: 4,
@@ -1287,5 +1741,257 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: 'white',
+  },
+
+  // GCash Modal Styles
+  gcashModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+  },
+  gcashModalCloseButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  gcashModalScroll: {
+    width: '100%',
+    maxHeight: '95%',
+  },
+  gcashModalScrollContent: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  gcashModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 420,
+    padding: 20,
+    marginTop: Platform.OS === 'ios' ? 30 : 10,
+  },
+  gcashModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  gcashModalHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.gcash,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  gcashModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+  },
+  gcashModalSubtitle: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  gcashTimerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.gcashLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  gcashTimerUrgentBg: {
+    backgroundColor: '#FEE2E2',
+  },
+  gcashTimerLabel: {
+    fontSize: 12,
+    color: COLORS.text.light,
+    marginLeft: 4,
+  },
+  gcashTimerValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.gcash,
+    marginLeft: 'auto',
+  },
+  gcashTimerValueUrgent: {
+    color: '#EF4444',
+  },
+  gcashQRContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  gcashQRTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginBottom: 8,
+  },
+  gcashQRBox: {
+    width: 160,
+    height: 160,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  gcashQRImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gcashQRPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gcashQRPlaceholderText: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 4,
+  },
+  gcashQRPlaceholderSubtext: {
+    fontSize: 10,
+    color: COLORS.text.lighter,
+  },
+  gcashQRVendor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginTop: 8,
+  },
+  gcashQRPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginTop: 2,
+  },
+  gcashQRHint: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  gcashInputSection: {
+    marginBottom: 16,
+  },
+  gcashInputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginBottom: 8,
+  },
+  gcashInput: {
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: COLORS.text.dark,
+    backgroundColor: COLORS.background,
+  },
+  gcashReceiptSection: {
+    marginBottom: 16,
+  },
+  gcashReceiptButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.background,
+  },
+  gcashReceiptPlaceholder: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gcashReceiptText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gcash,
+    marginTop: 8,
+  },
+  gcashReceiptHint: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 2,
+  },
+  gcashReceiptPreviewContainer: {
+    alignItems: 'center',
+    padding: 8,
+  },
+  gcashReceiptPreview: {
+    width: '100%',
+    height: 100,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  gcashReceiptChangeText: {
+    fontSize: 11,
+    color: COLORS.gcash,
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  gcashSubmitButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  gcashSubmitButtonDisabled: {
+    opacity: 0.6,
+  },
+  gcashSubmitGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  gcashSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  payNowOrderSummary: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  payNowOrderVendor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginBottom: 4,
+  },
+  payNowOrderAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  payNowOrderItems: {
+    marginTop: 4,
+  },
+  payNowOrderItem: {
+    fontSize: 12,
+    color: COLORS.text.medium,
+    marginBottom: 2,
   },
 });

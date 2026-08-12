@@ -1,3 +1,5 @@
+// src/screens/customer/CartScreen.js
+
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -10,8 +12,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
+import CheckoutContent from '../../components/CheckoutContent';
 
 const COLORS = {
   primary: '#DC2626',
@@ -38,12 +42,18 @@ const COLORS = {
   shadowDark: 'rgba(0, 0, 0, 0.12)',
 };
 
+const TABS = {
+  CART: 'cart',
+  CHECKOUT: 'checkout',
+};
+
 export default function CartScreen({ navigation }) {
   const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
   const [refreshing, setRefreshing] = useState(false);
   const [hasClosedStall, setHasClosedStall] = useState(false);
   const [closedStallNames, setClosedStallNames] = useState([]);
   const [closedStallIds, setClosedStallIds] = useState([]);
+  const [activeTab, setActiveTab] = useState(TABS.CART);
 
   useFocusEffect(
     useCallback(() => {
@@ -123,21 +133,6 @@ export default function CartScreen({ navigation }) {
     }
   };
 
-  if (cart.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🛒</Text>
-        <Text style={styles.emptyTitle}>Your cart is empty</Text>
-        <Text style={styles.emptyText}>Add items from the market to get started</Text>
-        <TouchableOpacity style={styles.shopButton} onPress={() => navigation.navigate('Home')}>
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.shopGradient}>
-            <Text style={styles.shopButtonText}>Start Shopping</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   const groupByStall = () => {
     const grouped = {};
     cart.forEach(item => {
@@ -160,13 +155,40 @@ export default function CartScreen({ navigation }) {
 
   const groupedCart = groupByStall();
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
-      >
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      Alert.alert('Empty Cart', 'Add items to your cart first');
+      return;
+    }
+    if (hasClosedStall) {
+      Alert.alert('Closed Stalls', 'Please remove items from closed stalls before proceeding.');
+      return;
+    }
+    setActiveTab(TABS.CHECKOUT);
+  };
+
+  const handleBackToCart = () => {
+    setActiveTab(TABS.CART);
+  };
+
+  if (cart.length === 0) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>🛒</Text>
+        <Text style={styles.emptyTitle}>Your cart is empty</Text>
+        <Text style={styles.emptyText}>Add items from the market to get started</Text>
+        <TouchableOpacity style={styles.shopButton} onPress={() => navigation.navigate('Home')}>
+          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.shopGradient}>
+            <Text style={styles.shopButtonText}>Start Shopping</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const renderCartContent = () => {
+    return (
+      <>
         {hasClosedStall && (
           <View style={styles.closedWarningBanner}>
             <View style={styles.closedWarningIconWrap}>
@@ -239,42 +261,101 @@ export default function CartScreen({ navigation }) {
             ))}
           </View>
         ))}
-      </ScrollView>
-      
-      {/* Footer - Single location for totals and checkout */}
-      <View style={styles.footer}>
-        <View style={styles.footerRow}>
-          <View style={styles.footerTotalLeft}>
-            <Text style={styles.footerTotalLabel}>Total</Text>
-            <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
-          </View>
-          <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
-        </View>
-        
-        {hasClosedStall ? (
-          <View style={styles.checkoutDisabledArea}>
-            <View style={styles.disabledCheckoutButton}>
-              <Text style={styles.disabledCheckoutText}>Checkout Unavailable</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.removeClosedButton}
-              onPress={removeItemsFromClosedStalls}
-            >
-              <Text style={styles.removeClosedButtonText}>Remove closed stall items</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity 
-            style={styles.checkoutButton}
-            onPress={() => navigation.navigate('Checkout', { cart, cartTotal })}
-            activeOpacity={0.85}
-          >
-            <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
-              <Text style={styles.checkoutButtonText}>Proceed to Checkout →</Text>
-            </LinearGradient>
+      </>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>My Cart</Text>
+        {cart.length > 0 && (
+          <TouchableOpacity onPress={clearCart}>
+            <Text style={styles.clearText}>Clear All</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Tabs */}
+      {cart.length > 0 && (
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === TABS.CART && styles.activeTab]}
+            onPress={() => setActiveTab(TABS.CART)}
+          >
+            <Text style={[styles.tabText, activeTab === TABS.CART && styles.activeTabText]}>
+              Cart ({cart.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === TABS.CHECKOUT && styles.activeTab]}
+            onPress={() => setActiveTab(TABS.CHECKOUT)}
+          >
+            <Text style={[styles.tabText, activeTab === TABS.CHECKOUT && styles.activeTabText]}>
+              Checkout
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Content */}
+      {activeTab === TABS.CART ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
+        >
+          {renderCartContent()}
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      ) : (
+        <ScrollView style={styles.scrollView}>
+          <CheckoutContent 
+            cart={cart}
+            cartTotal={cartTotal}
+            navigation={navigation}
+            onBack={handleBackToCart}
+          />
+        </ScrollView>
+      )}
+      
+      {/* Footer - Only show for Cart tab */}
+      {activeTab === TABS.CART && (
+        <View style={styles.footer}>
+          <View style={styles.footerRow}>
+            <View style={styles.footerTotalLeft}>
+              <Text style={styles.footerTotalLabel}>Total</Text>
+              <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
+            </View>
+            <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
+          </View>
+          
+          {hasClosedStall ? (
+            <View style={styles.checkoutDisabledArea}>
+              <View style={styles.disabledCheckoutButton}>
+                <Text style={styles.disabledCheckoutText}>Checkout Unavailable</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.removeClosedButton}
+                onPress={removeItemsFromClosedStalls}
+              >
+                <Text style={styles.removeClosedButtonText}>Remove closed stall items</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.checkoutButton}
+              onPress={handleCheckout}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
+                <Text style={styles.checkoutButtonText}>Proceed to Checkout →</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -290,22 +371,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
-  emptyIconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.accentSoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
   emptyIcon: {
     fontSize: 56,
+    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 22,
@@ -339,54 +407,69 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+  },
+  clearText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+
+  // Tabs
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  activeTab: {
+    backgroundColor: COLORS.accentSoft,
+  },
+  tabText: {
+    fontSize: 14,
+    color: COLORS.text.medium,
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
-  closedWarningBanner: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.accentSoft,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.accentLight,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+  bottomSpacer: {
+    height: 80,
   },
-  closedWarningIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.accentLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  closedWarningIcon: {
-    fontSize: 20,
-  },
-  closedWarningContent: {
-    flex: 1,
-  },
-  closedWarningTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.error,
-    marginBottom: 2,
-  },
-  closedWarningText: {
-    fontSize: 13,
-    color: COLORS.text.medium,
-    lineHeight: 18,
-  },
+
+  // Stall Section
   stallSection: {
     backgroundColor: COLORS.surface,
     borderRadius: 20,
@@ -409,6 +492,9 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   stallHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -418,6 +504,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   stallIconWrap: {
     width: 40,
@@ -459,6 +546,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'white',
   },
+
+  // Cart Items
   cartItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -539,6 +628,8 @@ const styles = StyleSheet.create({
     minWidth: 70,
     textAlign: 'right',
   },
+
+  // Footer
   footer: {
     backgroundColor: COLORS.surface,
     padding: 16,
@@ -593,6 +684,51 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
+
+  // Closed Stall Warning
+  closedWarningBanner: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.accentLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  closedWarningIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.accentLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  closedWarningIcon: {
+    fontSize: 20,
+  },
+  closedWarningContent: {
+    flex: 1,
+  },
+  closedWarningTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.error,
+    marginBottom: 2,
+  },
+  closedWarningText: {
+    fontSize: 13,
+    color: COLORS.text.medium,
+    lineHeight: 18,
+  },
+
+  // Disabled Checkout
   checkoutDisabledArea: {
     gap: 10,
   },
