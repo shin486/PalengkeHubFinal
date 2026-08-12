@@ -9,6 +9,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -31,6 +32,12 @@ import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
 import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
 import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
+import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
+import VendorProductsScreen from './src/screens/vendor/VendorProductsScreen';
+import VendorReportsScreen from './src/screens/vendor/VendorReportsScreen';
+import VendorNotificationsScreen from './src/screens/vendor/VendorNotificationsScreen';
+import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
+import VendorProfileScreen from './src/screens/vendor/VendorProfileScreen';
 import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
 import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
 import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
@@ -377,6 +384,12 @@ function RootNavigator() {
         
         {/* Vendor screens */}
         <Stack.Screen name="VendorDashboard" component={VendorDashboardScreen} />
+        <Stack.Screen name="VendorOrders" component={VendorOrdersScreen} />
+        <Stack.Screen name="VendorProducts" component={VendorProductsScreen} />
+        <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
+        <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
+        <Stack.Screen name="VendorOrderDetail" component={VendorOrderDetailScreen} />
+        <Stack.Screen name="VendorProfile" component={VendorProfileScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         
