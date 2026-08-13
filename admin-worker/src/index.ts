@@ -12,9 +12,9 @@ export default {
       return Response.redirect(url.origin + url.pathname, 302);
     }
 
-    // Redirect root to admin login page (React app served under /admin)
+    // Redirect root to the admin login page
     if (url.pathname === '/' || url.pathname === '') {
-      return Response.redirect('https://admin.palengkehub.site/admin/admin-login', 302);
+      return Response.redirect('https://admin.palengkehub.site/admin-login', 302);
     }
 
     // Proxy all requests to the React app on Cloudflare Pages

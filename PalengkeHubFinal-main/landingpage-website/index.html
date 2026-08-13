@@ -71,11 +71,11 @@
       });
     }
 
-    // Admin shortcut - Ctrl+1 redirects to admin subdomain
+    // Admin shortcut - Ctrl+1 redirects to admin login page
     document.addEventListener('keydown', function(e) {
       if (e.ctrlKey && e.key === '1') {
         e.preventDefault();
-        window.location.href = 'https://admin.palengkehub.site';
+        window.location.href = 'https://admin.palengkehub.site/admin-login';
       }
     });
 
