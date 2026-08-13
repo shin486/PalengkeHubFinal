@@ -2,8 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { speak } from '../services/voiceService';
+import { PriceTrendBadge } from './PriceTrendBadge';
 
-export const ProductCard = ({ product, onPress, onAddToCart }) => {
+export const ProductCard = ({ product, onPress, onAddToCart, priceTrend }) => {
   const readAloud = () => {
     speak(
       `${product.name}. Presyo, ${product.price} pesos, bawat ${product.unit || 'unit'}.`,
@@ -27,6 +28,12 @@ export const ProductCard = ({ product, onPress, onAddToCart }) => {
         </TouchableOpacity>
       </View>
       <Text style={styles.price}>₱{product.price}</Text>
+      {priceTrend && (
+        <PriceTrendBadge
+          currentPrice={product.price}
+          previousPrice={priceTrend.previous_price}
+        />
+      )}
       <Text style={styles.unit}>per {product.unit}</Text>
       <Text style={styles.stall}>Stall {product.stall?.stall_number}</Text>
       <TouchableOpacity style={styles.addButton} onPress={() => onAddToCart(product)}>

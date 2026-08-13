@@ -50,6 +50,25 @@ export const AuthProvider = ({ children }) => {
     checkUser();
   }, []);
 
+  // ========== SESSION KEEP-ALIVE (elderly "never log me out") ==========
+  // Refreshes the Supabase session periodically while the app is open so the
+  // access token doesn't expire mid-shopping trip. Best effort — failures are
+  // silent because a dead refresh token still falls back to password login.
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await supabase.auth.refreshSession();
+        }
+      } catch (e) {
+        // silent — session may just not exist
+      }
+    };
+    const interval = setInterval(refresh, 15 * 60 * 1000); // every 15 minutes
+    return () => clearInterval(interval);
+  }, []);
+
   // ========== DEEP LINK HANDLING ==========
   useEffect(() => {
     const handleDeepLink = async (event) => {

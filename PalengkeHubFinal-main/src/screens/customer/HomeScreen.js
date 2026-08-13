@@ -26,6 +26,8 @@ import { useI18n } from '../../contexts/i18nContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
+import { PriceTrendBadge } from '../../components/PriceTrendBadge';
+import { fetchPriceTrends } from '../../services/priceHistoryService';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.44;
@@ -136,7 +138,7 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 // PRODUCT CARD COMPONENT
 // ============================================================
-const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false }) => {
+const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false, priceTrend }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
@@ -181,6 +183,13 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPro
           )}
           <Text style={styles.productUnit}>/{product.unit}</Text>
         </View>
+
+        {priceTrend && (
+          <PriceTrendBadge
+            currentPrice={product.price}
+            previousPrice={priceTrend.previous_price}
+          />
+        )}
         
         <Text style={styles.productVendor} numberOfLines={1}>
           {stall?.stall_name || `Stall ${stall?.stall_number}`}
@@ -318,6 +327,16 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
+  const [priceTrends, setPriceTrends] = useState(new Map());
+
+  const loadPriceTrends = async (products) => {
+    const ids = (products || []).map(p => p.id).filter(Boolean);
+    if (ids.length === 0) return;
+    const trends = await fetchPriceTrends(ids);
+    if (trends.size > 0) {
+      setPriceTrends(prev => new Map([...prev, ...trends]));
+    }
+  };
   
   const { user } = useAuth();
   const { addToCart } = useCart();
@@ -376,6 +395,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
       if (promosData && promosData.length > 0) {
         const validPromos = promosData.filter(p => p.product?.is_available === true);
         setPromoProducts(validPromos);
+        loadPriceTrends(validPromos.map(p => p.product).filter(Boolean));
       } else {
         setPromoProducts([]);
       }
@@ -450,7 +470,9 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           }
         }
       }
-      setRecentOrderItems(Array.from(itemsMap.values()));
+      const items = Array.from(itemsMap.values());
+      setRecentOrderItems(items);
+      loadPriceTrends(items);
     } catch (error) {
       console.error('Error fetching recent orders:', error);
     }
@@ -750,6 +772,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     stall={stall}
                     discountText={discountText}
                     isPromo={true}
+                    priceTrend={priceTrends.get(product.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                     onAddToCart={() => handleAddToCart({ ...product, price: promo.discounted_price }, stall)}
                   />
@@ -827,6 +850,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                       ? `${item.promotion.discount_value}% OFF` 
                       : `₱${item.promotion.discount_value} OFF`) 
                     : null}
+                  priceTrend={priceTrends.get(item.id)}
                   onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
                   onAddToCart={() => handleOrderAgain(item)}
                 />

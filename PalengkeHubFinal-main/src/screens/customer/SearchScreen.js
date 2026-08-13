@@ -21,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
+import { PriceTrendBadge } from '../../components/PriceTrendBadge';
+import { fetchPriceTrends } from '../../services/priceHistoryService';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
@@ -196,6 +198,7 @@ export default function SearchScreen({ navigation }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [priceTrends, setPriceTrends] = useState(new Map());
 
   // Stop any active voice session when leaving the screen
   useEffect(() => () => { stopListening(); }, []);
@@ -485,6 +488,19 @@ export default function SearchScreen({ navigation }) {
             });
           }
           setProductsData(results);
+
+          // Fetch price trends for the result products (Bumaba/Tumaas badges)
+          const resultIds = results
+            .filter(i => i.type === 'product')
+            .map(i => i.data.id)
+            .filter(Boolean);
+          if (resultIds.length > 0) {
+            fetchPriceTrends(resultIds).then((trends) => {
+              if (trends.size > 0) {
+                setPriceTrends(prev => new Map([...prev, ...trends]));
+              }
+            });
+          }
         } else {
           // No exact match — try to find a close match ("Did you mean?")
           const closest = await findClosestProductName(searchTerm);
@@ -656,6 +672,10 @@ export default function SearchScreen({ navigation }) {
               ₱{product.price.toFixed(2)}
             </Text>
             <Text style={styles.comparisonUnit}>/ {product.unit}</Text>
+            <PriceTrendBadge
+              currentPrice={product.price}
+              previousPrice={priceTrends.get(product.id)?.previous_price}
+            />
             {product.hasPromotion && (
               <View style={styles.promoMiniBadge}>
                 <Text style={styles.promoMiniText}>

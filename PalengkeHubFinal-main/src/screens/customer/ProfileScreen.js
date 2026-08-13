@@ -12,6 +12,7 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { savePin, clearPin, hasSavedPin } from '../../services/pinService';
 
 export default function ProfileScreen({ navigation }) {
   const COLORS = useColors();
@@ -40,11 +42,62 @@ export default function ProfileScreen({ navigation }) {
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
 
+  // ── PIN Login state ──
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [hasPin, setHasPin] = useState(false);
+  const [pinStep, setPinStep] = useState(0); // 0 = enter new PIN, 1 = confirm
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+
   useEffect(() => {
+    checkSavedPin();
     if (user) {
       fetchUserStats();
     }
   }, [user]);
+
+  const checkSavedPin = async () => {
+    setHasPin(await hasSavedPin());
+  };
+
+  const openPinModal = () => {
+    setPinStep(0);
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+    setShowPinModal(true);
+  };
+
+  const handlePinNext = () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError('Ang PIN ay dapat 4 na numero.');
+      return;
+    }
+    setPinError('');
+    setPinStep(1);
+  };
+
+  const handlePinSave = async () => {
+    if (confirmPin !== newPin) {
+      setPinError('Hindi magkatugma ang PIN. Subukan muli.');
+      return;
+    }
+    setPinBusy(true);
+    await savePin(newPin, user?.id);
+    setPinBusy(false);
+    setHasPin(true);
+    setShowPinModal(false);
+    Alert.alert('PIN Login', 'Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.');
+  };
+
+  const handlePinRemove = async () => {
+    await clearPin();
+    setHasPin(false);
+    setShowPinModal(false);
+    Alert.alert('PIN Login', 'Tinanggal ang PIN. Password na ulit ang gagamitin.');
+  };
 
   const fetchUserStats = async () => {
     try {
@@ -499,6 +552,14 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
+          {/* PIN Login */}
+          <TouchableOpacity style={styles.menuItem} onPress={openPinModal}>
+            <Text style={styles.menuItemIcon}>🔢</Text>
+            <Text style={styles.menuItemText}>PIN Login</Text>
+            <Text style={styles.languageValue}>{hasPin ? 'Naka-on' : 'Naka-off'}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuItemIcon}>📍</Text>
             <Text style={styles.menuItemText}>Saved Addresses</Text>
@@ -645,6 +706,74 @@ export default function ProfileScreen({ navigation }) {
               style={styles.langCancelBtn}
               onPress={() => setShowLanguagePicker(false)}
             >
+              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* PIN Login Setup Modal */}
+      <Modal visible={showPinModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>🔢 PIN Login</Text>
+            <Text style={styles.pinHint}>
+              {hasPin && pinStep === 0
+                ? 'May naka-save nang PIN. Maglagay ng bagong 4-digit na PIN para palitan, o tanggalin ito.'
+                : 'Maglagay ng 4-digit na PIN para hindi na kailangan ng password sa susunod.'}
+            </Text>
+
+            {pinStep === 0 ? (
+              <>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="● ● ● ●"
+                  placeholderTextColor="#B0A99F"
+                  value={newPin}
+                  onChangeText={(v) => { setNewPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                {hasPin && (
+                  <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
+                    <Text style={[styles.langCancelText, { color: '#DC2626', fontWeight: '600' }]}>Tanggalin ang PIN</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.langOption, newPin.length === 4 && styles.langOptionActive]}
+                  onPress={handlePinNext}
+                >
+                  <Text style={styles.langOptionText}>Susunod →</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="● ● ● ● (ulitin)"
+                  placeholderTextColor="#B0A99F"
+                  value={confirmPin}
+                  onChangeText={(v) => { setConfirmPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.langOption, confirmPin.length === 4 && styles.langOptionActive]}
+                  onPress={handlePinSave}
+                  disabled={pinBusy}
+                >
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN ✓'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(0)}>
+                  <Text style={styles.langCancelText}>Bumalik</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.langCancelBtn} onPress={() => setShowPinModal(false)}>
               <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
@@ -821,4 +950,18 @@ const createStyles = (COLORS) => StyleSheet.create({
   langCheck: { fontSize: 18, color: '#1a5f28', fontWeight: '700' },
   langCancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   langCancelText: { color: '#888', fontSize: 15 },
+  pinHint: { fontSize: 13, color: '#888', marginBottom: 12, lineHeight: 19 },
+  pinInput: {
+    borderWidth: 1.5,
+    borderColor: '#E4D3C8',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 22,
+    letterSpacing: 8,
+    textAlign: 'center',
+    color: '#333',
+    marginBottom: 8,
+  },
+  pinError: { color: '#DC2626', fontSize: 13, marginBottom: 8, fontWeight: '600' },
 });

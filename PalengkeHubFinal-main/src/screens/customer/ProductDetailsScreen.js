@@ -16,6 +16,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
+import { PriceTrendBadge } from '../../components/PriceTrendBadge';
+import { fetchPriceTrends } from '../../services/priceHistoryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
@@ -206,6 +208,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   // Related products from same stall
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [priceTrend, setPriceTrend] = useState(null);
 
   // Add-to-cart toast animation
   const [toastVisible, setToastVisible] = useState(false);
@@ -302,6 +305,11 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       setProduct(productData);
       setStall(productData.stalls);
+
+      // 1b. Fetch price history trend (Bumaba/Tumaas badge)
+      fetchPriceTrends([productId]).then((trends) => {
+        if (trends.has(productId)) setPriceTrend(trends.get(productId));
+      });
       
       // 2. Fetch active promotion for this product
       const now = new Date().toISOString();
@@ -698,6 +706,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </View>
           )}
         </View>
+
+        {priceTrend && (
+          <PriceTrendBadge
+            currentPrice={currentPrice}
+            previousPrice={priceTrend.previous_price}
+          />
+        )}
 
         {promotion && (
           <View style={styles.originalPriceRow}>
