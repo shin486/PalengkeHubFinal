@@ -1,0 +1,39 @@
+# ── Node / Expo ──
+node_modules/
+.expo/
+web/dist/
+dist/
+.wrangler/
+
+# ── Logs ──
+*.log
+
+# ── Local dev/test junk ──
+chrome-*-profile/
+expo-dom.txt
+expo-final.txt
+expo-check.txt
+expo-web-err.log
+headless*.txt
+live-admin*.txt
+login-check*.txt
+admin-check*.txt
+*-check*.txt
+serve-err.log
+serve.log
+
+# ── SECRETS — never commit these ──
+test-token.txt
+test-user.json
+.dev.vars
+
+# ── Test scripts (dev-only) ──
+pin-crypto-test.js
+pin-pad-test.js
+search-logic-test.js
+smoke-test.js
+ui-search-test.js
+
+# ── OS junk ──
+Thumbs.db
+.DS_Store
