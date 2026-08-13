@@ -8,7 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { verifyPin } from '../services/pinService';
+import { verifyPin, getStoredCredentials } from '../services/pinService';
 
 // Big-button 4-digit PIN pad shown on the login screen when the user has
 // enabled PIN login. Designed for elderly users: huge keys, clear dots.
@@ -37,31 +37,63 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
 
   const attemptUnlock = async (pin) => {
     setBusy(true);
-    const ok = await verifyPin(pin);
-    if (!ok) {
-      setEntry('');
-      setError('Maling PIN. Subukan muli.');
-      shake();
-      setBusy(false);
-      return;
-    }
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setError('');
-        onSuccess();
-      } else {
+
+    // 1) Try decrypting the saved credentials with this PIN and signing in.
+    //    This works even after logout or session expiry.
+    const creds = await getStoredCredentials(pin);
+    if (creds) {
+      try {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const credentials = emailRegex.test(creds.identifier || '')
+          ? { email: creds.identifier }
+          : { phone: creds.identifier };
+        const { error } = await supabase.auth.signInWithPassword({
+          ...credentials,
+          password: creds.password,
+        });
+        if (!error) {
+          setError('');
+          setBusy(false);
+          onSuccess();
+          return;
+        }
+        console.warn('PIN unlock sign-in failed:', error.message);
         setEntry('');
-        setError('Nag-expire na ang session. Gumamit ng password.');
+        setError('Hindi makapasok. Gumamit ng password.');
         shake();
+        setBusy(false);
+        return;
+      } catch (e) {
+        console.warn('PIN unlock error:', e);
+        setEntry('');
+        setError('Hindi makapasok. Gumamit ng password.');
+        shake();
+        setBusy(false);
+        return;
       }
-    } catch (e) {
-      setEntry('');
-      setError('Hindi makakonekta. Gumamit ng password.');
-      shake();
-    } finally {
-      setBusy(false);
     }
+
+    // 2) Fallback: older PIN with no stored credentials — only unlocks when a
+    //    Supabase session is still alive.
+    const ok = await verifyPin(pin);
+    if (ok) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setError('');
+          setBusy(false);
+          onSuccess();
+          return;
+        }
+      } catch (e) {
+        // fall through to error
+      }
+    }
+
+    setEntry('');
+    setError('Maling PIN. Subukan muli.');
+    shake();
+    setBusy(false);
   };
 
   const pressDigit = (digit) => {

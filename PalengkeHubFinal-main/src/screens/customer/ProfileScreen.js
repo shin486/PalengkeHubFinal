@@ -25,7 +25,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { savePin, clearPin, hasSavedPin } from '../../services/pinService';
+import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 export default function ProfileScreen({ navigation }) {
   const COLORS = useColors();
@@ -45,11 +45,14 @@ export default function ProfileScreen({ navigation }) {
   // ── PIN Login state ──
   const [showPinModal, setShowPinModal] = useState(false);
   const [hasPin, setHasPin] = useState(false);
-  const [pinStep, setPinStep] = useState(0); // 0 = enter new PIN, 1 = confirm
+  const [pinStep, setPinStep] = useState(0); // 0 = password check, 1 = new PIN, 2 = confirm
+  const [pinIdentifier, setPinIdentifier] = useState('');
+  const [pinPassword, setPinPassword] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
+  const [pinSaved, setPinSaved] = useState(false);
 
   useEffect(() => {
     checkSavedPin();
@@ -64,10 +67,43 @@ export default function ProfileScreen({ navigation }) {
 
   const openPinModal = () => {
     setPinStep(0);
+    setPinIdentifier(user?.email || profile?.phone || '');
+    setPinPassword('');
     setNewPin('');
     setConfirmPin('');
     setPinError('');
+    setPinSaved(false);
     setShowPinModal(true);
+  };
+
+  // Step 0 → verify the password against Supabase (so the PIN can sign in later)
+  const handlePinVerifyCredentials = async () => {
+    if (!pinIdentifier.trim() || !pinPassword) {
+      setPinError('Ilagay ang email/phone at password mo.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError('');
+    try {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const credentials = emailRegex.test(pinIdentifier.trim())
+        ? { email: pinIdentifier.trim() }
+        : { phone: pinIdentifier.trim() };
+      const { error } = await supabase.auth.signInWithPassword({
+        ...credentials,
+        password: pinPassword,
+      });
+      if (error) {
+        setPinError('Maling password. Subukan muli.');
+        setPinBusy(false);
+        return;
+      }
+      setPinStep(1);
+    } catch (e) {
+      setPinError('Hindi ma-verify ang password. Subukan muli.');
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   const handlePinNext = () => {
@@ -76,7 +112,7 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
     setPinError('');
-    setPinStep(1);
+    setPinStep(2);
   };
 
   const handlePinSave = async () => {
@@ -85,18 +121,19 @@ export default function ProfileScreen({ navigation }) {
       return;
     }
     setPinBusy(true);
-    await savePin(newPin, user?.id);
+    setPinError('');
+    await savePinWithCredentials(newPin, user?.id, pinIdentifier.trim(), pinPassword);
     setPinBusy(false);
     setHasPin(true);
-    setShowPinModal(false);
-    Alert.alert('PIN Login', 'Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.');
+    setPinSaved(true);
+    setTimeout(() => setShowPinModal(false), 1200);
   };
 
   const handlePinRemove = async () => {
     await clearPin();
     setHasPin(false);
+    setPinSaved(false);
     setShowPinModal(false);
-    Alert.alert('PIN Login', 'Tinanggal ang PIN. Password na ulit ang gagamitin.');
   };
 
   const fetchUserStats = async () => {
@@ -716,14 +753,55 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>🔢 PIN Login</Text>
-            <Text style={styles.pinHint}>
-              {hasPin && pinStep === 0
-                ? 'May naka-save nang PIN. Maglagay ng bagong 4-digit na PIN para palitan, o tanggalin ito.'
-                : 'Maglagay ng 4-digit na PIN para hindi na kailangan ng password sa susunod.'}
-            </Text>
 
-            {pinStep === 0 ? (
+            {pinSaved ? (
               <>
+                <Text style={styles.pinHint}>
+                  ✓ Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.
+                </Text>
+              </>
+            ) : pinStep === 0 ? (
+              <>
+                <Text style={styles.pinHint}>
+                  Para sa seguridad, ilagay ang email/phone at password mo. Ise-save ito
+                  sa device na ito (naka-encrypt) para makapasok ka gamit ang PIN.
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="Email o phone"
+                  placeholderTextColor="#B0A99F"
+                  value={pinIdentifier}
+                  onChangeText={(v) => { setPinIdentifier(v); setPinError(''); }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="Password"
+                  placeholderTextColor="#B0A99F"
+                  value={pinPassword}
+                  onChangeText={(v) => { setPinPassword(v); setPinError(''); }}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                {hasPin && (
+                  <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
+                    <Text style={[styles.langCancelText, { color: '#DC2626', fontWeight: '600' }]}>Tanggalin ang PIN</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.langOption, (pinIdentifier.trim() && pinPassword) ? styles.langOptionActive : null]}
+                  onPress={handlePinVerifyCredentials}
+                  disabled={pinBusy}
+                >
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagve-verify...' : 'I-verify →'}</Text>
+                </TouchableOpacity>
+              </>
+            ) : pinStep === 1 ? (
+              <>
+                <Text style={styles.pinHint}>
+                  Maglagay ng bagong 4-digit na PIN.
+                </Text>
                 <TextInput
                   style={styles.pinInput}
                   placeholder="● ● ● ●"
@@ -735,20 +813,21 @@ export default function ProfileScreen({ navigation }) {
                   secureTextEntry
                 />
                 {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
-                {hasPin && (
-                  <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
-                    <Text style={[styles.langCancelText, { color: '#DC2626', fontWeight: '600' }]}>Tanggalin ang PIN</Text>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   style={[styles.langOption, newPin.length === 4 && styles.langOptionActive]}
                   onPress={handlePinNext}
                 >
                   <Text style={styles.langOptionText}>Susunod →</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(0)}>
+                  <Text style={styles.langCancelText}>Bumalik</Text>
+                </TouchableOpacity>
               </>
             ) : (
               <>
+                <Text style={styles.pinHint}>
+                  Ulitin ang PIN para kumpirmahin.
+                </Text>
                 <TextInput
                   style={styles.pinInput}
                   placeholder="● ● ● ● (ulitin)"
@@ -767,15 +846,17 @@ export default function ProfileScreen({ navigation }) {
                 >
                   <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN ✓'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(0)}>
+                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(1)}>
                   <Text style={styles.langCancelText}>Bumalik</Text>
                 </TouchableOpacity>
               </>
             )}
 
-            <TouchableOpacity style={styles.langCancelBtn} onPress={() => setShowPinModal(false)}>
-              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
+            {!pinSaved && (
+              <TouchableOpacity style={styles.langCancelBtn} onPress={() => setShowPinModal(false)}>
+                <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
