@@ -1,22 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Image,
+  Vibration,
   Platform,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useLastViewed } from '../../hooks/useLastViewed';
 
 // Conditionally load Recharts only on web (it is a web-only library)
 let RechartsLineChart, RechartsResponsiveContainer, RechartsXAxis, RechartsYAxis,
@@ -36,31 +39,6 @@ if (Platform.OS === 'web') {
     console.warn('Recharts not available:', e.message);
   }
 }
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 // Unit configurations
 const UNIT_CONFIG = {
@@ -122,54 +100,59 @@ const StarRating = ({ rating, size = 12 }) => {
 };
 
 // Price History Chart Component (Recharts on web, fallback bar chart on native)
-const PriceHistoryChart = ({ data, darkMode }) => {
-  if (!data || data.length === 0) return null;
+const PriceHistoryChart = ({ data, darkMode, styles }) => {
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
 
   const chartData = data.map(h => ({
     date: new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     price: h.price || 0,
   }));
 
-  // Web: use Recharts
-  if (Platform.OS === 'web' && RechartsLineChart) {
-    return (
-      <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
-        <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
-        <View style={{ width: '100%', height: 200 }}>
-          <RechartsResponsiveContainer width="100%" height="100%">
-            <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-              <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
-              <RechartsXAxis 
-                dataKey="date" 
-                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
-                angle={-30}
-                textAnchor="end"
-                height={40}
-              />
-              <RechartsYAxis 
-                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
-                tickFormatter={(value) => `₱${value}`}
-                width={50}
-              />
-              <RechartsTooltip 
-                contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
-                labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
-                itemStyle={{ fontSize: 11, color: '#DC2626' }}
-                formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
-              />
-              <RechartsLine 
-                type="monotone" 
-                dataKey="price" 
-                stroke="#DC2626" 
-                strokeWidth={2}
-                dot={{ r: 3, fill: '#DC2626' }}
-                activeDot={{ r: 5, fill: '#EF4444' }}
-              />
-            </RechartsLineChart>
-          </RechartsResponsiveContainer>
+  // Web: use Recharts (guarded against missing components)
+  const hasRecharts = Platform.OS === 'web' && RechartsLineChart && RechartsResponsiveContainer;
+  if (hasRecharts) {
+    try {
+      return (
+        <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
+          <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+          <View style={{ width: '100%', height: 200 }}>
+            <RechartsResponsiveContainer width="100%" height="100%">
+              <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
+                <RechartsXAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                  angle={-30}
+                  textAnchor="end"
+                  height={40}
+                />
+                <RechartsYAxis 
+                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                  tickFormatter={(value) => `₱${value}`}
+                  width={50}
+                />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
+                  labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
+                  itemStyle={{ fontSize: 11, color: '#DC2626' }}
+                  formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
+                />
+                <RechartsLine 
+                  type="monotone" 
+                  dataKey="price" 
+                  stroke="#DC2626" 
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: '#DC2626' }}
+                  activeDot={{ r: 5, fill: '#EF4444' }}
+                />
+              </RechartsLineChart>
+            </RechartsResponsiveContainer>
+          </View>
         </View>
-      </View>
-    );
+      );
+    } catch (e) {
+      console.warn('PriceHistoryChart Recharts render error:', e.message);
+    }
   }
 
   // Native fallback: simple bar chart
@@ -203,6 +186,8 @@ const PriceHistoryChart = ({ data, darkMode }) => {
 };
 
 export default function ProductDetailsScreen({ route, navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
@@ -219,9 +204,28 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [marketLoading, setMarketLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
+  // Related products from same stall
+  const [relatedProducts, setRelatedProducts] = useState([]);
+
+  // Add-to-cart toast animation
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastAnim = useRef(new Animated.Value(-100)).current;
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.spring(toastAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
+      Animated.delay(1800),
+      Animated.timing(toastAnim, { toValue: -120, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToastVisible(false));
+  };
+
   const { user, isGuest, setIsGuest } = useAuth();
   const { addToCart } = useCart();
   const { isProductFavorite, toggleProductFavorite } = useFavorites();
+  const { add: addLastViewed } = useLastViewed();
 
   useEffect(() => {
     if (productId) {
@@ -229,12 +233,46 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   }, [productId]);
 
+  // Track last viewed when product loads
+  useEffect(() => {
+    if (product && stall) {
+      addLastViewed({
+        id: product.id,
+        name: product.name,
+        image_url: product.image_url,
+        price: currentPrice || product.price,
+        stall_id: stall.id,
+        stall_name: stall.stall_name,
+        unit: product.unit,
+      });
+    }
+  }, [product]);
+
   // Fetch market data once the product is loaded
   useEffect(() => {
     if (product) {
       fetchMarketData(product);
     }
   }, [product]);
+
+  // Fetch related products from the same stall
+  useEffect(() => {
+    if (stall?.id) {
+      fetchRelatedProducts(stall.id);
+    }
+  }, [stall]);
+
+  const fetchRelatedProducts = async (stallId) => {
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, price, image_url, unit')
+        .eq('stall_id', stallId)
+        .neq('id', productId)
+        .limit(5);
+      if (data) setRelatedProducts(data);
+    } catch { /* silently fail */ }
+  };
 
   const fetchProductDetails = async () => {
     try {
@@ -384,20 +422,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       addToCart(cartProduct, stall.id, stall, quantity);
       
-      let quantityText = '';
-      if (selectedUnit === 'kg') quantityText = `${quantity}kg`;
-      else if (selectedUnit === '500g') quantityText = `${quantity * 0.5}kg`;
-      else if (selectedUnit === '250g') quantityText = `${quantity * 0.25}kg`;
-      else quantityText = `${quantity} ${getUnitSuffix(selectedUnit)}`;
-      
-      Alert.alert(
-        'Added to Cart',
-        `${quantityText} of ${product.name} added to your cart`,
-        [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
-        ]
-      );
+      // Haptic feedback + animated toast
+      Vibration.vibrate(50);
+      showToast(`${product.name} added to cart`);
     }
   };
 
@@ -610,6 +637,30 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Back Button */}
+      <TouchableOpacity
+        style={styles.backArrow}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {/* Add-to-Cart Toast */}
+      {toastVisible && (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
+          <View style={styles.toastContent}>
+            <View style={styles.toastIcon}>
+              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.toastTextWrap}>
+              <Text style={styles.toastTitle}>Added to Cart</Text>
+              <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Product Image */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
@@ -878,7 +929,39 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
             {/* Price History Chart */}
             {priceHistory.length > 0 && (
-              <PriceHistoryChart data={priceHistory} darkMode={darkMode} />
+              <PriceHistoryChart data={priceHistory} darkMode={darkMode} styles={styles} />
+            )}
+
+            {/* You Might Also Like */}
+            {relatedProducts.length > 0 && (
+              <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
+                <View style={styles.marketSubSectionHeader}>
+                  <MaterialIcons name="store" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
+                  <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>
+                    More from {stall?.stall_name || 'this stall'}
+                  </Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                  {relatedProducts.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.relatedCard}
+                      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.relatedImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.relatedInfo}>
+                        <Text numberOfLines={2} style={styles.relatedName}>{item.name}</Text>
+                        <Text style={styles.relatedPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             )}
 
             {/* Vendor Comparison Table */}
@@ -1051,10 +1134,95 @@ export default function ProductDetailsScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  backArrow: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingTop: 50,
+    paddingHorizontal: 16,
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  toastIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#22C55E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  toastTextWrap: {
+    flex: 1,
+  },
+  toastTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  toastSubtitle: {
+    color: '#D1D5DB',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  relatedCard: {
+    width: 130,
+    marginRight: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  relatedImage: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#F3F4F6',
+  },
+  relatedInfo: {
+    padding: 10,
+  },
+  relatedName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  relatedPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#C62828',
   },
   centerContainer: {
     flex: 1,

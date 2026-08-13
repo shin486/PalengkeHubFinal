@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +14,8 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function CustomerReportsScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,11 +66,11 @@ export default function CustomerReportsScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return '#F59E0B';
+      case 'pending': return COLORS.warning;
       case 'reviewing': return '#3B82F6';
-      case 'resolved': return '#10B981';
-      case 'dismissed': return '#6B7280';
-      default: return '#6B7280';
+      case 'resolved': return COLORS.success;
+      case 'dismissed': return COLORS.text.tertiary;
+      default: return COLORS.text.tertiary;
     }
   };
 
@@ -106,7 +109,7 @@ export default function CustomerReportsScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#EF4444" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
@@ -121,7 +124,7 @@ export default function CustomerReportsScreen({ navigation }) {
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <LinearGradient
-          colors={['#EF4444', '#DC2626']}
+          colors={[COLORS.primary, COLORS.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.statsCard}
@@ -131,16 +134,16 @@ export default function CustomerReportsScreen({ navigation }) {
         </LinearGradient>
         
         <View style={styles.statsRow}>
-          <View style={[styles.statBox, { backgroundColor: '#FEF3C7' }]}>
-            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{stats.pending}</Text>
+          <View style={[styles.statBox, { backgroundColor: COLORS.warningLight }]}>
+            <Text style={[styles.statNumber, { color: COLORS.warning }]}>{stats.pending}</Text>
             <Text style={styles.statLabel}>Pending</Text>
           </View>
           <View style={[styles.statBox, { backgroundColor: '#DBEAFE' }]}>
             <Text style={[styles.statNumber, { color: '#3B82F6' }]}>{stats.reviewing}</Text>
             <Text style={styles.statLabel}>Reviewing</Text>
           </View>
-          <View style={[styles.statBox, { backgroundColor: '#D1FAE5' }]}>
-            <Text style={[styles.statNumber, { color: '#10B981' }]}>{stats.resolved}</Text>
+          <View style={[styles.statBox, { backgroundColor: COLORS.successLight }]}>
+            <Text style={[styles.statNumber, { color: COLORS.success }]}>{stats.resolved}</Text>
             <Text style={styles.statLabel}>Resolved</Text>
           </View>
         </View>
@@ -152,7 +155,7 @@ export default function CustomerReportsScreen({ navigation }) {
         onPress={() => navigation.navigate('ReportIssue')}
       >
         <LinearGradient
-          colors={['#EF4444', '#DC2626']}
+          colors={[COLORS.primary, COLORS.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.newReportGradient}
@@ -237,10 +240,10 @@ export default function CustomerReportsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
@@ -259,7 +262,7 @@ const styles = StyleSheet.create({
   statsNumber: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   statsLabel: {
     fontSize: 14,
@@ -282,7 +285,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
-    color: '#4B5563',
+    color: COLORS.text.secondary,
     marginTop: 4,
   },
   newReportButton: {
@@ -302,7 +305,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   newReportText: {
-    color: 'white',
+    color: COLORS.text.inverse,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -313,11 +316,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 16,
   },
   emptyState: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     padding: 32,
     borderRadius: 16,
     alignItems: 'center',
@@ -329,17 +332,17 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
   reportCard: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -366,7 +369,7 @@ const styles = StyleSheet.create({
   reportTypeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -383,34 +386,34 @@ const styles = StyleSheet.create({
   reportReason: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4B5563',
+    color: COLORS.text.secondary,
     marginBottom: 6,
   },
   reportTarget: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 6,
   },
   reportDescription: {
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     lineHeight: 20,
   },
   adminNote: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: 8,
   },
   adminNoteLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4B5563',
+    color: COLORS.text.secondary,
     marginBottom: 4,
   },
   adminNoteText: {
     fontSize: 13,
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   reportFooter: {
     flexDirection: 'row',
@@ -418,19 +421,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   reportDate: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   feedbackLink: {
     fontSize: 12,
-    color: '#EF4444',
+    color: COLORS.primary,
     fontWeight: '500',
   },
   infoSection: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     marginHorizontal: 16,
     marginBottom: 32,
     padding: 16,

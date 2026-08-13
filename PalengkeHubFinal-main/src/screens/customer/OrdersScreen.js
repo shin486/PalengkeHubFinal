@@ -1,6 +1,7 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/OrdersScreen.js
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,36 +26,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useOrders } from '../../hooks/useOrders';
 import { useCart } from '../../hooks/useCart';
 import StallMap from '../../components/StallMap';
+import { EmptyState } from '../../components/EmptyState';
+import { OrderTimeline } from '../../components/OrderTimeline';
 import { supabase } from '../../../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-  gcash: '#007DFE',
-  gcashLight: '#E8F4FF',
-};
 
 const SPACING = {
   xs: 4,
@@ -84,6 +60,8 @@ const CANCEL_REASONS = [
 ];
 
 export default function OrdersScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, isGuest } = useAuth();
   const { orders, loading, newOrderAlert, refreshOrders } = useOrders();
   const { addToCart } = useCart();
@@ -775,6 +753,9 @@ export default function OrdersScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Order Status Timeline */}
+        <OrderTimeline status={order.status} colors={{ primary: COLORS.primary }} />
+
         {/* PAY NOW BUTTON - Only for unpaid orders (awaiting_payment) */}
         {isAwaitingPayment && (
           <View style={styles.payNowContainer}>
@@ -1089,28 +1070,20 @@ export default function OrdersScreen({ navigation }) {
         }
       >
         {displayOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyTitle}>
-              {activeTab === 'active' ? 'No Active Orders' : 'No Order History'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'active' 
-                ? 'Place an order to see it here' 
-                : 'Your completed orders will appear here'}
-            </Text>
-            <TouchableOpacity 
-              style={styles.shopButton}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E8E']}
-                style={styles.shopGradient}
-              >
-                <Text style={styles.shopButtonText}>Start Shopping</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="receipt-outline"
+            title={activeTab === 'active' ? 'No Active Orders' : 'No Order History'}
+            subtitle={activeTab === 'active' ? 'Place an order to see it here' : 'Your completed orders will appear here'}
+            actionLabel="Start Shopping"
+            onAction={() => navigation.navigate('Home')}
+            colors={{
+              icon: COLORS.text.tertiary || '#9CA3AF',
+              title: COLORS.text.secondary || '#6B7280',
+              subtitle: COLORS.text.tertiary || '#9CA3AF',
+              background: COLORS.background || '#FFFFFF',
+              iconBg: COLORS.surfaceSecondary || '#F3F4F6',
+            }}
+          />
         ) : (
           displayOrders.map(renderOrderCard)
         )}
@@ -1500,7 +1473,7 @@ export default function OrdersScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   // ... (styles remain the same as before)
   container: { flex: 1, backgroundColor: COLORS.background },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },

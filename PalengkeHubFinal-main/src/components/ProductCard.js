@@ -1,13 +1,31 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { speak } from '../services/voiceService';
 
 export const ProductCard = ({ product, onPress, onAddToCart }) => {
+  const readAloud = () => {
+    speak(
+      `${product.name}. Presyo, ${product.price} pesos, bawat ${product.unit || 'unit'}.`,
+      { language: 'fil-PH' },
+    );
+  };
+
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress(product)}>
       <View style={styles.imagePlaceholder}>
         <Text style={styles.emoji}>🛒</Text>
       </View>
-      <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
+      <View style={styles.nameRow}>
+        <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
+        <TouchableOpacity
+          style={styles.speakButton}
+          onPress={readAloud}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="volume-medium-outline" size={16} color="#4CAF50" />
+        </TouchableOpacity>
+      </View>
       <Text style={styles.price}>₱{product.price}</Text>
       <Text style={styles.unit}>per {product.unit}</Text>
       <Text style={styles.stall}>Stall {product.stall?.stall_number}</Text>
@@ -44,11 +62,20 @@ const styles = StyleSheet.create({
   emoji: {
     fontSize: 32,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
   name: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
+  },
+  speakButton: {
+    padding: 2,
+    marginLeft: 4,
   },
   price: {
     fontSize: 18,

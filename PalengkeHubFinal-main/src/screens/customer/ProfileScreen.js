@@ -1,5 +1,6 @@
 // src/screens/customer/ProfileScreen.js
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,54 +16,29 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme, useColors } from '../../contexts/ThemeContext';
 import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import axios from 'axios';
-
-const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 export default function ProfileScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
   const { t, locale, changeLanguage } = useI18n();
   const { themeMode, setTheme } = useTheme();
   const { getFavoriteCount } = useFavorites();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
-  const [removingPhoto, setRemovingPhoto] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -105,30 +81,29 @@ export default function ProfileScreen({ navigation }) {
     if (!result.canceled) {
       setUploadingAvatar(true);
       try {
-        const uri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const uri = asset.uri;
         
-        const response = await fetch(uri);
-        const blob = await response.blob();
+        // Determine file extension
+        const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
+        const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
         
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64String = reader.result.split(',')[1];
-            resolve(base64String);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        
+        // Upload to uguu.se (free permanent image host — no API key needed)
         const formData = new FormData();
-        formData.append('image', base64);
+        // On web, asset.file is a File; on native, use the uri object
+        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
         
-        const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
-          params: { key: IMGBB_API_KEY },
-          headers: { 'Content-Type': 'multipart/form-data' }
+        const uploadResponse = await fetch('https://uguu.se/upload', {
+          method: 'POST',
+          body: formData,
         });
         
-        const avatarUrl = uploadResponse.data.data.url;
+        const uploadResult = await uploadResponse.json();
+        if (!uploadResult.success || !uploadResult.files?.length) {
+          throw new Error('Image host rejected the upload');
+        }
+        
+        const avatarUrl = uploadResult.files[0].url;
         console.log('✅ Avatar uploaded:', avatarUrl);
         
         const { error } = await supabase
@@ -164,6 +139,7 @@ export default function ProfileScreen({ navigation }) {
           onPress: async () => {
             setRemovingPhoto(true);
             try {
+              // Update profile in Supabase - set avatar_url to null
               const { error } = await supabase
                 .from('profiles')
                 .update({ avatar_url: null })
@@ -171,6 +147,7 @@ export default function ProfileScreen({ navigation }) {
               
               if (error) throw error;
               
+              // Refresh user profile
               await checkUser();
               setAvatarError(false);
               Alert.alert('Success', 'Profile photo removed successfully');
@@ -397,7 +374,7 @@ export default function ProfileScreen({ navigation }) {
               <View style={styles.avatarGradient}>
                 <ActivityIndicator size="large" color="white" />
               </View>
-            ) : profile?.avatar_url && !avatarError ? (
+            ) : hasProfilePhoto ? (
               <Image 
                 source={{ uri: profile.avatar_url }} 
                 style={styles.avatarImage}
@@ -425,12 +402,8 @@ export default function ProfileScreen({ navigation }) {
               {profile?.role === 'vendor' ? '🛍️ Vendor' : '🛒 Shopper'}
             </Text>
           </View>
-          <TouchableOpacity onPress={uploadAvatar} disabled={uploadingAvatar} style={styles.changePhotoBtn}>
-            <Text style={styles.changePhotoBtnText}>
-              {uploadingAvatar ? 'Uploading...' : 'Change Profile Photo'}
-            </Text>
-          </TouchableOpacity>
 
+          {/* ✅ REMOVED: The duplicate "Change Profile Photo" text button */}
           {/* ✅ ADDED: "Remove Photo" button - only shows when user has a profile photo */}
           {hasProfilePhoto && (
             <TouchableOpacity 
@@ -681,7 +654,7 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -697,13 +670,26 @@ const styles = StyleSheet.create({
   avatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#DC2626' },
   avatarEmoji: { fontSize: 48 },
   editAvatarBadge: {
-    position: 'absolute', bottom: 0, right: 0, backgroundColor: COLORS.primary, width: 34, height: 34, borderRadius: 17,
-    justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'white',
-    shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 4, elevation: 2,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  editAvatarBadgeText: { fontSize: 16 },
-  changePhotoBtn: { marginTop: 8, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.borderLight },
-  changePhotoBtnText: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
+  editAvatarBadgeText: {
+    fontSize: 16,
+  },
   // ✅ NEW STYLES: Remove Photo Button
   removePhotoBtn: {
     flexDirection: 'row',
@@ -722,14 +708,50 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
   },
-  guestName: { fontSize: 24, fontWeight: '800', color: COLORS.text.dark, marginBottom: 4 },
-  guestEmail: { fontSize: 14, color: COLORS.text.medium, marginBottom: 12 },
-  guestBadge: { backgroundColor: COLORS.accentSoft, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  guestBadgeText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
-  userName: { fontSize: 24, fontWeight: '800', color: COLORS.text.dark, marginBottom: 4 },
-  userEmail: { fontSize: 14, color: COLORS.text.medium, marginBottom: 12 },
-  roleBadge: { backgroundColor: COLORS.accentSoft, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  roleText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  guestName: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text.dark,
+    marginBottom: 4,
+  },
+  guestEmail: {
+    fontSize: 14,
+    color: COLORS.text.medium,
+    marginBottom: 12,
+  },
+  guestBadge: {
+    backgroundColor: COLORS.accentSoft,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  guestBadgeText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text.dark,
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: COLORS.text.medium,
+    marginBottom: 12,
+  },
+  roleBadge: {
+    backgroundColor: COLORS.accentSoft,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  roleText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
   benefitsCard: {
     backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, padding: 20, borderRadius: 20,
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,

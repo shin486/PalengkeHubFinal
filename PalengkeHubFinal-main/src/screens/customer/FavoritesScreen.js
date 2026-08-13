@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,18 +14,9 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
 
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: { dark: '#111827', medium: '#374151', light: '#6B7280', lighter: '#9CA3AF', white: '#FFFFFF' },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-};
-
 export default function FavoritesScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { t } = useI18n();
   const { user } = useAuth();
   const {
@@ -170,7 +162,7 @@ export default function FavoritesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   tabContainer: {
     flexDirection: 'row',

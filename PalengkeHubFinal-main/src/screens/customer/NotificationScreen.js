@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   SafeAreaView,
@@ -17,6 +18,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { notificationService } from '../../services/notificationService';
 
 export default function NotificationScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -206,7 +209,7 @@ export default function NotificationScreen({ navigation }) {
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backText}>←</Text>
@@ -215,7 +218,7 @@ export default function NotificationScreen({ navigation }) {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       </SafeAreaView>
     );
@@ -223,13 +226,13 @@ export default function NotificationScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       
       
       {notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <LinearGradient
-            colors={['#FEF3F2', '#FFFFFF']}
+            colors={[COLORS.accentSoft, COLORS.surface]}
             style={styles.emptyCard}
           >
             <Text style={styles.emptyIcon}>🔔</Text>
@@ -244,7 +247,7 @@ export default function NotificationScreen({ navigation }) {
           {unreadCount > 0 && (
             <TouchableOpacity style={styles.markAllButton} onPress={handleMarkAllAsRead}>
               <LinearGradient
-                colors={['#DC2626', '#EF4444']}
+                colors={[COLORS.primary, COLORS.primary]}
                 style={styles.markAllGradient}
               >
                 <Text style={styles.markAllText}>Mark all as read</Text>
@@ -258,7 +261,7 @@ export default function NotificationScreen({ navigation }) {
             renderItem={renderNotification}
             contentContainerStyle={styles.listContent}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
             }
             showsVerticalScrollIndicator={false}
           />
@@ -268,21 +271,21 @@ export default function NotificationScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   headerGradient: {
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
-    shadowColor: '#DC2626',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -306,13 +309,13 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 24,
-    color: 'white',
+    color: COLORS.text.inverse,
     fontWeight: '600',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   placeholder: {
     width: 40,
@@ -333,7 +336,7 @@ const styles = StyleSheet.create({
     padding: 40,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: COLORS.accentSoft,
   },
   emptyIcon: {
     fontSize: 60,
@@ -342,12 +345,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
   },
   markAllButton: {
@@ -364,13 +367,13 @@ const styles = StyleSheet.create({
   },
   markAllText: {
     fontSize: 12,
-    color: 'white',
+    color: COLORS.text.inverse,
     fontWeight: '600',
   },
   notificationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -380,23 +383,23 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: COLORS.surfaceSecondary,
   },
   unreadCard: {
-    backgroundColor: '#FEF3F2',
-    borderColor: '#FEE2E2',
+    backgroundColor: COLORS.accentSoft,
+    borderColor: COLORS.accentSoft,
   },
   notificationIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   cancellationIcon: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.accentSoft,
   },
   iconText: {
     fontSize: 24,
@@ -407,28 +410,28 @@ const styles = StyleSheet.create({
   notificationTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   unreadText: {
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   notificationMessage: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 4,
     lineHeight: 18,
   },
   notificationTime: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   deleteButton: {
     padding: 8,
   },
   deleteText: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   unreadDot: {
     position: 'absolute',
@@ -437,6 +440,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
   },
 });

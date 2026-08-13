@@ -19,7 +19,8 @@
     "try_again": "Try Again",
     "ok": "OK",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "closed": "Closed"
   },
   "auth": {
     "login": "Login",
@@ -71,7 +72,12 @@
     "check_back_later": "Check back later for discounts!",
     "start_shopping": "Start Shopping",
     "featured_stalls": "Featured Stalls",
-    "all_products": "All Products"
+    "all_products": "All Products",
+    "search": "Search",
+    "dont_miss_discounts": "Don't miss out on these discounts",
+    "recent_favorites": "Your recent favorites",
+    "items_now_cheaper": "Items you bought are now cheaper!",
+    "explore_vendors": "Explore vendors at Lipa City Public Market"
   },
   "categories": {
     "all": "All",
@@ -338,5 +344,11 @@
     "promotion": "Promotion",
     "chat": "Chat Message",
     "report_update": "Report Update"
+  },
+  "cart": {
+    "added": "Added to Cart",
+    "added_suffix": "added to your cart",
+    "continue_shopping": "Continue Shopping",
+    "view_cart": "View Cart"
   }
 }

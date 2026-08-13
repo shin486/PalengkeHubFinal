@@ -1,6 +1,7 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/SearchScreen.js
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,33 +20,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
+import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  gold: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 // Generate a stable pseudo-random rating seeded by stall id
 const getStallRating = (stallId, realRating) => {
@@ -78,8 +56,122 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   }
 };
 
+// Levenshtein distance — for "Did you mean?" fuzzy matching
+const levenshtein = (a, b) => {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1].toLowerCase() === b[j - 1].toLowerCase() ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+};
+
+// Cache of all product names for suggestions (avoids repeated DB hits)
+let productNamesCache = null;
+
+// ── Tagalog → English product synonyms (for elderly users searching in Tagalog) ──
+const TAGALOG_SYNONYMS = {
+  // Karne (meat)
+  baboy: ['pork'], 'karneng baboy': ['pork'], liempo: ['pork belly', 'liempo'],
+  kasim: ['pork shoulder'], pata: ['pork leg', 'pata'], atay: ['liver'],
+  manok: ['chicken'], baka: ['beef'], 'karneng baka': ['beef'], karne: ['meat'],
+  itik: ['duck'], pato: ['duck'], bibe: ['duck'], pabo: ['turkey'],
+  kambing: ['goat'], tupa: ['lamb'], longganisa: ['sausage', 'longganisa'],
+  sausage: ['sausage'], tocino: ['tocino', 'cured pork'], tapa: ['tapa', 'cured beef'],
+  hotdog: ['hotdog'], embutido: ['embutido', 'meatloaf'], 'corned beef': ['corned beef'],
+  // Isda (fish & seafood)
+  isda: ['fish'], bangus: ['milkfish', 'bangus'], tilapia: ['tilapia'],
+  galunggong: ['galunggong', 'mackerel'], hipon: ['shrimp'], sugpo: ['prawn'],
+  pusit: ['squid'], alimango: ['crab'], alimasag: ['crab'], ulang: ['crayfish', 'lobster'],
+  tahong: ['mussel'], talaba: ['oyster'], kuhol: ['snail'], suso: ['snail'],
+  dilis: ['anchovy'], tuyo: ['dried fish'], daing: ['dried fish'], danggit: ['dried fish'],
+  tinapa: ['smoked fish'], sardinas: ['sardines'], tamban: ['sardine'],
+  tuna: ['tuna'], salmon: ['salmon'], 'lapu-lapu': ['grouper', 'lapu-lapu'],
+  'maya-maya': ['red snapper'], talakitok: ['trevally'], 'hasa-hasa': ['mackerel'],
+  alumahan: ['mackerel'], 'matang baka': ['mackerel'], sapsap: ['ponyfish'],
+  hito: ['catfish'], kanduli: ['catfish'], dalag: ['mudfish'],
+  igat: ['eel'], palos: ['eel'],
+  // Gulay (vegetables)
+  gulay: ['vegetable', 'vegetables'], sibuyas: ['onion'], bawang: ['garlic'],
+  luya: ['ginger'], kamatis: ['tomato'], patatas: ['potato'], repolyo: ['cabbage'],
+  karot: ['carrot'], talong: ['eggplant'], okra: ['okra'],
+  sitaw: ['string beans', 'sitaw'], kalabasa: ['squash', 'pumpkin'],
+  ampalaya: ['bitter gourd', 'ampalaya'], kangkong: ['water spinach', 'kangkong'],
+  petsay: ['pechay', 'bok choy'], 'bok choy': ['bok choy'],
+  kamote: ['sweet potato', 'kamote'], 'kamote tops': ['sweet potato leaves', 'talbos'],
+  talbos: ['leaves', 'vegetable tops'], sayote: ['chayote', 'sayote'],
+  pipino: ['cucumber'], singkamas: ['jicama', 'singkamas'], labanos: ['radish'],
+  letsugas: ['lettuce'], broccoli: ['broccoli'], cauliflower: ['cauliflower'],
+  upo: ['bottle gourd'], patola: ['sponge gourd'], kundol: ['winter melon'],
+  sigarilyas: ['winged bean'], mani: ['peanut'], kasoy: ['cashew'],
+  munggo: ['mung bean'], 'mung beans': ['mung bean'], garbanzos: ['chickpeas'],
+  patani: ['lima bean'], kadyos: ['pigeon pea'], toge: ['bean sprouts'],
+  labong: ['bamboo shoots'], kabute: ['mushroom'], 'tenga ng daga': ['wood ear mushroom'],
+  'dahon ng sibuyas': ['spring onion', 'scallion'], kintsay: ['celery', 'parsley'],
+  kinchay: ['celery'], wansoy: ['cilantro', 'coriander'],
+  alugbati: ['malabar spinach'], saluyot: ['jute leaves'],
+  kangkong: ['water spinach'], malunggay: ['moringa', 'malunggay'],
+  tanglad: ['lemongrass', 'tanglad'],
+  // Prutas (fruits)
+  prutas: ['fruit', 'fruits'], saging: ['banana'], mangga: ['mango'],
+  pinya: ['pineapple'], pakwan: ['watermelon'], melon: ['melon'],
+  niyog: ['coconut'], kalamansi: ['calamansi'], dalandan: ['orange'],
+  dalanghita: ['mandarin', 'orange'], mansanas: ['apple'], ubas: ['grape'],
+  bayabas: ['guava'], langka: ['jackfruit'], atis: ['sugar apple', 'custard apple'],
+  chico: ['sapodilla'], lanzones: ['lanzones'], rambutan: ['rambutan'],
+  durian: ['durian'], guyabano: ['soursop', 'guyabano'], suha: ['pomelo'],
+  peras: ['pear'], sampalok: ['tamarind', 'sampalok'], kamias: ['bilimbi'],
+  santol: ['santol', 'cotton fruit'],
+  // Bigas at iba pa (rice & staples)
+  bigas: ['rice'], kanin: ['rice'], itlog: ['egg'],
+  asukal: ['sugar'], 'pulang asukal': ['brown sugar'], 'brown sugar': ['brown sugar'],
+  asin: ['salt'], suka: ['vinegar'], toyo: ['soy sauce'], patis: ['fish sauce'],
+  mantika: ['cooking oil', 'oil'], kape: ['coffee'], gatas: ['milk'],
+  keso: ['cheese'], 'kesong puti': ['white cheese', 'kesong puti'],
+  'keso de bola': ['edam cheese'], tinapay: ['bread'], harina: ['flour'],
+  arina: ['flour'], noodles: ['noodles'], pansit: ['noodles'], miswa: ['noodles'],
+  sotanghon: ['noodles'], gata: ['coconut milk'], 'kakang gata': ['coconut cream'],
+  kakanggata: ['coconut cream'], gawgaw: ['cornstarch'], cornstarch: ['cornstarch'],
+  'baking powder': ['baking powder'], 'baking soda': ['baking soda'],
+  pampaalsa: ['yeast'], yeast: ['yeast'], vetsin: ['msg', 'seasoning'],
+  // Pampalasa (herbs & spices)
+  'dahon ng laurel': ['bay leaf', 'bay leaves'], laurel: ['bay leaf', 'bay leaves'],
+  paminta: ['pepper', 'black pepper'], 'siling labuyo': ['chili', 'red chili'],
+  sili: ['chili', 'chili pepper'], 'siling haba': ['long chili', 'green chili'],
+  oregano: ['oregano'], basil: ['basil'], rosemary: ['rosemary'],
+  thyme: ['thyme'], cinnamon: ['cinnamon'], kanela: ['cinnamon'],
+  anis: ['anise'], cloves: ['cloves'], nutmeg: ['nutmeg'],
+};
+
+// Translate a Tagalog query into extra English search terms
+const translateQuery = (query) => {
+  const q = (query || '').toLowerCase();
+  const found = new Set();
+  for (const [tagalog, englishTerms] of Object.entries(TAGALOG_SYNONYMS)) {
+    if (q.includes(tagalog)) {
+      englishTerms.forEach(t => found.add(t));
+    }
+  }
+  return [...found];
+};
+
+// Build a PostgREST .or() filter string: original term + Tagalog translations
+const buildSearchFilter = (searchTerm) => {
+  const filters = [`name.ilike.%${searchTerm}%`];
+  const translated = translateQuery(searchTerm);
+  translated.forEach(term => filters.push(`name.ilike.%${term}%`));
+  return filters.join(',');
+};
+
 // Star rating component with Ionicons
 const StarRating = ({ rating, size = 12 }) => {
+  const COLORS = useColors();
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
@@ -100,14 +192,21 @@ const StarRating = ({ rating, size = 12 }) => {
 };
 
 export default function SearchScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isListening, setIsListening] = useState(false);
+
+  // Stop any active voice session when leaving the screen
+  useEffect(() => () => { stopListening(); }, []);
   const [productsData, setProductsData] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchType, setSearchType] = useState('products');
   const [recentSearches, setRecentSearches] = useState([]);
   const [showRecent, setShowRecent] = useState(true);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [suggestion, setSuggestion] = useState(null);
 
   const debounceTimer = useRef(null);
 
@@ -189,9 +288,132 @@ export default function SearchScreen({ navigation }) {
     await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
   };
 
-  const performSearch = async () => {
-    if (!searchQuery.trim()) return;
+
+  // Find the closest product name to a misspelled query (for "Did you mean?")
+  // Matches against individual words too (e.g. "brest" -> "chicken breast")
+  const findClosestProductName = async (query) => {
+    try {
+      if (!productNamesCache) {
+        const { data } = await supabase
+          .from('products')
+          .select('name')
+          .eq('is_available', true)
+          .limit(1000);
+        productNamesCache = (data || []).map(p => (p.name || '').trim()).filter(Boolean);
+      }
+      const q = (query || '').trim().toLowerCase();
+      if (!q || productNamesCache.length === 0) return null;
+
+      // Allow typos up to ~40% of the word length (minimum 1)
+      const threshold = Math.max(1, Math.floor(q.length * 0.4));
+
+      let bestName = null;
+      let bestDist = Infinity;
+
+      // 0. Compare against Tagalog dictionary words FIRST (e.g. "babow" -> "baboy")
+      //    so Tagalog typos beat unrelated English products like "bacon"
+      for (const tagalogWord of Object.keys(TAGALOG_SYNONYMS)) {
+        const tagalogDist = levenshtein(q, tagalogWord.toLowerCase());
+        if (tagalogDist < bestDist) {
+          bestDist = tagalogDist;
+          bestName = tagalogWord;
+        }
+        if (tagalogDist === 0) break;
+      }
+
+      // 1. Compare against English product names (full names and individual words)
+      for (const fullName of productNamesCache) {
+        const fullDist = levenshtein(q, fullName.toLowerCase());
+        if (fullDist < bestDist) {
+          bestDist = fullDist;
+          bestName = fullName;
+        }
+        if (fullDist === 0) break;
+
+        // 2. Compare against each word in the name (e.g. "brest" vs "breast" in "chicken breast")
+        const words = fullName.toLowerCase().split(/\s+/);
+        for (const word of words) {
+          if (word.length < 3) continue;
+          const wordDist = levenshtein(q, word);
+          if (wordDist < bestDist) {
+            bestDist = wordDist;
+            bestName = fullName;
+          }
+          if (wordDist === 0) break;
+        }
+        if (bestDist === 0) break;
+      }
+
+      if (bestName && bestDist > 0 && bestDist <= threshold) {
+        return bestName.toLowerCase();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Apply the "did you mean" suggestion
+  const applySuggestion = (suggestedName) => {
+    setSuggestion(null);
+    setSearchQuery(suggestedName);
+    performSearch(suggestedName);
+  };
+
+  // Voice search — speak in Tagalog or English and the results update live
+  const handleVoiceSearch = () => {
+    if (isListening) {
+      stopListening();
+      setIsListening(false);
+      return;
+    }
+    if (!isVoiceInputSupported()) {
+      Alert.alert(
+        'Voice Search',
+        'Voice search is not supported in this browser. Please type your search instead.',
+      );
+      return;
+    }
+    setIsListening(true);
+    const started = startListening({
+      language: 'tl-PH',
+      onResult: (text, isFinal) => {
+        if (!text) return;
+        setSearchQuery(text.trim());
+        if (isFinal) {
+          setIsListening(false);
+          performSearch(text.trim());
+        }
+      },
+      onEnd: () => setIsListening(false),
+      onError: (error) => {
+        console.warn('Voice recognition error:', error?.message);
+        setIsListening(false);
+        if (error?.message === 'not-allowed' || error?.message === 'service-not-allowed') {
+          Alert.alert(
+            'Voice Search',
+            'Microphone access was blocked. Please allow microphone permission in your browser and try again.',
+          );
+        } else if (error?.message === 'no-speech') {
+          Alert.alert('Voice Search', 'No speech detected. Please try again.');
+        } else if (error?.message !== 'aborted') {
+          Alert.alert('Voice Search', 'Could not understand the speech. Please try again or type instead.');
+        }
+      },
+    });
+    if (!started) {
+      setIsListening(false);
+      Alert.alert('Voice Search', 'Voice search could not be started. Please type instead.');
+    }
+  };
+
+  const performSearch = async (overrideQuery) => {
+    const query = (overrideQuery || searchQuery).trim();
+    if (!query) return;
     setLoading(true);
+    setSuggestion(null);
+    
+    const searchTerm = query;
 
     try {
       if (searchType === 'products') {
@@ -211,7 +433,7 @@ export default function SearchScreen({ navigation }) {
               average_rating
             )
           `)
-          .ilike('name', `%${searchQuery}%`)
+          .or(buildSearchFilter(searchTerm))
           .eq('is_available', true);
 
         if (error) throw error;
@@ -264,13 +486,69 @@ export default function SearchScreen({ navigation }) {
           }
           setProductsData(results);
         } else {
-          setProductsData([]);
+          // No exact match — try to find a close match ("Did you mean?")
+          const closest = await findClosestProductName(searchTerm);
+          if (closest && closest !== searchTerm.toLowerCase()) {
+            setSuggestion(closest);
+            // Show the corrected products below (same shape as normal search)
+            const { data: correctedData } = await supabase
+              .from('products')
+              .select(`
+                id, name, price, unit, stall_id,
+                stalls!inner (id, stall_number, stall_name, section, average_rating)
+              `)
+              .eq('is_available', true)
+              .or(buildSearchFilter(closest))
+              .limit(30);
+            if (correctedData && correctedData.length > 0) {
+              const correctedIds = correctedData.map(p => p.id);
+              const now = new Date().toISOString();
+              const { data: corrPromos } = await supabase
+                .from('promotions')
+                .select('*')
+                .in('product_id', correctedIds)
+                .eq('is_active', true)
+                .lte('start_date', now)
+                .gte('end_date', now);
+              const corrPromoMap = new Map();
+              if (corrPromos) corrPromos.forEach(p => corrPromoMap.set(p.product_id, p));
+              const correctedWithPromo = correctedData.map(product => {
+                const promotion = corrPromoMap.get(product.id);
+                const discountedPrice = getDiscountedPrice(product.price, promotion);
+                return {
+                  ...product,
+                  promotion,
+                  originalPrice: product.price,
+                  price: discountedPrice,
+                  hasPromotion: !!promotion,
+                };
+              });
+              const grouped = {};
+              correctedWithPromo.forEach(product => {
+                if (!grouped[product.name]) grouped[product.name] = [];
+                grouped[product.name].push(product);
+              });
+              const results = [];
+              for (const [productName, variants] of Object.entries(grouped)) {
+                variants.sort((a, b) => a.price - b.price);
+                results.push({ type: 'header', name: productName });
+                variants.forEach(variant => {
+                  results.push({ type: 'product', data: variant });
+                });
+              }
+              setProductsData(results);
+            } else {
+              setProductsData([]);
+            }
+          } else {
+            setProductsData([]);
+          }
         }
       } else if (searchType === 'stalls') {
         const { data, error } = await supabase
           .from('stalls')
           .select('*')
-          .or(`stall_number.ilike.%${searchQuery}%,stall_name.ilike.%${searchQuery}%,section.ilike.%${searchQuery}%`)
+          .or(`stall_number.ilike.%${searchTerm}%,stall_name.ilike.%${searchTerm}%,section.ilike.%${searchTerm}%`)
           .order('stall_number')
           .limit(50);
 
@@ -492,23 +770,42 @@ export default function SearchScreen({ navigation }) {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputWrapper}>
-          <Ionicons name="search-outline" size={20} color={COLORS.primary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products or stalls..."
-            placeholderTextColor={COLORS.text.lighter}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearchSubmit}
-            returnKeyType="search"
-            autoFocus
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <Ionicons name="close-circle" size={20} color={COLORS.text.lighter} />
+        <View style={styles.searchInputRow}>
+          <TouchableOpacity
+            style={styles.backArrow}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={22} color={COLORS.text.primary} />
+          </TouchableOpacity>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search-outline" size={20} color={COLORS.primary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={isListening ? 'Listening... speak now (Tagalog or English)' : 'Search products or stalls...'}
+              placeholderTextColor={isListening ? COLORS.primary : COLORS.text.lighter}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearchSubmit}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <Ionicons name="close-circle" size={20} color={COLORS.text.lighter} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={handleVoiceSearch}
+              style={[styles.micButton, isListening && styles.micButtonActive]}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isListening ? 'radio' : 'mic-outline'}
+                size={19}
+                color={isListening ? '#FFFFFF' : COLORS.primary}
+              />
             </TouchableOpacity>
-          )}
+          </View>
         </View>
       </View>
 
@@ -552,6 +849,23 @@ export default function SearchScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* "Did you mean?" suggestion banner */}
+      {suggestion && (
+        <View style={styles.suggestionBanner}>
+          <Ionicons name="bulb-outline" size={18} color={COLORS.warning} />
+          <Text style={styles.suggestionText}>
+            Did you mean <Text style={styles.suggestionHighlight}>"{suggestion}"</Text>?
+          </Text>
+          <TouchableOpacity
+            style={styles.suggestionButton}
+            onPress={() => applySuggestion(suggestion)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.suggestionButtonText}>Search</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Content */}
       {showRecent && !searchQuery ? (
         <ScrollView
@@ -589,17 +903,67 @@ export default function SearchScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  suggestionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: COLORS.warningSoft || '#FEF3C7',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.warning || '#F59E0B',
+    gap: 8,
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text.primary,
+  },
+  suggestionHighlight: {
+    fontWeight: '700',
+    color: '#B45309',
+    textTransform: 'capitalize',
+  },
+  suggestionButton: {
+    backgroundColor: COLORS.warning || '#F59E0B',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  suggestionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
   },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  backArrow: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   searchInputWrapper: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
@@ -623,6 +987,17 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     padding: 4,
+  },
+  micButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
+  },
+  micButtonActive: {
+    backgroundColor: COLORS.primary,
   },
   typeToggle: {
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 // src/screens/customer/HomeScreen.js
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   Alert,
   Image,
   Platform,
+  Animated,
+  Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,36 +22,13 @@ import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useI18n } from '../../contexts/i18nContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { SkeletonList } from '../../components/SkeletonCard';
+import { useLastViewed } from '../../hooks/useLastViewed';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.44;
-
-// ============================================================
-// COLORS - PalengkeHub Branding
-// ============================================================
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  card: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.04)',
-  shadowDark: 'rgba(0, 0, 0, 0.08)',
-};
 
 // ============================================================
 // SPACING CONSTANTS
@@ -79,7 +58,10 @@ const TypewriterPlaceholder = ({
   typingSpeed = 100,
   deletingSpeed = 50,
   pauseDelay = 1500,
-}) => {
+  }) => {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [displayText, setDisplayText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -122,7 +104,7 @@ const TypewriterPlaceholder = ({
 
   return (
     <Text style={styles.searchPlaceholder}>
-      Search <Text style={styles.searchPlaceholderDynamic}>{displayText}</Text>
+      {t('home.search')} <Text style={styles.searchPlaceholderDynamic}>{displayText}</Text>
       <Text style={styles.searchCursor}>|</Text>
     </Text>
   );
@@ -155,6 +137,8 @@ const StarRating = ({ rating, size = 12 }) => {
 // PRODUCT CARD COMPONENT
 // ============================================================
 const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
 
   return (
@@ -218,6 +202,9 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPro
 // STALL CARD COMPONENT
 // ============================================================
 const StallCard = ({ stall, onPress, isClosed = false }) => {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
   const displayRating = stall.average_rating || 3.5 + (stall.id % 3) * 0.5;
   const ratingCount = 20 + (stall.id % 80);
@@ -244,7 +231,7 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
           )}
           {isClosed && (
             <View style={styles.stallClosedBadge}>
-              <Text style={styles.stallClosedText}>Closed</Text>
+              <Text style={styles.stallClosedText}>{t('common.closed')}</Text>
             </View>
           )}
         </View>
@@ -266,7 +253,7 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
         </View>
 
         <View style={styles.stallArrow}>
-          <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </View>
       </View>
     </TouchableOpacity>
@@ -277,6 +264,9 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
 // PRICE DROP ITEM COMPONENT
 // ============================================================
 const PriceDropItem = ({ item, onPress }) => {
+  const { colors } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
 
   return (
@@ -299,7 +289,7 @@ const PriceDropItem = ({ item, onPress }) => {
           </View>
         )}
         <View style={styles.savingsBadge}>
-          <Text style={styles.savingsBadgeText}>Save ₱{item.savings.toFixed(2)}</Text>
+          <Text style={styles.savingsBadgeText}>{t('products.save')} ₱{item.savings.toFixed(2)}</Text>
         </View>
       </View>
 
@@ -333,6 +323,25 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const { addToCart } = useCart();
   const { setIsGuest } = route?.params || {};
   const { unreadCount } = useNotifications();
+  const { t } = useI18n();
+  const { colors, isDark } = useTheme();
+  const { items: lastViewedItems } = useLastViewed();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Add-to-cart toast animation
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastAnim = useRef(new Animated.Value(-100)).current;
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.spring(toastAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
+      Animated.delay(1800),
+      Animated.timing(toastAnim, { toValue: -120, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToastVisible(false));
+  };
 
   const searchPhrases = ['products', 'stalls', 'meat', 'vegetables', 'fruits', 'rice', 'chicken', 'fish'];
 
@@ -552,8 +561,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
   const handleAddToCart = (product, stall) => {
     if (!user && !isGuest) {
-      Alert.alert('Login Required', 'Please login to add items to cart', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
+        { text: t('common.cancel'), style: 'cancel' },
         { 
           text: 'Login', 
           onPress: () => { 
@@ -570,17 +579,16 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
     if (product && stall) {
       addToCart(product, stall.id, stall, 1);
-      Alert.alert('Added to Cart', `${product.name} added to your cart`, [
-        { text: 'Continue Shopping', style: 'cancel' },
-        { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
-      ]);
+      // Haptic feedback + animated toast
+      Vibration.vibrate(50);
+      showToast(`${product.name} added to cart`);
     }
   };
 
   const handleOrderAgain = (item) => {
     if (!user && !isGuest) {
-      Alert.alert('Login Required', 'Please login to add items to cart', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
+        { text: t('common.cancel'), style: 'cancel' },
         { 
           text: 'Login', 
           onPress: () => { 
@@ -605,7 +613,9 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     const stall = item.stall;
     if (product && stall) {
       addToCart(product, stall.id, stall, item.quantity);
-      Alert.alert('Added to Cart', `${item.quantity}x ${item.name} added to your cart`);
+      // Haptic feedback + animated toast
+      Vibration.vibrate(50);
+      showToast(`${item.quantity}× ${item.name} added to cart`);
     }
   };
 
@@ -625,28 +635,28 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} translucent={true} />
+        <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={true} />
         <LinearGradient
-          colors={[COLORS.primary, COLORS.primaryLight]}
+          colors={[colors.primary, colors.primaryLight]}
           style={{ paddingTop: Platform.OS === 'ios' ? 44 : 28, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}
         >
           <View style={{ height: 44 }} />
         </LinearGradient>
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingCategories} />
-          <View style={styles.loadingProducts} />
-        </View>
+        <ScrollView>
+          <SkeletonList count={4} />
+          <SkeletonList count={4} />
+        </ScrollView>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} translucent={true} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={true} />
       
       {/* ✅ Search Header with Notification Bell */}
       <LinearGradient
-        colors={[COLORS.primary, COLORS.primaryLight]}
+        colors={[colors.primary, colors.primaryLight]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.searchHeaderGradient}
@@ -694,8 +704,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh} 
-            colors={[COLORS.primary]} 
-            tintColor={COLORS.primary} 
+            colors={[colors.primary]} 
+            tintColor={colors.primary} 
           />
         }
       >
@@ -705,12 +715,12 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>Today's Deals</Text>
-              <Text style={styles.sectionSubtitle}>Don't miss out on these discounts</Text>
+              <Text style={styles.sectionTitle}>{t('home.todays_deals')}</Text>
+              <Text style={styles.sectionSubtitle}>{t('home.dont_miss_discounts')}</Text>
             </View>
             {promoProducts.length > 0 && (
               <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'promos' })}>
-                <Text style={styles.sectionLink}>See All</Text>
+                <Text style={styles.sectionLink}>{t('home.see_all')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -718,8 +728,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           {promoProducts.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="pricetag-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No deals right now</Text>
-              <Text style={styles.emptyStateText}>Check back later for discounts!</Text>
+              <Text style={styles.emptyStateTitle}>{t('home.no_deals')}</Text>
+              <Text style={styles.emptyStateText}>{t('home.check_back_later')}</Text>
             </View>
           ) : (
             <ScrollView 
@@ -750,17 +760,55 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         </View>
 
         {/* ============================================================
+            RECENTLY VIEWED
+        ============================================================ */}
+        {lastViewedItems.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>👁️ Recently Viewed</Text>
+                <Text style={styles.sectionSubtitle}>Pick up where you left off</Text>
+              </View>
+            </View>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            >
+              {lastViewedItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.productCard, { marginRight: SPACING.md }]}
+                  onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri: item.image }}
+                    style={styles.productImage}
+                  />
+                  <View style={styles.productInfo}>
+                    <Text numberOfLines={2} style={styles.productName}>{item.name}</Text>
+                    <Text numberOfLines={1} style={styles.productStall}>{item.stall_name}</Text>
+                    <Text style={styles.productPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ============================================================
             BUY AGAIN (Logged-in users only)
         ============================================================ */}
         {!isGuest && user && recentOrderItems.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Buy Again</Text>
-                <Text style={styles.sectionSubtitle}>Your recent favorites</Text>
+                <Text style={styles.sectionTitle}>{t('home.buy_again')}</Text>
+                <Text style={styles.sectionSubtitle}>{t('home.recent_favorites')}</Text>
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('Orders')}>
-                <Text style={styles.sectionLink}>See All</Text>
+                <Text style={styles.sectionLink}>{t('home.see_all')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -794,11 +842,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Price Drop Alert</Text>
-                <Text style={styles.sectionSubtitle}>Items you bought are now cheaper!</Text>
+                <Text style={styles.sectionTitle}>{t('home.price_drop_alert')}</Text>
+                <Text style={styles.sectionSubtitle}>{t('home.items_now_cheaper')}</Text>
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'products' })}>
-                <Text style={styles.sectionLink}>See All</Text>
+                <Text style={styles.sectionLink}>{t('home.see_all')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -824,8 +872,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         <View style={[styles.section, styles.lastSection]}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>Market Stalls</Text>
-              <Text style={styles.sectionSubtitle}>Explore vendors at Lipa City Public Market</Text>
+              <Text style={styles.sectionTitle}>{t('home.market_stalls')}</Text>
+              <Text style={styles.sectionSubtitle}>{t('home.explore_vendors')}</Text>
             </View>
           </View>
 
@@ -856,7 +904,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 isClosed={stall.is_temporarily_closed}
                 onPress={() => {
                   if (stall.is_temporarily_closed) {
-                    Alert.alert('Store Closed', 'This stall is temporarily closed. Please check back later.');
+                    Alert.alert(t('stalls.temporarily_closed'), t('stalls.temporarily_closed_msg'));
                     return;
                   }
                   navigation.navigate('StallDetails', { stallId: stall.id });
@@ -868,6 +916,21 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Add-to-Cart Toast */}
+      {toastVisible && (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
+          <View style={styles.toastContent}>
+            <View style={styles.toastIcon}>
+              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.toastTextWrap}>
+              <Text style={styles.toastTitle}>Added to Cart</Text>
+              <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -875,13 +938,57 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 // ============================================================
 // STYLES
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingTop: 50,
+    paddingHorizontal: 16,
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  toastIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#22C55E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  toastTextWrap: {
+    flex: 1,
+  },
+  toastTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  toastSubtitle: {
+    color: '#D1D5DB',
+    fontSize: 13,
+    marginTop: 2,
   },
 
   loadingContainer: {
@@ -991,18 +1098,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: COLORS.text.dark,
+    color: colors.text.primary,
     letterSpacing: -0.5,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: COLORS.text.light,
+    color: colors.text.tertiary,
     marginTop: 2,
   },
   sectionLink: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: colors.primary,
   },
 
   horizontalList: {
@@ -1017,16 +1124,16 @@ const styles = StyleSheet.create({
 
   // ── Product Cards ──
   productCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADIUS.md,
     overflow: 'hidden',
-    shadowColor: COLORS.shadow,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
     elevation: 2,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: colors.borderLight,
     marginBottom: SPACING.md,
     position: 'relative',
     width: CARD_WIDTH,
@@ -1054,7 +1161,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: SPACING.sm,
     left: SPACING.sm,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: RADIUS.sm,
@@ -1074,7 +1181,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   productPriceRow: {
@@ -1087,20 +1194,20 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: colors.primary,
   },
   productOriginalPrice: {
     fontSize: 12,
-    color: COLORS.text.lighter,
+    color: colors.text.tertiaryer,
     textDecorationLine: 'line-through',
   },
   productUnit: {
     fontSize: 11,
-    color: COLORS.text.light,
+    color: colors.text.tertiary,
   },
   productVendor: {
     fontSize: 11,
-    color: COLORS.text.light,
+    color: colors.text.tertiary,
   },
   addToCartButton: {
     position: 'absolute',
@@ -1109,10 +1216,10 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.shadowDark,
+    shadowColor: colors.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
@@ -1122,16 +1229,16 @@ const styles = StyleSheet.create({
   // ── Price Drop Cards ──
   priceDropCard: {
     width: CARD_WIDTH,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADIUS.md,
     overflow: 'hidden',
-    shadowColor: COLORS.shadow,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
     elevation: 2,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: colors.borderLight,
     marginBottom: SPACING.md,
   },
   priceDropImageWrapper: {
@@ -1157,7 +1264,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: SPACING.sm,
     left: SPACING.sm,
-    backgroundColor: COLORS.success,
+    backgroundColor: colors.success,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: RADIUS.sm,
@@ -1175,7 +1282,7 @@ const styles = StyleSheet.create({
   priceDropName: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: colors.text.primary,
     marginBottom: 4,
   },
   priceDropPriceRow: {
@@ -1186,17 +1293,17 @@ const styles = StyleSheet.create({
   },
   priceDropOldPrice: {
     fontSize: 12,
-    color: COLORS.text.lighter,
+    color: colors.text.tertiaryer,
     textDecorationLine: 'line-through',
   },
   priceDropNewPrice: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.success,
+    color: colors.success,
   },
   priceDropVendor: {
     fontSize: 11,
-    color: COLORS.text.light,
+    color: colors.text.tertiary,
   },
 
   // ── Filter Chips ──
@@ -1208,24 +1315,24 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
+    borderColor: colors.border,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 1,
     shadowRadius: 3,
     elevation: 1,
   },
   filterChipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.text.medium,
+    color: colors.text.secondary,
   },
   filterChipTextActive: {
     color: '#FFFFFF',
@@ -1236,16 +1343,16 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   stallCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: RADIUS.md,
     padding: SPACING.lg,
-    shadowColor: COLORS.shadow,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
     elevation: 2,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: colors.borderLight,
     marginBottom: SPACING.md,
   },
   stallCardClosed: {
@@ -1263,13 +1370,13 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.borderLight,
+    backgroundColor: colors.borderLight,
   },
   stallImagePlaceholder: {
     width: 56,
     height: 56,
     borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.borderLight,
+    backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1296,7 +1403,7 @@ const styles = StyleSheet.create({
   stallName: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: colors.text.primary,
     marginBottom: 2,
   },
   stallMetaRow: {
@@ -1308,17 +1415,17 @@ const styles = StyleSheet.create({
   stallNumber: {
     fontSize: 12,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: colors.primary,
   },
   stallMetaDot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: COLORS.text.lighter,
+    backgroundColor: colors.text.tertiaryer,
   },
   stallSection: {
     fontSize: 12,
-    color: COLORS.text.light,
+    color: colors.text.tertiary,
   },
   stallRatingRow: {
     flexDirection: 'row',
@@ -1328,17 +1435,17 @@ const styles = StyleSheet.create({
   stallRatingText: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.warning,
+    color: colors.warning,
   },
   stallRatingCount: {
     fontSize: 11,
-    color: COLORS.text.lighter,
+    color: colors.text.tertiaryer,
   },
   stallArrow: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.primarySurface,
+    backgroundColor: colors.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1347,19 +1454,19 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 48,
-    backgroundColor: COLORS.primarySurface,
+    backgroundColor: colors.accentSoft,
     borderRadius: RADIUS.md,
     marginVertical: SPACING.sm,
   },
   emptyStateTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: colors.text.primary,
     marginTop: SPACING.md,
   },
   emptyStateText: {
     fontSize: 13,
-    color: COLORS.text.medium,
+    color: colors.text.secondary,
     marginTop: SPACING.xs,
   },
 

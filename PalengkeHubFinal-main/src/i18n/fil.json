@@ -19,7 +19,8 @@
     "try_again": "Subukang Muli",
     "ok": "OK",
     "yes": "Oo",
-    "no": "Hindi"
+    "no": "Hindi",
+    "closed": "Sarado"
   },
   "auth": {
     "login": "Mag-login",
@@ -71,7 +72,12 @@
     "check_back_later": "Bumalik mamaya para sa mga diskwento!",
     "start_shopping": "Magsimulang Mamili",
     "featured_stalls": "Mga Tampok na Puwesto",
-    "all_products": "Lahat ng Produkto"
+    "all_products": "Lahat ng Produkto",
+    "search": "Maghanap",
+    "dont_miss_discounts": "Huwag palampasin ang mga diskwento na ito",
+    "recent_favorites": "Ang iyong mga kamakailang paborito",
+    "items_now_cheaper": "Mas mura na ang mga binili mo!",
+    "explore_vendors": "Tuklasin ang mga tindera sa Pamilihang Bayan ng Lipa"
   },
   "categories": {
     "all": "Lahat",
@@ -338,5 +344,11 @@
     "promotion": "Promosyon",
     "chat": "Mensahe sa Chat",
     "report_update": "Update sa Report"
+  },
+  "cart": {
+    "added": "Idinagdag sa Cart",
+    "added_suffix": "idinagdag sa iyong cart",
+    "continue_shopping": "Magpatuloy sa Pamimili",
+    "view_cart": "Tingnan ang Cart"
   }
 }

@@ -1,6 +1,7 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/ChatDetailScreen.js
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,6 +26,8 @@ import { useChat } from '../../hooks/useChat';
 // ✅ REMOVED: import { Header } from '../../components/Header';
 
 export default function ChatDetailScreen({ navigation, route }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { conversationId, stall, vendor, userRole = 'customer' } = route.params;
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
@@ -208,7 +211,7 @@ export default function ChatDetailScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       
       {/* ✅ CUSTOM HEADER - Replaces the global Header */}
       <View style={styles.customHeader}>
@@ -217,7 +220,7 @@ export default function ChatDetailScreen({ navigation, route }) {
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Ionicons name="chevron-back" size={28} color="#1F2937" />
+          <Ionicons name="chevron-back" size={28} color={COLORS.text.primary} />
         </TouchableOpacity>
         
         <View style={styles.headerInfo}>
@@ -237,14 +240,14 @@ export default function ChatDetailScreen({ navigation, route }) {
         </View>
         
         <TouchableOpacity style={styles.headerAction} activeOpacity={0.7}>
-          <Ionicons name="ellipsis-vertical" size={22} color="#6B7280" />
+          <Ionicons name="ellipsis-vertical" size={22} color={COLORS.text.tertiary} />
         </TouchableOpacity>
       </View>
 
       {/* Messages */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : (
         <FlatList
@@ -284,7 +287,7 @@ export default function ChatDetailScreen({ navigation, route }) {
           <TextInput
             style={styles.input}
             placeholder="Type a message..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.text.quaternary}
             value={messageText}
             onChangeText={setMessageText}
             onSubmitEditing={handleSend}
@@ -299,13 +302,13 @@ export default function ChatDetailScreen({ navigation, route }) {
             disabled={uploadingImage}
           >
             <LinearGradient
-              colors={['#10B981', '#059669']}
+              colors={[COLORS.success, COLORS.success]}
               style={styles.imageGradient}
             >
               {uploadingImage ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
+                <Ionicons name="camera-outline" size={22} color={COLORS.surface} />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -316,13 +319,13 @@ export default function ChatDetailScreen({ navigation, route }) {
             disabled={sending || !messageText.trim()}
           >
             <LinearGradient
-              colors={['#DC2626', '#EF4444']}
+              colors={[COLORS.primary, COLORS.primary]}
               style={styles.sendGradient}
             >
               {sending ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Ionicons name="send" size={22} color="#FFFFFF" />
+                <Ionicons name="send" size={22} color={COLORS.surface} />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -340,7 +343,7 @@ export default function ChatDetailScreen({ navigation, route }) {
             style={styles.modalCloseButton}
             onPress={() => setImageModalVisible(false)}
           >
-            <Ionicons name="close" size={24} color="#FFFFFF" />
+            <Ionicons name="close" size={24} color={COLORS.surface} />
           </TouchableOpacity>
           {selectedImage && (
             <Image 
@@ -355,10 +358,10 @@ export default function ChatDetailScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
@@ -377,9 +380,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.surfaceSecondary,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -399,14 +402,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   headerText: {
     marginLeft: 12,
@@ -415,11 +418,11 @@ const styles = StyleSheet.create({
   vendorName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: COLORS.text.primary,
   },
   vendorStatus: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   headerAction: {
     padding: 8,
@@ -445,11 +448,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   myBubble: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     borderBottomRightRadius: 4,
   },
   theirBubble: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     borderBottomLeftRadius: 4,
   },
   messageText: {
@@ -457,15 +460,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   myMessageText: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   theirMessageText: {
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   messageTime: {
     fontSize: 10,
     marginTop: 4,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
     textAlign: 'right',
   },
   chatImage: {
@@ -473,14 +476,14 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     marginBottom: 4,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.surfaceSecondary,
   },
 
   // ── Suggested Messages ──
   suggestedContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     paddingVertical: 8,
   },
   suggestedContent: {
@@ -488,7 +491,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   suggestedButton: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -496,22 +499,22 @@ const styles = StyleSheet.create({
   },
   suggestedText: {
     fontSize: 13,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
 
   // ── Input ──
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     alignItems: 'flex-end',
     gap: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,

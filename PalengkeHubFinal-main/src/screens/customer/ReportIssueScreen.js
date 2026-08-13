@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,10 +17,10 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 const reportTypes = [
-  { id: 'product', label: '🚫 Product Issue', icon: '📦', color: '#EF4444' },
+  { id: 'product', label: '🚫 Product Issue', icon: '📦', color: '#C62828' },
   { id: 'vendor', label: '🏪 Vendor Problem', icon: '👤', color: '#F59E0B' },
   { id: 'order', label: '📋 Order Issue', icon: '🛒', color: '#3B82F6' },
-  { id: 'payment', label: '💳 Payment Problem', icon: '💰', color: '#10B981' },
+  { id: 'payment', label: '💳 Payment Problem', icon: '💰', color: '#22C55E' },
   { id: 'other', label: 'Other Concerns', icon: '📝', color: '#8B5CF6' },
 ];
 
@@ -66,6 +67,8 @@ const reasons = {
 };
 
 export default function ReportIssueScreen({ navigation, route }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const [selectedType, setSelectedType] = useState(null);
   const [selectedReason, setSelectedReason] = useState('');
@@ -275,7 +278,7 @@ export default function ReportIssueScreen({ navigation, route }) {
               disabled={loading}
             >
               <LinearGradient
-                colors={['#EF4444', '#DC2626']}
+                colors={[COLORS.primary, COLORS.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.submitGradient}
@@ -303,10 +306,10 @@ export default function ReportIssueScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   header: {
     padding: 24,
@@ -317,7 +320,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
     marginBottom: 8,
   },
   headerSubtitle: {
@@ -326,7 +329,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   section: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     marginTop: 16,
     marginHorizontal: 16,
     padding: 16,
@@ -340,7 +343,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 12,
   },
   reportTypesGrid: {
@@ -350,16 +353,16 @@ const styles = StyleSheet.create({
   },
   reportTypeCard: {
     width: '30%',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     borderTopWidth: 3,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   reportTypeCardActive: {
-    backgroundColor: '#FEF2F2',
-    borderTopColor: '#EF4444',
+    backgroundColor: COLORS.accentSoft,
+    borderTopColor: COLORS.primary,
   },
   reportTypeIcon: {
     fontSize: 28,
@@ -368,18 +371,18 @@ const styles = StyleSheet.create({
   reportTypeLabel: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#4B5563',
+    color: COLORS.text.secondary,
     textAlign: 'center',
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   textArea: {
     minHeight: 120,
@@ -387,7 +390,7 @@ const styles = StyleSheet.create({
   },
   helperText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 4,
   },
   reasonsList: {
@@ -398,18 +401,18 @@ const styles = StyleSheet.create({
   reasonChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: 20,
   },
   reasonChipActive: {
-    backgroundColor: '#EF4444',
+    backgroundColor: COLORS.primary,
   },
   reasonChipText: {
     fontSize: 13,
-    color: '#4B5563',
+    color: COLORS.text.secondary,
   },
   reasonChipTextActive: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   submitButton: {
     marginHorizontal: 16,
@@ -423,13 +426,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: {
-    color: 'white',
+    color: COLORS.text.inverse,
     fontSize: 18,
     fontWeight: '600',
   },
   infoNote: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     marginHorizontal: 16,
     marginBottom: 32,
     padding: 16,

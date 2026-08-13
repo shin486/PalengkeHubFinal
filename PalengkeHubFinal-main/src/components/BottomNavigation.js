@@ -299,6 +299,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 28,
     marginBottom: 2,
+    overflow: 'visible',
   },
   tabLabel: {
     fontSize: 10,

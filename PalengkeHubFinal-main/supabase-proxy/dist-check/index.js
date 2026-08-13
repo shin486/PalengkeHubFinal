@@ -2,7 +2,7 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // src/index.ts
-var SUPABASE_URL = "https://qpmauvmhrdlpbbbaevk.supabase.co";
+var SUPABASE_URL = "https://jjpgmpufwpbgqjzqymvj.supabase.co";
 var ALLOWED_ORIGINS = "*";
 function isOriginAllowed(origin) {
   if (ALLOWED_ORIGINS === "*")

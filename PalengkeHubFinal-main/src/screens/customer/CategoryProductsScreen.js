@@ -1,6 +1,7 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/CategoryProductsScreen.js
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,28 +27,6 @@ const { width } = Dimensions.get('window');
 // ============================================================
 // COLORS
 // ============================================================
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.04)',
-  shadowDark: 'rgba(0, 0, 0, 0.08)',
-  gold: '#F59E0B',
-};
 
 const SPACING = {
   xs: 4,
@@ -126,6 +105,7 @@ const getStallRating = (stallId) => {
 // STAR RATING COMPONENT
 // ============================================================
 const StarRating = ({ rating, size = 12 }) => {
+  const COLORS = useColors();
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
@@ -149,6 +129,7 @@ const StarRating = ({ rating, size = 12 }) => {
 // PRODUCT CARD COMPONENT
 // ============================================================
 const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPromotion }) => {
+  const COLORS = useColors();
   const [imageError, setImageError] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const rating = getStallRating(stall?.id || 0);
@@ -248,6 +229,7 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPr
 // STALL GROUP CARD (for grouped view)
 // ============================================================
 const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewStall }) => {
+  const COLORS = useColors();
   const rating = getStallRating(stall.id);
   
   return (
@@ -377,6 +359,8 @@ const SkeletonLoader = () => {
 // MAIN COMPONENT
 // ============================================================
 export default function CategoryProductsScreen({ route, navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { categoryName } = route.params;
   const [products, setProducts] = useState([]);
   const [stalls, setStalls] = useState([]);
@@ -863,7 +847,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
 // ============================================================
 // STYLES
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

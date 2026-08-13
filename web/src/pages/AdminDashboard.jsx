@@ -255,9 +255,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/admin-login'); return; }
+      if (!session) { navigate('/admin-login', { replace: true }); return; }
       const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', session.user.id).single();
-      if (!profile || profile.role !== 'admin') { await supabase.auth.signOut(); navigate('/admin-login'); return; }
+      if (!profile || profile.role !== 'admin') { await supabase.auth.signOut(); navigate('/admin-login', { replace: true }); return; }
       setAdminName(profile.full_name || 'Admin');
       setLoading(false);
     })();
