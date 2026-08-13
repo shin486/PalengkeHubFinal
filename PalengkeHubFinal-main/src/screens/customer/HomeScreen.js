@@ -328,6 +328,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
   const [priceTrends, setPriceTrends] = useState(new Map());
+  const [topRatedStalls, setTopRatedStalls] = useState([]);
 
   const loadPriceTrends = async (products) => {
     const ids = (products || []).map(p => p.id).filter(Boolean);
@@ -335,6 +336,48 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     const trends = await fetchPriceTrends(ids);
     if (trends.size > 0) {
       setPriceTrends(prev => new Map([...prev, ...trends]));
+    }
+  };
+
+  // Top-rated stalls from real customer ratings (publicly readable table)
+  const fetchTopRatedStalls = async () => {
+    try {
+      const { data: ratings } = await supabase
+        .from('ratings')
+        .select('stall_id, rating')
+        .limit(1000);
+      if (!ratings || ratings.length === 0) return;
+
+      const stats = new Map();
+      for (const r of ratings) {
+        if (!r.stall_id) continue;
+        const s = stats.get(r.stall_id) || { count: 0, sum: 0 };
+        s.count += 1;
+        s.sum += parseFloat(r.rating) || 0;
+        stats.set(r.stall_id, s);
+      }
+
+      const topIds = [...stats.entries()]
+        .sort((a, b) => (b[1].count - a[1].count) || ((b[1].sum / b[1].count) - (a[1].sum / a[1].count)))
+        .slice(0, 5)
+        .map(([id]) => id);
+      if (topIds.length === 0) return;
+
+      const { data: stallsData } = await supabase
+        .from('stalls')
+        .select('*')
+        .in('id', topIds)
+        .eq('is_active', true);
+      if (!stallsData || stallsData.length === 0) return;
+
+      const list = stallsData.map(s => ({
+        ...s,
+        average_rating: Math.round((stats.get(s.id).sum / stats.get(s.id).count) * 10) / 10,
+        total_ratings: stats.get(s.id).count,
+      }));
+      setTopRatedStalls(list);
+    } catch (e) {
+      console.warn('fetchTopRatedStalls failed:', e);
     }
   };
   
@@ -378,6 +421,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .eq('is_active', true)
         .order('stall_number');
       setStalls(stallsData || []);
+      fetchTopRatedStalls();
 
       const now = new Date().toISOString();
       const { data: promosData } = await supabase
@@ -885,6 +929,41 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                   item={item}
                   onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
                 />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ============================================================
+            TOP-RATED STALLS (from real customer ratings)
+        ============================================================ */}
+        {topRatedStalls.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>⭐ {t('home.top_rated_stalls')}</Text>
+                <Text style={styles.sectionSubtitle}>{t('home.top_rated_subtitle')}</Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalListWithMargin}
+            >
+              {topRatedStalls.map(stall => (
+                <View key={stall.id} style={{ width: CARD_WIDTH + 40 }}>
+                  <StallCard
+                    stall={stall}
+                    isClosed={stall.is_temporarily_closed}
+                    onPress={() => {
+                      if (stall.is_temporarily_closed) {
+                        Alert.alert(t('stalls.temporarily_closed'), t('stalls.temporarily_closed_msg'));
+                        return;
+                      }
+                      navigation.navigate('StallDetails', { stallId: stall.id });
+                    }}
+                  />
+                </View>
               ))}
             </ScrollView>
           </View>

@@ -77,7 +77,9 @@
     "dont_miss_discounts": "Huwag palampasin ang mga diskwento na ito",
     "recent_favorites": "Ang iyong mga kamakailang paborito",
     "items_now_cheaper": "Mas mura na ang mga binili mo!",
-    "explore_vendors": "Tuklasin ang mga tindera sa Pamilihang Bayan ng Lipa"
+    "explore_vendors": "Tuklasin ang mga tindera sa Pamilihang Bayan ng Lipa",
+    "top_rated_stalls": "Mga Pinagkakatiwalaang Tindahan",
+    "top_rated_subtitle": "Pinagkakatiwalaan ng mga mamimili"
   },
   "categories": {
     "all": "Lahat",
@@ -112,7 +114,9 @@
     "view_stall": "Tingnan ang Detalye ng Puwesto",
     "report_product": "I-report ang Produktong Ito",
     "report_note": "May nakitang problema sa produktong ito? Ipaalam sa amin para maimbestigahan.",
-    "status": "Katayuan"
+    "status": "Katayuan",
+    "share": "Ibahagi",
+    "share_copied": "Na-kopya sa clipboard!"
   },
   "cart": {
     "title": "Shopping Cart",
@@ -210,6 +214,10 @@
     "ready_for_pickup": "Handa na para sa Pickup",
     "ready_pickup_msg": "Handa na ang iyong order! Mangyaring kunin ito sa puwesto.",
     "show_screen_to_vendor": "Ipakita ang screen na ito sa tindera.",
+    "pickup_pass": "Pickup Pass",
+    "pickup_title": "PICKUP PASS",
+    "show_phone_to_vendor": "Pakita po ito sa tindera",
+    "pickup_hint": "Hindi na kailangang magpaliwanag — ipakita lang ang screen na ito.",
     "proposal_title": "Nagmungkahi ang Tindera ng Pagbabago",
     "accept": "Tanggapin",
     "reject": "Tanggihan"

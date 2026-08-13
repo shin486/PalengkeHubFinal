@@ -26,6 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
+import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
 
 const { width, height } = Dimensions.get('window');
@@ -53,6 +54,7 @@ export default function CheckoutScreen({ navigation, route }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { cart: hookCart, cartTotal: hookTotal, clearCart } = useCart();
+  const { t } = useI18n();
   
   const cart = route.params?.cart || hookCart;
   const cartTotal = route.params?.cartTotal || hookTotal;
@@ -499,7 +501,7 @@ const handleGcashModalClose = () => {
         {/* Order Summary */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Order Summary</Text>
+            <Text style={styles.sectionTitle}>{t('checkout.order_summary')}</Text>
             <Text style={styles.sectionCount}>{Object.keys(groupedOrders).length} stall(s)</Text>
           </View>
           
@@ -617,7 +619,7 @@ const handleGcashModalClose = () => {
 
         {/* Payment Method */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <Text style={styles.sectionTitle}>{t('checkout.payment_method')}</Text>
           <Text style={styles.sectionSubtitle}>Pay securely using GCash</Text>
           
           <View style={styles.gcashPaymentCard}>
@@ -653,7 +655,7 @@ const handleGcashModalClose = () => {
 
         {/* Special Instructions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Special Instructions</Text>
+          <Text style={styles.sectionTitle}>{t('checkout.special_instructions')}</Text>
           <Text style={styles.sectionSubtitle}>Any notes for the vendor?</Text>
           <TextInput
             style={styles.instructionsInput}
@@ -686,7 +688,7 @@ const handleGcashModalClose = () => {
               <>
                 <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                 <Text style={styles.placeOrderText}>
-                  Place Order & Pay via GCash
+                  {t('checkout.place_order_gcash')}
                   {Object.keys(groupedOrders).length > 1 && ` (${Object.keys(groupedOrders).length} vendors)`}
                 </Text>
               </>

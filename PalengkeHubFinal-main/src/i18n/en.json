@@ -77,7 +77,9 @@
     "dont_miss_discounts": "Don't miss out on these discounts",
     "recent_favorites": "Your recent favorites",
     "items_now_cheaper": "Items you bought are now cheaper!",
-    "explore_vendors": "Explore vendors at Lipa City Public Market"
+    "explore_vendors": "Explore vendors at Lipa City Public Market",
+    "top_rated_stalls": "Top-Rated Stalls",
+    "top_rated_subtitle": "Trusted by our shoppers"
   },
   "categories": {
     "all": "All",
@@ -112,7 +114,9 @@
     "view_stall": "View Stall Details",
     "report_product": "Report this Product",
     "report_note": "Found an issue with this product? Let us know so we can investigate.",
-    "status": "Status"
+    "status": "Status",
+    "share": "Share",
+    "share_copied": "Copied to clipboard!"
   },
   "cart": {
     "title": "Shopping Cart",
@@ -210,6 +214,10 @@
     "ready_for_pickup": "Ready for Pickup",
     "ready_pickup_msg": "Your order is ready! Please pick it up at the stall.",
     "show_screen_to_vendor": "Show this screen to the vendor.",
+    "pickup_pass": "Pickup Pass",
+    "pickup_title": "PICKUP PASS",
+    "show_phone_to_vendor": "Show this screen to the vendor",
+    "pickup_hint": "No need to explain — just show this screen.",
     "proposal_title": "Vendor Proposed a Change",
     "accept": "Accept",
     "reject": "Reject"

@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { EmptyState } from '../../components/EmptyState';
 import { useCart } from '../../hooks/useCart';
+import { useI18n } from '../../contexts/i18nContext';
 import CheckoutContent from '../../components/CheckoutContent';
 
 const TABS = {
@@ -28,6 +29,7 @@ export default function CartScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
+  const { t } = useI18n();
   const [refreshing, setRefreshing] = useState(false);
   const [hasClosedStall, setHasClosedStall] = useState(false);
   const [closedStallNames, setClosedStallNames] = useState([]);
@@ -154,9 +156,9 @@ export default function CartScreen({ navigation }) {
     return (
       <EmptyState
         icon="cart-outline"
-        title="Your cart is empty"
-        subtitle="Add items from the market to get started"
-        actionLabel="Start Shopping"
+        title={t('cart.empty')}
+        subtitle={t('cart.empty_subtitle')}
+        actionLabel={t('home.start_shopping')}
         onAction={() => navigation.navigate('Home')}
         colors={{
           icon: COLORS.text.tertiary || '#9CA3AF',
@@ -318,7 +320,7 @@ export default function CartScreen({ navigation }) {
         <View style={styles.footer}>
           <View style={styles.footerRow}>
             <View style={styles.footerTotalLeft}>
-              <Text style={styles.footerTotalLabel}>Total</Text>
+              <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
               <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
             </View>
             <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
@@ -327,13 +329,13 @@ export default function CartScreen({ navigation }) {
           {hasClosedStall ? (
             <View style={styles.checkoutDisabledArea}>
               <View style={styles.disabledCheckoutButton}>
-                <Text style={styles.disabledCheckoutText}>Checkout Unavailable</Text>
+                <Text style={styles.disabledCheckoutText}>{t('cart.checkout_unavailable')}</Text>
               </View>
               <TouchableOpacity 
                 style={styles.removeClosedButton}
                 onPress={removeItemsFromClosedStalls}
               >
-                <Text style={styles.removeClosedButtonText}>Remove closed stall items</Text>
+                <Text style={styles.removeClosedButtonText}>{t('cart.remove_closed_items')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -343,7 +345,7 @@ export default function CartScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
-                <Text style={styles.checkoutButtonText}>Proceed to Checkout →</Text>
+                <Text style={styles.checkoutButtonText}>{t('cart.proceed_checkout')} →</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}

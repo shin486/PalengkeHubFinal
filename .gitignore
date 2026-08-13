@@ -33,6 +33,7 @@ pin-pad-test.js
 search-logic-test.js
 smoke-test.js
 ui-search-test.js
+feature-test.js
 
 # ── OS junk ──
 Thumbs.db

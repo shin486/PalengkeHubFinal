@@ -19,6 +19,8 @@ import { supabase } from '../../../lib/supabase';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/i18nContext';
+import { shareProduct } from '../../services/shareService';
 import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useLastViewed } from '../../hooks/useLastViewed';
@@ -227,6 +229,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const { user, isGuest, setIsGuest } = useAuth();
   const { addToCart } = useCart();
+  const { t } = useI18n();
   const { isProductFavorite, toggleProductFavorite } = useFavorites();
   const { add: addLastViewed } = useLastViewed();
 
@@ -688,9 +691,25 @@ export default function ProductDetailsScreen({ route, navigation }) {
       <View style={styles.productInfo}>
         <View style={styles.productTitleRow}>
           <Text style={styles.productName}>{product.name}</Text>
-          <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
-            <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => shareProduct({
+                name: product.name,
+                price: currentPrice,
+                unit: getUnitDisplayText(selectedUnit),
+                stallName: stall?.stall_name,
+                stallNumber: stall?.stall_number,
+                onCopied: () => Alert.alert(t('products.share'), t('products.share_copied')),
+              })}
+              style={styles.favBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.favIcon}>↗️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
+              <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.priceRow}>
@@ -1125,7 +1144,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             style={styles.buttonGradient}
           >
             <Text style={styles.buttonText}>
-              {product?.is_available ? `Add to Cart (₱${totalPrice.toFixed(2)})` : 'Out of Stock'}
+              {product?.is_available ? `${t('products.add_to_cart')} (₱${totalPrice.toFixed(2)})` : t('products.out_of_stock')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>

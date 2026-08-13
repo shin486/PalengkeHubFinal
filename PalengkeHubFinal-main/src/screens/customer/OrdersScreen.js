@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrders } from '../../hooks/useOrders';
 import { useCart } from '../../hooks/useCart';
+import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
 import { EmptyState } from '../../components/EmptyState';
 import { OrderTimeline } from '../../components/OrderTimeline';
@@ -65,6 +66,7 @@ export default function OrdersScreen({ navigation }) {
   const { user, isGuest } = useAuth();
   const { orders, loading, newOrderAlert, refreshOrders } = useOrders();
   const { addToCart } = useCart();
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState('active');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStall, setSelectedStall] = useState(null);
@@ -666,15 +668,16 @@ export default function OrdersScreen({ navigation }) {
   };
 
   const getStatusText = (status) => {
-    switch (status) {
-      case 'pending': return '⏳ Pending - Waiting for vendor confirmation';
-      case 'confirmed': return '✅ Confirmed - Vendor accepted your order';
-      case 'preparing': return '👨‍🍳 Preparing - Vendor is preparing your items';
-      case 'ready': return '🛎️ Ready for Pickup - Come pick up your order!';
-      case 'completed': return '📦 Completed - Order fulfilled';
-      case 'cancelled': return '❌ Cancelled';
-      default: return status;
-    }
+    const icons = {
+      pending: '⏳',
+      confirmed: '✅',
+      preparing: '👨‍🍳',
+      ready: '🛎️',
+      completed: '📦',
+      cancelled: '❌',
+    };
+    const text = t(`orders.status.${status}`, status);
+    return `${icons[status] || ''} ${text}`;
   };
 
   const formatDate = (dateString) => {
@@ -953,22 +956,18 @@ export default function OrdersScreen({ navigation }) {
           </>
         )}
 
-        {order.status === 'ready' && (
+        {['ready', 'confirmed', 'preparing'].includes(order.status) && (
           <TouchableOpacity 
             style={styles.pickupButton}
-            onPress={() => {
-              Alert.alert(
-                'Ready for Pickup',
-                `Your order is ready! Please pick it up at:\n\n${stall.stall_name || 'Market Stall'}\nStall #${stall.stall_number || 'N/A'}\n${stall.section || 'Unknown Section'}\n\nShow this screen to the vendor.`,
-                [{ text: 'OK' }]
-              );
-            }}
+            onPress={() => navigation.navigate('PickupPass', { order, stall })}
           >
             <LinearGradient
-              colors={['#10B981', '#059669']}
+              colors={order.status === 'ready' ? ['#10B981', '#059669'] : [COLORS.primary, COLORS.primaryLight]}
               style={styles.pickupGradient}
             >
-              <Text style={styles.pickupButtonText}>📦 Ready for Pickup</Text>
+              <Text style={styles.pickupButtonText}>
+                {order.status === 'ready' ? `📦 ${t('orders.ready_for_pickup')}` : `📋 ${t('orders.pickup_pass')}`}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -1041,7 +1040,7 @@ export default function OrdersScreen({ navigation }) {
             onPress={() => setActiveTab('active')}
           >
             <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
-              Active ({activeOrders.length})
+              {t('orders.active')} ({activeOrders.length})
             </Text>
           </TouchableOpacity>
           
@@ -1050,14 +1049,14 @@ export default function OrdersScreen({ navigation }) {
             onPress={() => setActiveTab('completed')}
           >
             <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-              History ({completedOrders.length})
+              {t('orders.history')} ({completedOrders.length})
             </Text>
           </TouchableOpacity>
         </View>
         
         {activeTab === 'completed' && completedOrders.length > 0 && (
           <TouchableOpacity onPress={clearAllHistory} style={styles.clearAllButton}>
-            <Text style={styles.clearAllButtonText}>Clear All</Text>
+            <Text style={styles.clearAllButtonText}>{t('orders.clear_history')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1072,9 +1071,9 @@ export default function OrdersScreen({ navigation }) {
         {displayOrders.length === 0 ? (
           <EmptyState
             icon="receipt-outline"
-            title={activeTab === 'active' ? 'No Active Orders' : 'No Order History'}
-            subtitle={activeTab === 'active' ? 'Place an order to see it here' : 'Your completed orders will appear here'}
-            actionLabel="Start Shopping"
+            title={activeTab === 'active' ? t('orders.no_active') : t('orders.no_history')}
+            subtitle={activeTab === 'active' ? t('orders.place_order_prompt') : t('orders.history_prompt')}
+            actionLabel={t('home.start_shopping')}
             onAction={() => navigation.navigate('Home')}
             colors={{
               icon: COLORS.text.tertiary || '#9CA3AF',

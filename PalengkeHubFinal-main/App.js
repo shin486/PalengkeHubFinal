@@ -48,6 +48,7 @@ import OrdersScreen from './src/screens/customer/OrdersScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
 import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
+import PickupPassScreen from './src/screens/customer/PickupPassScreen';
 import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
@@ -440,6 +441,7 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
+      <Stack.Screen name="PickupPass" component={PickupPassScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         

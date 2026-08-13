@@ -23,6 +23,7 @@ import { supabase } from '../../../lib/supabase';
 import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { useI18n } from '../../contexts/i18nContext';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
@@ -199,6 +200,7 @@ export default function SearchScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [priceTrends, setPriceTrends] = useState(new Map());
+  const { t } = useI18n();
 
   // Stop any active voice session when leaving the screen
   useEffect(() => () => { stopListening(); }, []);
@@ -736,7 +738,7 @@ export default function SearchScreen({ navigation }) {
       <View style={styles.recentHeader}>
         <View style={styles.recentHeaderLeft}>
           <Ionicons name="time-outline" size={18} color={COLORS.primary} />
-          <Text style={styles.recentTitle}>Recent Searches</Text>
+          <Text style={styles.recentTitle}>{t('search.recent_searches')}</Text>
         </View>
         {recentSearches.length > 0 && (
           <TouchableOpacity onPress={clearRecentSearches} activeOpacity={0.7}>
@@ -747,8 +749,8 @@ export default function SearchScreen({ navigation }) {
       {recentSearches.length === 0 ? (
         <View style={styles.noRecentContainer}>
           <Ionicons name="search-outline" size={48} color={COLORS.text.lighter} />
-          <Text style={styles.noRecentText}>No recent searches</Text>
-          <Text style={styles.noRecentSubtext}>Your searches will appear here</Text>
+          <Text style={styles.noRecentText}>{t('search.no_recent')}</Text>
+          <Text style={styles.noRecentSubtext}>{t('search.recent_subtitle')}</Text>
         </View>
       ) : (
         recentSearches.map((item, index) => (
@@ -779,7 +781,7 @@ export default function SearchScreen({ navigation }) {
       <View style={styles.emptyIconContainer}>
         <Ionicons name="search-outline" size={56} color={COLORS.primary} />
       </View>
-      <Text style={styles.emptyTitle}>No results found</Text>
+      <Text style={styles.emptyTitle}>{t('common.no_results')}</Text>
       <Text style={styles.emptyText}>Try searching with a different keyword</Text>
     </View>
   );
@@ -802,7 +804,7 @@ export default function SearchScreen({ navigation }) {
             <Ionicons name="search-outline" size={20} color={COLORS.primary} />
             <TextInput
               style={styles.searchInput}
-              placeholder={isListening ? 'Listening... speak now (Tagalog or English)' : 'Search products or stalls...'}
+              placeholder={isListening ? 'Listening... speak now (Tagalog or English)' : t('search.placeholder')}
               placeholderTextColor={isListening ? COLORS.primary : COLORS.text.lighter}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -845,7 +847,7 @@ export default function SearchScreen({ navigation }) {
           >
             <Ionicons name="cube-outline" size={16} color={searchType === 'products' ? '#FFFFFF' : COLORS.text.medium} />
             <Text style={[styles.toggleText, searchType === 'products' && styles.toggleTextActive]}>
-              Products
+              {t('search.products_tab')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -863,7 +865,7 @@ export default function SearchScreen({ navigation }) {
           >
             <Ionicons name="storefront-outline" size={16} color={searchType === 'stalls' ? '#FFFFFF' : COLORS.text.medium} />
             <Text style={[styles.toggleText, searchType === 'stalls' && styles.toggleTextActive]}>
-              Stalls
+              {t('search.stalls_tab')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
