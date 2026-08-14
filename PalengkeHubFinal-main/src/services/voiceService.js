@@ -2,6 +2,8 @@
 // Works on web (browser SpeechRecognition / SpeechSynthesis) and falls back
 // gracefully on native (expo-speech for TTS; expo-speech-recognition if installed).
 import { Platform } from 'react-native';
+import { SpeechRecognition as CapacitorSpeechRecognition } from '@capacitor-community/speech-recognition';
+import { Capacitor } from '@capacitor/core';
 
 // ── Text-to-speech ──
 let ExpoSpeech = null;
@@ -61,6 +63,59 @@ try {
   NativeVoice = null;
 }
 
+// Capacitor native runtime: the Android app loads this web bundle inside a
+// Capacitor WebView, where the browser SpeechRecognition API does not exist.
+// In that case use the @capacitor-community/speech-recognition plugin.
+const isCapacitorNative = () => {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch (e) {
+    return false;
+  }
+};
+
+const startCapacitorListening = async (plugin, { language, onResult, onEnd, onError }) => {
+  try {
+    if (plugin.removeAllListeners) {
+      try {
+        await plugin.removeAllListeners();
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (plugin.addListener) {
+      await plugin.addListener('partialResults', (data) => {
+        const matches = (data && data.matches) || [];
+        if (matches.length && onResult) onResult(matches[0], false);
+      });
+      await plugin.addListener('listeningState', (data) => {
+        if (data && data.status === 'stopped' && onEnd) onEnd();
+      });
+    }
+    if (plugin.requestPermissions) {
+      const perm = await plugin.requestPermissions();
+      if (perm && perm.speechRecognition !== 'granted') {
+        if (onError) onError(new Error('not-allowed'));
+        return false;
+      }
+    }
+    const result = await plugin.start({
+      language: (language || 'tl-PH').replace(/_/g, '-'),
+      maxResults: 5,
+      partialResults: true,
+      popup: false,
+    });
+    const matches = (result && result.matches) || [];
+    if (matches.length && onResult) onResult(matches[0], true);
+    if (onEnd) onEnd();
+    return true;
+  } catch (e) {
+    console.warn('Capacitor speech recognition failed:', (e && e.message) || e);
+    if (onError) onError(e);
+    return false;
+  }
+};
+
 let webRecognition = null;
 
 const getWebRecognition = () => {
@@ -75,6 +130,7 @@ const getWebRecognition = () => {
 };
 
 export const isVoiceInputSupported = () => {
+  if (isCapacitorNative()) return true;
   if (Platform.OS === 'web') return !!getWebRecognition();
   return !!NativeVoice;
 };
@@ -84,6 +140,10 @@ export const isVoiceInputSupported = () => {
  * onResult(text, isFinal) is called as the user speaks.
  */
 export const startListening = ({ language = 'tl-PH', onResult, onEnd, onError } = {}) => {
+  if (isCapacitorNative()) {
+    startCapacitorListening(CapacitorSpeechRecognition, { language, onResult, onEnd, onError });
+    return true;
+  }
   if (Platform.OS === 'web') {
     const rec = getWebRecognition();
     if (!rec) {
@@ -149,6 +209,14 @@ export const startListening = ({ language = 'tl-PH', onResult, onEnd, onError } 
 };
 
 export const stopListening = () => {
+  if (isCapacitorNative()) {
+    try {
+      CapacitorSpeechRecognition.stop();
+    } catch (e) {
+      // ignore
+    }
+    return;
+  }
   if (Platform.OS === 'web') {
     try {
       if (webRecognition) webRecognition.stop();

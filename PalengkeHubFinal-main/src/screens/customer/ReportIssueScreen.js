@@ -334,7 +334,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginHorizontal: 16,
     padding: 16,
     borderRadius: 16,
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -445,7 +445,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: '#92400E',
+    color: COLORS.warning,
     lineHeight: 18,
   },
 });

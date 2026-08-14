@@ -79,7 +79,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
   const nextStep = getNextStatus(order.status);
   const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled';
   const canReject = order.status === 'pending';
-  const canRequestPayment = order.status === 'confirmed' && order.payment_status !== 'verified' && order.payment_status !== 'paid';
+  const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
   const canProposeChange = order.status === 'pending';
   const paymentNeedsVerification = order.payment_status === 'awaiting_verification';
 

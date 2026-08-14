@@ -1100,13 +1100,13 @@ const createStyles = (colors) => StyleSheet.create({
   },
   loadingCategories: {
     height: 100,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: RADIUS.md,
     marginBottom: SPACING.lg,
   },
   loadingProducts: {
     height: 200,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: RADIUS.md,
   },
 
@@ -1243,7 +1243,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   productImageWrapper: {
     position: 'relative',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
     padding: SPACING.md,
     height: 100,
   },
@@ -1251,13 +1251,13 @@ const createStyles = (colors) => StyleSheet.create({
     width: '100%',
     height: 80,
     borderRadius: RADIUS.sm,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
   },
   productImagePlaceholder: {
     height: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
     borderRadius: RADIUS.sm,
   },
   discountBadge: {
@@ -1346,7 +1346,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   priceDropImageWrapper: {
     position: 'relative',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
     padding: SPACING.md,
     height: 100,
   },
@@ -1354,13 +1354,13 @@ const createStyles = (colors) => StyleSheet.create({
     width: '100%',
     height: 80,
     borderRadius: RADIUS.sm,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
   },
   priceDropImagePlaceholder: {
     height: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.inputBg,
     borderRadius: RADIUS.sm,
   },
   savingsBadge: {

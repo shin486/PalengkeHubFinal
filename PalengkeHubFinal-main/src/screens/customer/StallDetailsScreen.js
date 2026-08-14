@@ -1123,7 +1123,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.inputBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -1187,7 +1187,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   // ── Modal Styles - Updated ──
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
   },
   modalHeader: {
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
@@ -1238,7 +1238,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   modalMapWrapper: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
+    backgroundColor: COLORS.background,
   },
   modalFooter: {
     padding: 16,

@@ -682,6 +682,10 @@ export default function ProfileScreen({ navigation }) {
             </LinearGradient>
           </TouchableOpacity>
         )}
+        {/* VERSION LABEL */}
+        <View style={styles.versionContainer}>
+          <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
+        </View>
       </ScrollView>
 
       {/* Theme Picker Modal */}
@@ -769,7 +773,7 @@ export default function ProfileScreen({ navigation }) {
                 <TextInput
                   style={styles.pinInput}
                   placeholder="Email o phone"
-                  placeholderTextColor="#B0A99F"
+                  placeholderTextColor={COLORS.text.lighter}
                   value={pinIdentifier}
                   onChangeText={(v) => { setPinIdentifier(v); setPinError(''); }}
                   autoCapitalize="none"
@@ -778,7 +782,7 @@ export default function ProfileScreen({ navigation }) {
                 <TextInput
                   style={styles.pinInput}
                   placeholder="Password"
-                  placeholderTextColor="#B0A99F"
+                  placeholderTextColor={COLORS.text.lighter}
                   value={pinPassword}
                   onChangeText={(v) => { setPinPassword(v); setPinError(''); }}
                   secureTextEntry
@@ -786,7 +790,7 @@ export default function ProfileScreen({ navigation }) {
                 {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
                 {hasPin && (
                   <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
-                    <Text style={[styles.langCancelText, { color: '#DC2626', fontWeight: '600' }]}>Tanggalin ang PIN</Text>
+                    <Text style={[styles.langCancelText, { color: COLORS.error, fontWeight: '600' }]}>Tanggalin ang PIN</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -805,7 +809,7 @@ export default function ProfileScreen({ navigation }) {
                 <TextInput
                   style={styles.pinInput}
                   placeholder="● ● ● ●"
-                  placeholderTextColor="#B0A99F"
+                  placeholderTextColor={COLORS.text.lighter}
                   value={newPin}
                   onChangeText={(v) => { setNewPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
                   keyboardType="number-pad"
@@ -831,7 +835,7 @@ export default function ProfileScreen({ navigation }) {
                 <TextInput
                   style={styles.pinInput}
                   placeholder="● ● ● ● (ulitin)"
-                  placeholderTextColor="#B0A99F"
+                  placeholderTextColor={COLORS.text.lighter}
                   value={confirmPin}
                   onChangeText={(v) => { setConfirmPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
                   keyboardType="number-pad"
@@ -1008,6 +1012,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   logoutButton: { marginHorizontal: 16, marginBottom: 30, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   logoutGradient: { paddingVertical: 14, alignItems: 'center' },
   logoutButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  versionContainer: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  versionText: {
+    fontSize: 12,
+    color: COLORS.text.lighter,
+    letterSpacing: 0.3,
+  },
   // Menu styles
   menuSection: { backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, borderRadius: 20, overflow: 'hidden' },
   menuItem: {
@@ -1015,34 +1029,34 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.borderLight,
   },
   menuItemIcon: { fontSize: 20, width: 28, textAlign: 'center' },
-  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: '#333' },
-  languageValue: { fontSize: 13, color: '#1a5f28', fontWeight: '600', marginRight: 8 },
-  chevron: { fontSize: 20, color: '#ccc' },
+  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: COLORS.text.dark },
+  languageValue: { fontSize: 13, color: COLORS.success, fontWeight: '600', marginRight: 8 },
+  chevron: { fontSize: 20, color: COLORS.text.lighter },
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+  modalContent: { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
   langOption: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16,
-    borderRadius: 12, marginBottom: 8, backgroundColor: '#f5f5f5',
+    borderRadius: 12, marginBottom: 8, backgroundColor: COLORS.surfaceSecondary,
   },
-  langOptionActive: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#1a5f28' },
+  langOptionActive: { backgroundColor: COLORS.successLight, borderWidth: 1, borderColor: COLORS.success },
   langOptionText: { fontSize: 16, fontWeight: '500' },
-  langCheck: { fontSize: 18, color: '#1a5f28', fontWeight: '700' },
+  langCheck: { fontSize: 18, color: COLORS.success, fontWeight: '700' },
   langCancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
-  langCancelText: { color: '#888', fontSize: 15 },
-  pinHint: { fontSize: 13, color: '#888', marginBottom: 12, lineHeight: 19 },
+  langCancelText: { color: COLORS.text.light, fontSize: 15 },
+  pinHint: { fontSize: 13, color: COLORS.text.light, marginBottom: 12, lineHeight: 19 },
   pinInput: {
     borderWidth: 1.5,
-    borderColor: '#E4D3C8',
+    borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 22,
     letterSpacing: 8,
     textAlign: 'center',
-    color: '#333',
+    color: COLORS.text.dark,
     marginBottom: 8,
   },
-  pinError: { color: '#DC2626', fontSize: 13, marginBottom: 8, fontWeight: '600' },
+  pinError: { color: COLORS.error, fontSize: 13, marginBottom: 8, fontWeight: '600' },
 });

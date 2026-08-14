@@ -1,6 +1,6 @@
 // src/components/CheckoutContent.js
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,32 +18,52 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../hooks/useCart';
+import { useColors } from '../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
+import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../utils/receiptScanner';
 
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  warning: '#F59E0B',
-  gcash: '#007DFE',
-  gcashLight: '#E8F4FF',
-  shadow: 'rgba(0, 0, 0, 0.04)',
-  shadowDark: 'rgba(0, 0, 0, 0.08)',
+// Theme-aware colors are provided by ThemeContext via useColors().
+
+// Downscale an image (data URI or blob URI) to a compressed JPEG data URI using
+// a canvas, so receipts stay small when stored directly on the order (fallback
+// for when Supabase storage buckets are unavailable).
+const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
+  try {
+    if (typeof document === 'undefined') return Promise.resolve(uri);
+    const img = document.createElement('img');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return Promise.resolve(uri);
+    return new Promise((resolve) => {
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (!w || !h) {
+            resolve(uri);
+            return;
+          }
+          const scale = Math.min(1, maxDim / Math.max(w, h));
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          resolve(uri);
+        }
+      };
+      img.onerror = () => resolve(uri);
+      img.src = uri;
+    });
+  } catch (e) {
+    return Promise.resolve(uri);
+  }
 };
 
 const SPACING = {
@@ -67,6 +87,8 @@ const RADIUS = {
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
   const { clearCart } = useCart();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
   const [loading, setLoading] = useState(false);
   const [pickupTime, setPickupTime] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
@@ -81,6 +103,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   const [allPaymentsCompleted, setAllPaymentsCompleted] = useState(false);
   const [gcashReceiptUploading, setGcashReceiptUploading] = useState(false);
   const [gcashSubmitting, setGcashSubmitting] = useState(false);
+  const [gcashScanStatus, setGcashScanStatus] = useState(null);
+  const [gcashScanError, setGcashScanError] = useState(null);
   
   // ✅ Each vendor has their own timer (stored in the payment object)
   const gcashTimerRef = useRef(null);
@@ -152,35 +176,81 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
   // Handle GCash modal close
   const handleGcashModalClose = () => {
-    // Check if any vendor is still unpaid
-    const hasUnpaid = gcashPayments.some(p => !p.isPaid && !p.isExpired);
-    
-    if (hasUnpaid) {
-      Alert.alert(
-        'Payment Pending',
-        'You have unpaid vendors. You can continue paying or view your orders later.',
-        [
-          { text: 'Continue Paying', style: 'cancel' },
-          { 
-            text: 'Go to Orders', 
-            onPress: () => {
-              if (gcashTimerRef.current) {
-                clearInterval(gcashTimerRef.current);
-              }
-              setGcashModalVisible(false);
-              navigation.navigate('Orders');
-            }
-          }
-        ]
-      );
-    } else {
-      setGcashModalVisible(false);
+    // Close the modal directly. Multi-button Alerts don't render their buttons
+    // on the app's web runtime, so a confirmation dialog here would appear to
+    // do nothing. The per-vendor 10-minute timer keeps running and expires
+    // unpaid orders as before.
+    setGcashModalVisible(false);
+  };
+
+  // Photograph the GCash receipt with the device camera (camera-first flow).
+  const takeGcashReceiptFromCamera = async (index) => {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const photo = await Camera.getPhoto({
+          resultType: CameraResultType.Base64,
+          source: CameraSource.Camera,
+          quality: 70,
+          correctOrientation: true,
+        });
+        if (photo && photo.base64String) {
+          const dataUri = `data:image/jpeg;base64,${photo.base64String}`;
+          setGcashPayments(prev => {
+            const updated = [...prev];
+            updated[index].receiptUri = dataUri;
+            return updated;
+          });
+        }
+        return;
+      }
+      // Web fallback: browser camera picker.
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        allowsEditing: false,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setGcashPayments(prev => {
+          const updated = [...prev];
+          updated[index].receiptUri = result.assets[0].uri;
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('Error taking receipt photo:', error);
+      pickGcashReceipt(index);
     }
   };
 
   // Pick GCash receipt image for a specific vendor
   const pickGcashReceipt = async (index) => {
     try {
+      // Native Android app (Capacitor): use the @capacitor/camera plugin to open
+      // the system gallery picker, which asks the user to grant access to their
+      // photos before they can choose a receipt image.
+      if (Capacitor.isNativePlatform()) {
+        const photo = await Camera.getPhoto({
+          resultType: CameraResultType.Base64,
+          source: CameraSource.Photos,
+          quality: 70,
+          correctOrientation: true,
+        });
+        if (photo && photo.base64String) {
+          const dataUri = `data:image/jpeg;base64,${photo.base64String}`;
+          setGcashPayments(prev => {
+            const updated = [...prev];
+            updated[index].receiptUri = dataUri;
+            return updated;
+          });
+        }
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
@@ -214,17 +284,29 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       const blob = await response.blob();
       const fileName = `receipt_${Date.now()}_${stallId}.jpg`;
       const folder = `gcash_receipts/${user.id}/${stallId}`;
-      const { data, error } = await supabase.storage
-        .from('vendor_documents')
-        .upload(`${folder}/${fileName}`, blob, {
-          cacheControl: '3600',
-          contentType: 'image/jpeg',
-        });
-      if (error) throw error;
-      const { data: urlData } = supabase.storage
-        .from('vendor_documents')
-        .getPublicUrl(data.path);
-      return urlData?.publicUrl || null;
+
+      // Preferred path: upload to Supabase storage.
+      try {
+        const { data, error } = await supabase.storage
+          .from('vendor_documents')
+          .upload(`${folder}/${fileName}`, blob, {
+            cacheControl: '3600',
+            contentType: 'image/jpeg',
+          });
+        if (!error && data) {
+          const { data: urlData } = supabase.storage
+            .from('vendor_documents')
+            .getPublicUrl(data.path);
+          return urlData?.publicUrl || null;
+        }
+        console.warn('Storage upload failed (bucket missing?), embedding receipt on the order instead:', error?.message || error);
+      } catch (e) {
+        console.warn('Storage upload failed (bucket missing?), embedding receipt on the order instead:', e?.message || e);
+      }
+
+      // Fallback: no storage buckets configured yet, so keep the compressed
+      // receipt attached directly to the order so payment can still be confirmed.
+      return await imageToCompressedDataUri(uri);
     } catch (error) {
       console.error('Error uploading receipt:', error);
       Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
@@ -234,50 +316,158 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     }
   };
 
-  // ✅ Submit payment for current vendor
+  // ✅ Submit payment for current vendor — scans the receipt, cross-checks the
+  // reference number/amount/timestamp, checks for reuse, then submits the order
+  // for VENDOR verification (it is NOT auto-marked as paid).
   const handleSubmitPayment = async (index) => {
     const payment = gcashPayments[index];
-    
-    if (!payment.referenceNumber || payment.referenceNumber.trim().length < 6) {
-      Alert.alert('Missing Reference Number', 'Please enter the GCash reference number from your payment.');
+    const referenceDigits = normalizeReference(payment.referenceNumber);
+
+    if (!isValidGcashReference(referenceDigits)) {
+      Alert.alert('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
       return;
     }
     if (!payment.receiptUri) {
-      Alert.alert('Missing Receipt', 'Please upload a screenshot of your GCash receipt.');
+      Alert.alert('Missing Receipt', 'Please take a photo of your GCash receipt.');
       return;
     }
-    
+    if (payment.isProcessing) return;
+
     setGcashPayments(prev => {
       const updated = [...prev];
       updated[index].isProcessing = true;
       return updated;
     });
-    
+    setGcashScanError(null);
+    setGcashScanStatus('🔍 Scanning receipt…');
+
     try {
+      // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
+      let scan = null;
+      try {
+        scan = await scanReceipt(payment.receiptUri);
+      } catch (scanError) {
+        console.error('Receipt scan failed:', scanError);
+        setGcashScanError('We could not scan your receipt. Please check your internet connection and try again, or retake a clearer photo.');
+        Alert.alert(
+          'Receipt Scan Unavailable',
+          'We could not scan your receipt. Please check your internet connection and try again.\n\nIf the problem continues, retake a clearer photo of the receipt.'
+        );
+        return;
+      }
+
+      // 2) Reference / amount / timestamp cross-checks
+      const oldestAllowed = new Date(Date.now() - 20 * 60 * 1000);
+      const validation = validateReceiptScan({
+        typedReference: referenceDigits,
+        scan,
+        expectedAmount: payment.total || 0,
+        oldestAllowedTime: oldestAllowed,
+      });
+
+      if (!validation.refMatched) {
+        const found = validation.clueReferences.length
+          ? validation.clueReferences.join(', ')
+          : validation.digitCandidates.length
+            ? validation.digitCandidates.join(', ')
+            : 'no number sequence found';
+        setGcashScanError(`We scanned your receipt and could not find the reference number you typed.\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`);
+        Alert.alert(
+          'Reference Number Not Found on Receipt',
+          `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}\n\nPlease fix your reference number or upload a clearer photo of the correct receipt.`
+        );
+        return;
+      }
+      if (!validation.amountMatched) {
+        const amountReason = validation.amounts.length === 0
+          ? `We could not find the total amount on your receipt. Please upload a clearer photo that shows the amount sent (should be ₱${(payment.total || 0).toFixed(2)}).`
+          : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match this vendor's total (₱${(payment.total || 0).toFixed(2)}).`;
+        setGcashScanError(amountReason);
+        Alert.alert(
+          'Receipt Amount Problem',
+          `${amountReason}\n\nPlease upload the receipt for THIS payment.`
+        );
+        return;
+      }
+      if (!validation.timeOk) {
+        setGcashScanError(
+          validation.timeProblem === 'future'
+            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
+            : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
+        );
+        Alert.alert(
+          validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
+          validation.timeProblem === 'future'
+            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
+            : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
+        );
+        return;
+      }
+
+      setGcashScanStatus('🔍 Checking for duplicates…');
+
+      // 3) The same GCash reference cannot be used on another order.
+      const { data: duplicateRef } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('payment_reference', referenceDigits)
+        .neq('id', payment.orderId)
+        .maybeSingle();
+      if (duplicateRef) {
+        setGcashScanError('This GCash reference number was already used on another order. Every payment must have a unique reference number.');
+        Alert.alert(
+          'Reference Already Used',
+          'This GCash reference number was already used on another order. Every payment must have a unique reference number.'
+        );
+        return;
+      }
+
+      // 4) The same receipt image cannot be reused on another order.
+      const receiptHash = await computeImageHash(payment.receiptUri);
+      if (receiptHash) {
+        try {
+          const { data: duplicateImage } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('receipt_image_hash', receiptHash)
+            .neq('id', payment.orderId)
+            .maybeSingle();
+          if (duplicateImage) {
+            setGcashScanError('This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.');
+            Alert.alert(
+              'Duplicate Receipt Detected',
+              'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'
+            );
+            return;
+          }
+        } catch (hashCheckError) {
+          console.warn('receipt_image_hash column may not exist yet:', hashCheckError);
+        }
+      }
+
+      setGcashScanStatus('📤 Uploading receipt…');
       const receiptUrl = await uploadGcashReceipt(payment.receiptUri, payment.stallId, index);
       if (!receiptUrl) {
-        setGcashPayments(prev => {
-          const updated = [...prev];
-          updated[index].isProcessing = false;
-          return updated;
-        });
+        setGcashScanError('Failed to upload your receipt. Please try again.');
         return;
       }
       
+      // ✅ Submit for vendor verification — NOT marked as paid.
       const { error } = await supabase
         .from('orders')
         .update({
-          status: 'confirmed',
-          payment_status: 'paid',
-          payment_reference: payment.referenceNumber.trim(),
+          payment_status: 'awaiting_verification',
+          payment_reference: referenceDigits,
           payment_receipt_url: receiptUrl,
-          paid_at: new Date().toISOString(),
+          payment_scan_text: (scan.text || '').slice(0, 1500) || null,
+          payment_scan_matched: validation.refMatched,
+          receipt_image_hash: receiptHash || null,
         })
         .eq('id', payment.orderId);
       
       if (error) throw error;
       
-      // ✅ Mark this vendor as paid
+      // ✅ Mark this vendor's payment as submitted (awaiting vendor verification)
       setGcashPayments(prev => {
         const updated = [...prev];
         updated[index].isPaid = true;
@@ -287,7 +477,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         return updated;
       });
       
-      // ✅ Check if all vendors are paid
+      // ✅ Check if all vendors are submitted
       const allPaid = gcashPayments.every(p => p.isPaid || p.isExpired);
       
       if (allPaid) {
@@ -299,7 +489,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           setGcashModalVisible(false);
           Alert.alert(
             '✅ All Payments Submitted! 🎉',
-            'Your GCash payments have been submitted successfully. The vendors will verify your payments and confirm your orders.',
+            'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.',
             [
               { text: 'View Orders', onPress: () => navigation.navigate('Orders') },
               { text: 'Continue Shopping', onPress: () => navigation.navigate('Home') }
@@ -315,7 +505,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           startTimerForVendor(nextIndex);
           Alert.alert(
             '✅ Payment Submitted!',
-            `Payment for ${payment.stallName} confirmed. Please proceed to pay the next vendor.`,
+            `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`,
             [{ text: 'Continue' }]
           );
         }
@@ -323,12 +513,15 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       
     } catch (error) {
       console.error('Error submitting payment:', error);
+      setGcashScanError('Failed to submit payment. Please try again.');
       Alert.alert('Error', 'Failed to submit payment. Please try again.');
+    } finally {
       setGcashPayments(prev => {
         const updated = [...prev];
         updated[index].isProcessing = false;
         return updated;
       });
+      setGcashScanStatus(null);
     }
   };
 
@@ -503,6 +696,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
   const groupedOrders = groupByStall();
   const currentPayment = gcashPayments[currentVendorIndex];
+  // Confirm Payment is enabled only when a valid 13-digit reference and a receipt are present
+  const gcashReady = !!(currentPayment && isValidGcashReference(currentPayment.referenceNumber) && currentPayment.receiptUri);
   const totalVendors = gcashPayments.length;
   
   // ✅ Count remaining vendors to pay
@@ -770,7 +965,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                   </Text>
                   <TextInput
                     style={styles.gcashInput}
-                    placeholder="Enter GCash reference number"
+                    placeholder="Enter 13-digit GCash reference number"
                     placeholderTextColor={COLORS.text.lighter}
                     value={currentPayment.referenceNumber || ''}
                     onChangeText={(text) => {
@@ -781,8 +976,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       });
                     }}
                     keyboardType="numeric"
-                    maxLength={20}
+                    maxLength={13}
                   />
+                  <Text style={styles.gcashInputHint}>
+                    GCash reference numbers are exactly 13 digits
+                  </Text>
                 </View>
               )}
 
@@ -794,7 +992,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                   </Text>
                   <TouchableOpacity 
                     style={styles.gcashReceiptButton} 
-                    onPress={() => pickGcashReceipt(currentVendorIndex)} 
+                    onPress={() => takeGcashReceiptFromCamera(currentVendorIndex)} 
                     disabled={gcashReceiptUploading} 
                     activeOpacity={0.7}
                   >
@@ -802,19 +1000,40 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       <View style={styles.gcashReceiptPreviewContainer}>
                         <Image source={{ uri: currentPayment.receiptUri }} style={styles.gcashReceiptPreview} />
                         <Text style={styles.gcashReceiptChangeText}>
-                          <Ionicons name="refresh-outline" size={14} /> Tap to change
+                          <Ionicons name="camera-outline" size={14} /> Tap to retake
                         </Text>
                       </View>
                     ) : (
                       <View style={styles.gcashReceiptPlaceholder}>
-                        <Ionicons name="cloud-upload-outline" size={36} color={COLORS.gcash} />
+                        <Ionicons name="camera-outline" size={36} color={COLORS.gcash} />
                         <Text style={styles.gcashReceiptText}>
-                          {gcashReceiptUploading ? 'Uploading...' : 'Upload Receipt'}
+                          {gcashReceiptUploading ? 'Uploading...' : 'Take Photo of Receipt'}
                         </Text>
-                        <Text style={styles.gcashReceiptHint}>Tap to select from gallery</Text>
+                        <Text style={styles.gcashReceiptHint}>Photograph your GCash receipt now</Text>
                       </View>
                     )}
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.gcashReceiptSecondaryButton}
+                    onPress={() => pickGcashReceipt(currentVendorIndex)}
+                    disabled={gcashReceiptUploading}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="images-outline" size={16} color={COLORS.text.light} />
+                    <Text style={styles.gcashReceiptSecondaryText}>Choose from gallery instead</Text>
+                  </TouchableOpacity>
+                  {gcashScanStatus && (
+                    <View style={styles.gcashScanStatusRow}>
+                      <ActivityIndicator size="small" color={COLORS.gcash} />
+                      <Text style={styles.gcashScanStatusText}>{gcashScanStatus}</Text>
+                    </View>
+                  )}
+                  {gcashScanError && (
+                    <View style={styles.gcashScanErrorRow}>
+                      <Ionicons name="alert-circle" size={16} color={COLORS.error} />
+                      <Text style={styles.gcashScanErrorText}>{gcashScanError}</Text>
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -835,10 +1054,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                 <TouchableOpacity
                   style={[
                     styles.gcashSubmitButton,
-                    (currentPayment.isProcessing) && styles.gcashSubmitButtonDisabled
+                    (!gcashReady || currentPayment.isProcessing) && styles.gcashSubmitButtonDisabled
                   ]}
                   onPress={() => handleSubmitPayment(currentVendorIndex)}
-                  disabled={currentPayment.isProcessing}
+                  disabled={!gcashReady || currentPayment.isProcessing}
                   activeOpacity={0.8}
                 >
                   <LinearGradient 
@@ -848,7 +1067,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                     style={styles.gcashSubmitGradient}
                   >
                     {currentPayment.isProcessing ? (
-                      <ActivityIndicator color="#FFFFFF" />
+                      <>
+                        <ActivityIndicator color="#FFFFFF" />
+                        <Text style={styles.gcashSubmitText}>Verifying Payment…</Text>
+                      </>
                     ) : currentPayment.isPaid ? (
                       <>
                         <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
@@ -870,9 +1092,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && currentPayment.isPaid && (
                 <View style={styles.gcashCompletedContainer}>
                   <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
-                  <Text style={styles.gcashCompletedText}>✅ Payment Completed</Text>
+                  <Text style={styles.gcashCompletedText}>✅ Payment Submitted</Text>
                   <Text style={styles.gcashCompletedSubtext}>
-                    {currentPayment.stallName} has been paid
+                    {currentPayment.stallName} will verify your payment shortly
                   </Text>
                 </View>
               )}
@@ -933,7 +1155,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
@@ -954,7 +1176,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -1188,6 +1410,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   infoBox: {
     flexDirection: 'row',
@@ -1237,7 +1461,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   gcashModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
     width: '100%',
     maxWidth: 420,
@@ -1298,7 +1522,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   gcashTimerUrgentBg: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
   },
   gcashTimerLabel: {
     fontSize: 12,
@@ -1312,7 +1536,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   gcashTimerValueUrgent: {
-    color: '#EF4444',
+    color: COLORS.error,
   },
   gcashQRContainer: {
     alignItems: 'center',
@@ -1327,7 +1551,7 @@ const styles = StyleSheet.create({
   gcashQRBox: {
     width: 160,
     height: 160,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     borderWidth: 2,
     borderColor: COLORS.borderLight,
@@ -1414,6 +1638,53 @@ const styles = StyleSheet.create({
     color: COLORS.text.light,
     marginTop: 2,
   },
+  gcashInputHint: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 6,
+  },
+  gcashReceiptSecondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  gcashReceiptSecondaryText: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    fontWeight: '500',
+  },
+  gcashScanStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  gcashScanStatusText: {
+    fontSize: 13,
+    color: COLORS.text.medium,
+    fontWeight: '500',
+  },
+  gcashScanErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: COLORS.errorLight,
+  },
+  gcashScanErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.error,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
   gcashReceiptPreviewContainer: {
     alignItems: 'center',
     padding: SPACING.sm,
@@ -1493,7 +1764,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   gcashStatusItemExpired: {
-    color: '#EF4444',
+    color: COLORS.error,
     fontWeight: '500',
   },
   gcashStatusItemAmount: {
@@ -1505,18 +1776,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     marginVertical: 10,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
     borderRadius: RADIUS.md,
   },
   gcashExpiredTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#EF4444',
+    color: COLORS.error,
     marginTop: 8,
   },
   gcashExpiredText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.light,
     textAlign: 'center',
     marginTop: 4,
   },
@@ -1524,7 +1795,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     marginVertical: 10,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: COLORS.successLight,
     borderRadius: RADIUS.md,
   },
   gcashCompletedText: {
@@ -1535,7 +1806,7 @@ const styles = StyleSheet.create({
   },
   gcashCompletedSubtext: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.light,
     textAlign: 'center',
     marginTop: 4,
   },

@@ -986,7 +986,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: RADIUS.md,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.inputBg,
     overflow: 'hidden',
   },
   productImage: {
@@ -998,7 +998,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 80,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.inputBg,
   },
   discountBadge: {
     position: 'absolute',
@@ -1154,7 +1154,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 40,
     borderRadius: RADIUS.sm,
     overflow: 'hidden',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.inputBg,
   },
   stallGroupProductImageInner: {
     width: 40,
@@ -1305,21 +1305,21 @@ const createStyles = (COLORS) => StyleSheet.create({
   skeletonBack: {
     width: 40,
     height: 20,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.sm,
     marginBottom: SPACING.md,
   },
   skeletonTitle: {
     width: '60%',
     height: 28,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.sm,
     marginBottom: SPACING.sm,
   },
   skeletonSubtitle: {
     width: '80%',
     height: 16,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.sm,
   },
   skeletonToolbar: {
@@ -1330,12 +1330,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   skeletonChip: {
     width: 100,
     height: 32,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.sm,
   },
   skeletonCard: {
     height: 100,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: RADIUS.md,
     marginBottom: SPACING.md,
   },

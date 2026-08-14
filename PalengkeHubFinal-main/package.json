@@ -9,7 +9,10 @@
     "web": "expo start --web --port 8082"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/camera": "^8.2.2",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
     "@expo/vector-icons": "^15.1.1",

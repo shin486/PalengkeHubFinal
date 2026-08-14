@@ -119,7 +119,7 @@
     "share_copied": "Na-kopya sa clipboard!"
   },
   "cart": {
-    "title": "Shopping Cart",
+    "title": "Cart",
     "empty": "Walang laman ang cart mo",
     "empty_subtitle": "Magdagdag ng items mula sa palengke para makapagsimula",
     "browse_products": "Tumingin ng Produkto",
@@ -134,6 +134,8 @@
     "remove_item": "Alisin ang Item",
     "remove_item_confirm": "Alisin sa cart?",
     "added_to_cart": "Naidagdag sa Cart",
+    "added": "Idinagdag sa Cart",
+    "added_suffix": "idinagdag sa iyong cart",
     "view_cart": "Tingnan ang Cart",
     "continue_shopping": "Magpatuloy sa Pamimili"
   },
@@ -352,11 +354,5 @@
     "promotion": "Promosyon",
     "chat": "Mensahe sa Chat",
     "report_update": "Update sa Report"
-  },
-  "cart": {
-    "added": "Idinagdag sa Cart",
-    "added_suffix": "idinagdag sa iyong cart",
-    "continue_shopping": "Magpatuloy sa Pamimili",
-    "view_cart": "Tingnan ang Cart"
   }
 }

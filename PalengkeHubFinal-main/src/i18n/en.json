@@ -134,6 +134,8 @@
     "remove_item": "Remove Item",
     "remove_item_confirm": "Remove from cart?",
     "added_to_cart": "Added to Cart",
+    "added": "Added to Cart",
+    "added_suffix": "added to your cart",
     "view_cart": "View Cart",
     "continue_shopping": "Continue Shopping"
   },
@@ -352,11 +354,5 @@
     "promotion": "Promotion",
     "chat": "Chat Message",
     "report_update": "Report Update"
-  },
-  "cart": {
-    "added": "Added to Cart",
-    "added_suffix": "added to your cart",
-    "continue_shopping": "Continue Shopping",
-    "view_cart": "View Cart"
   }
 }

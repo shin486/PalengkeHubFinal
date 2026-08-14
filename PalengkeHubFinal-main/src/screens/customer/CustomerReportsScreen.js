@@ -138,7 +138,7 @@ export default function CustomerReportsScreen({ navigation }) {
             <Text style={[styles.statNumber, { color: COLORS.warning }]}>{stats.pending}</Text>
             <Text style={styles.statLabel}>Pending</Text>
           </View>
-          <View style={[styles.statBox, { backgroundColor: '#DBEAFE' }]}>
+          <View style={[styles.statBox, { backgroundColor: COLORS.gcashLight }]}>
             <Text style={[styles.statNumber, { color: '#3B82F6' }]}>{stats.reviewing}</Text>
             <Text style={styles.statLabel}>Reviewing</Text>
           </View>
@@ -346,7 +346,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -442,12 +442,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#92400E',
+    color: COLORS.warning,
     marginBottom: 8,
   },
   infoText: {
     fontSize: 13,
-    color: '#92400E',
+    color: COLORS.warning,
     lineHeight: 20,
   },
 });

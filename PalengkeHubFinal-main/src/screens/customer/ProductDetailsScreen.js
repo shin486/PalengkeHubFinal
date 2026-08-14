@@ -215,7 +215,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   // Add-to-cart toast animation
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const toastAnim = useRef(new Animated.Value(-100)).current;
+  const toastAnim = useRef(new Animated.Value(160)).current;
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -223,7 +223,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     Animated.sequence([
       Animated.spring(toastAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
       Animated.delay(1800),
-      Animated.timing(toastAnim, { toValue: -120, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastAnim, { toValue: 160, duration: 300, useNativeDriver: true }),
     ]).start(() => setToastVisible(false));
   };
 
@@ -435,7 +435,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       // Haptic feedback + animated toast
       Vibration.vibrate(50);
-      showToast(`${product.name} added to cart`);
+      showToast(`${product.name} ${t('cart.added_suffix')}`);
     }
   };
 
@@ -647,7 +647,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.screenContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       {/* Back Button */}
       <TouchableOpacity
         style={styles.backArrow}
@@ -656,21 +657,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
       >
         <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
       </TouchableOpacity>
-
-      {/* Add-to-Cart Toast */}
-      {toastVisible && (
-        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
-          <View style={styles.toastContent}>
-            <View style={styles.toastIcon}>
-              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
-            </View>
-            <View style={styles.toastTextWrap}>
-              <Text style={styles.toastTitle}>Added to Cart</Text>
-              <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
-            </View>
-          </View>
-        </Animated.View>
-      )}
 
       {/* Product Image */}
       <View style={styles.imageContainer}>
@@ -1132,39 +1118,61 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </Text>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity 
-          style={[styles.button, styles.addToCartButton]}
-          onPress={handleAddToCart}
-          disabled={!product?.is_available}
-        >
-          <LinearGradient
-            colors={['#DC2626', '#EF4444']}
-            style={styles.buttonGradient}
-          >
-            <Text style={styles.buttonText}>
-              {product?.is_available ? `${t('products.add_to_cart')} (₱${totalPrice.toFixed(2)})` : t('products.out_of_stock')}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.button, styles.buyNowButton]}
-          onPress={handleBuyNow}
-          disabled={!product?.is_available}
-        >
-          <LinearGradient
-            colors={['#10B981', '#059669']}
-            style={styles.buttonGradient}
-          >
-            <Text style={styles.buttonText}>
-              {product?.is_available ? 'Buy Now' : 'Unavailable'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
     </ScrollView>
+
+      {/* Fixed Action Buttons - always visible while scrolling */}
+      <View style={styles.fixedFooter}>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.button, styles.addToCartButton]}
+            onPress={handleAddToCart}
+            disabled={!product?.is_available}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText} numberOfLines={2}>
+                {product?.is_available ? `${t('products.add_to_cart')} (₱${totalPrice.toFixed(2)})` : t('products.out_of_stock')}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.buyNowButton]}
+            onPress={handleBuyNow}
+            disabled={!product?.is_available}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText}>
+                {product?.is_available ? t('products.buy_now') : 'Unavailable'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Add-to-Cart Toast - floats above the buttons, always on screen */}
+      {toastVisible && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
+        >
+          <View style={styles.toastContent}>
+            <View style={styles.toastIcon}>
+              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.toastTextWrap}>
+              <Text style={styles.toastTitle}>{t('cart.added_to_cart')}</Text>
+              <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
+    </View>
   );
 }
 
@@ -1172,6 +1180,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  screenContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   backArrow: {
     position: 'absolute',
@@ -1187,12 +1202,10 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   toastContainer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    bottom: 120,
+    left: 16,
+    right: 16,
     zIndex: 100,
-    paddingTop: 50,
-    paddingHorizontal: 16,
   },
   toastContent: {
     flexDirection: 'row',
@@ -1241,7 +1254,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   relatedImage: {
     width: '100%',
     height: 100,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.inputBg,
   },
   relatedInfo: {
     padding: 10,
@@ -1267,7 +1280,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
   },
   errorText: {
     fontSize: 16,
@@ -1275,7 +1288,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 20,
   },
   backButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1286,7 +1299,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '600',
   },
   imageContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     alignItems: 'center',
   },
@@ -1298,7 +1311,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   productImagePlaceholder: {
     width: 200,
     height: 200,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.inputBg,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1307,7 +1320,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 60,
   },
   productInfo: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     marginTop: 1,
   },
@@ -1320,7 +1333,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   productName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.dark,
     flex: 1,
     marginRight: 12,
   },
@@ -1334,16 +1347,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   productPrice: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: COLORS.primary,
     marginRight: 8,
   },
   productUnit: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
   },
   productDescription: {
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.text.medium,
     lineHeight: 22,
     marginBottom: 15,
   },
@@ -1353,7 +1366,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   availabilityLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
     marginRight: 10,
   },
   availabilityBadge: {
@@ -1362,30 +1375,30 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 12,
   },
   availableBadge: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: COLORS.successLight,
   },
   unavailableBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
   },
   availabilityText: {
     fontSize: 12,
     fontWeight: '600',
   },
   availableText: {
-    color: '#059669',
+    color: COLORS.success,
   },
   unavailableText: {
-    color: '#DC2626',
+    color: COLORS.error,
   },
   section: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     marginTop: 10,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.dark,
     marginBottom: 15,
   },
   unitsContainer: {
@@ -1591,9 +1604,18 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    padding: 16,
     gap: 12,
-    marginBottom: 20,
+  },
+  fixedFooter: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   button: {
     flex: 1,
@@ -1613,6 +1635,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: 'white',
     fontSize: 15,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   promoBadge: {
     backgroundColor: COLORS.primary,

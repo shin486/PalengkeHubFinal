@@ -171,7 +171,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: COLORS.text.light,
   },
   filterScroll: {
     paddingVertical: 12,
@@ -215,7 +215,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 12,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,

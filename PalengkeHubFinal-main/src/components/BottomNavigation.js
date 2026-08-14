@@ -1,6 +1,6 @@
 // src/components/BottomNavigation.js
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,26 +11,15 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
 // ============================================================
 // COLORS - PalengkeHub Branding
 // ============================================================
-const COLORS = {
-  primary: '#C62828',
-  primaryLight: '#E53935',
-  primaryDark: '#B71C1C',
-  primarySurface: '#FFEBEE',
-  background: '#FFFFFF',
-  text: {
-    active: '#C62828',
-    inactive: '#9CA3AF',
-    dark: '#1F2937',
-  },
-  border: '#E5E7EB',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-};
+// Theme-aware colors are now provided by ThemeContext via useColors().
+// ============================================================
 
 // ============================================================
 // SPACING CONSTANTS
@@ -54,6 +43,8 @@ export default function BottomNavigation({
   unreadChatCount = 0,
 }) {
   const insets = useSafeAreaInsets();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
   
   // ✅ For hiding/showing the entire bottom nav
@@ -229,7 +220,7 @@ export default function BottomNavigation({
                   <Ionicons
                     name={config.icon}
                     size={24}
-                    color={isFocused ? COLORS.primary : COLORS.text.inactive}
+                    color={isFocused ? COLORS.primary : COLORS.text.lighter}
                   />
                   {badgeCount > 0 && (
                     <View style={[
@@ -263,9 +254,9 @@ export default function BottomNavigation({
 // ============================================================
 // STYLES
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     shadowColor: COLORS.shadow,
@@ -313,7 +304,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabLabelInactive: {
-    color: COLORS.text.inactive,
+    color: COLORS.text.lighter,
     fontWeight: '500',
   },
   activeIndicator: {
@@ -338,7 +329,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: COLORS.surface,
   },
   badgeOverlay: {
     top: -8,

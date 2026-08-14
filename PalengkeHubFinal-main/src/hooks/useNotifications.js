@@ -7,8 +7,10 @@ export const useNotifications = () => {
   const [notification, setNotification] = useState(false);
 
   useEffect(() => {
-    registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
-    
+    registerForPushNotificationsAsync()
+      .then(token => setExpoPushToken(token))
+      .catch(() => {});
+
     const subscription = Notifications.addNotificationReceivedListener(notification => {
       setNotification(notification);
     });
@@ -24,6 +26,12 @@ export const useNotifications = () => {
   }, []);
 
   async function registerForPushNotificationsAsync() {
+    // Push notifications only work on REAL native builds (Expo Go / EAS dev
+    // client) with Firebase FCM configured. The Capacitor WebView APK runs as
+    // "web" and cannot get a push token — skip silently instead of showing
+    // "Failed to get push token" on every launch.
+    if (Platform.OS === 'web') return null;
+
     let token;
     
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -36,7 +44,7 @@ export const useNotifications = () => {
     
     if (finalStatus !== 'granted') {
       alert('Failed to get push token for push notification!');
-      return;
+      return null;
     }
     
     token = (await Notifications.getExpoPushTokenAsync()).data;

@@ -950,7 +950,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   suggestionHighlight: {
     fontWeight: '700',
-    color: '#B45309',
+    color: COLORS.warning,
     textTransform: 'capitalize',
   },
   suggestionButton: {
@@ -992,9 +992,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -1002,13 +1002,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     fontSize: 16,
     color: COLORS.text.dark,
   },
   clearButton: {
     padding: 4,
+    flexShrink: 0,
   },
   micButton: {
     width: 34,
@@ -1017,6 +1020,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 2,
+    flexShrink: 0,
   },
   micButtonActive: {
     backgroundColor: COLORS.primary,
@@ -1384,7 +1388,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   promoMiniBadge: {
     marginTop: 4,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,

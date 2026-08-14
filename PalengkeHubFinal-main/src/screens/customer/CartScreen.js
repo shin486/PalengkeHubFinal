@@ -209,49 +209,54 @@ export default function CartScreen({ navigation }) {
             
             {data.items.map((item) => (
               <View key={item.product_id} style={styles.cartItem}>
-                <View style={styles.itemInfo}>
+                {/* Product name on top, full width */}
+                <View style={styles.itemTopRow}>
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
-                </View>
-                
-                <View style={styles.itemRightSection}>
-                  {!data.isClosed ? (
-                    <View style={styles.quantityControls}>
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => updateItemQuantity(item, -1)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.quantityButtonText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => updateItemQuantity(item, 1)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.quantityButtonText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.closedItemBadge}>
-                      <Text style={styles.closedItemLabel}>Closed</Text>
-                    </View>
+                  {!data.isClosed && (
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => removeItem(item.product_id)}
+                      activeOpacity={0.6}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                   )}
-                  <Text style={styles.itemTotal}>
-                    ₱{((item.quantity || 1) * item.price).toFixed(2)}
-                  </Text>
                 </View>
-                {/* Delete button */}
-                {!data.isClosed && (
-                  <TouchableOpacity
-                    style={styles.removeBtn}
-                    onPress={() => removeItem(item.product_id)}
-                    activeOpacity={0.6}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                )}
+
+                <View style={styles.itemBottomRow}>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
+                  </View>
+
+                  <View style={styles.itemRightSection}>
+                    {!data.isClosed ? (
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => updateItemQuantity(item, -1)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quantityButtonText}>−</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => updateItemQuantity(item, 1)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quantityButtonText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.closedItemBadge}>
+                        <Text style={styles.closedItemLabel}>Closed</Text>
+                      </View>
+                    )}
+                    <Text style={styles.itemTotal}>
+                      ₱{((item.quantity || 1) * item.price).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
               </View>
             ))}
           </View>
@@ -544,22 +549,33 @@ const createStyles = (COLORS) => StyleSheet.create({
 
   // Cart Items
   cartItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
+  itemTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  itemBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
   itemInfo: {
-    flex: 2,
+    flex: 1,
     paddingRight: 12,
   },
   itemName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.text.dark,
-    marginBottom: 4,
+    paddingRight: 8,
     lineHeight: 20,
   },
   itemPrice: {
@@ -627,7 +643,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: COLORS.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
