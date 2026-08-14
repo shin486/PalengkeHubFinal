@@ -1,6 +1,6 @@
 // src/screens/vendor/VendorDashboardScreen.js
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,9 @@ import {
   ActivityIndicator,
   Image,
   Alert,
-  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
@@ -72,12 +71,13 @@ export default function VendorDashboardScreen({ navigation }) {
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [salesData, setSalesData] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [chats, setChats] = useState([]);
   const [bestSellers, setBestSellers] = useState([]);
   const [sukiBuyers, setSukiBuyers] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
+  const [sukiLoading, setSukiLoading] = useState(false);
+  const dataFetchedRef = useRef(false);
 
   const [stats, setStats] = useState({
     revenueToday: 0,
@@ -114,6 +114,114 @@ export default function VendorDashboardScreen({ navigation }) {
     refreshOrders,
   } = useVendorOrders(stall?.id);
 
+  // ============================================================
+  // SUKI BUYERS - Fetch frequent customers (with cache check)
+  // ============================================================
+  const fetchSukiBuyers = useCallback(async () => {
+    if (!stall?.id) return;
+    
+    // Skip if already fetched and not refreshing
+    if (dataFetchedRef.current && !refreshing) {
+      console.log('⏭️ Suki buyers already loaded, skipping...');
+      return;
+    }
+    
+    if (sukiLoading) return;
+
+    try {
+      setSukiLoading(true);
+      console.log('🔄 Fetching suki buyers...');
+
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          consumer_id,
+          total_amount,
+          created_at,
+          status
+        `)
+        .eq('stall_id', stall.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+
+      if (ordersError) throw ordersError;
+
+      if (!ordersData || ordersData.length === 0) {
+        setSukiBuyers([]);
+        dataFetchedRef.current = true;
+        setSukiLoading(false);
+        return;
+      }
+
+      const consumerIds = [...new Set(ordersData.map(order => order.consumer_id).filter(id => id))];
+      
+      if (consumerIds.length === 0) {
+        setSukiBuyers([]);
+        dataFetchedRef.current = true;
+        setSukiLoading(false);
+        return;
+      }
+
+      const { data: consumersData, error: consumersError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, email')
+        .in('id', consumerIds);
+
+      if (consumersError) throw consumersError;
+
+      const consumerMap = {};
+      consumersData?.forEach(consumer => {
+        consumerMap[consumer.id] = {
+          id: consumer.id,
+          full_name: consumer.full_name || 'Customer',
+          avatar_url: consumer.avatar_url,
+          email: consumer.email,
+          orderCount: 0,
+          totalSpent: 0,
+          lastOrderDate: null,
+          firstOrderDate: null,
+        };
+      });
+
+      ordersData.forEach(order => {
+        const consumerId = order.consumer_id;
+        if (!consumerId || !consumerMap[consumerId]) return;
+        const consumer = consumerMap[consumerId];
+        consumer.orderCount += 1;
+        consumer.totalSpent += order.total_amount || 0;
+        if (!consumer.lastOrderDate || new Date(order.created_at) > new Date(consumer.lastOrderDate)) {
+          consumer.lastOrderDate = order.created_at;
+        }
+        if (!consumer.firstOrderDate || new Date(order.created_at) < new Date(consumer.firstOrderDate)) {
+          consumer.firstOrderDate = order.created_at;
+        }
+      });
+
+      const sortedBuyers = Object.values(consumerMap)
+        .filter(c => c.orderCount > 0)
+        .sort((a, b) => b.orderCount - a.orderCount)
+        .slice(0, 10);
+
+      // Only update if data changed
+      setSukiBuyers(prev => {
+        if (prev.length === sortedBuyers.length && 
+            prev.every((p, i) => p.id === sortedBuyers[i]?.id)) {
+          return prev; // No change
+        }
+        return sortedBuyers;
+      });
+      
+      dataFetchedRef.current = true;
+
+    } catch (error) {
+      console.error('Error fetching suki buyers:', error);
+      setSukiBuyers([]);
+    } finally {
+      setSukiLoading(false);
+    }
+  }, [stall, sukiLoading, refreshing]);
+
   const fetchDashboardData = useCallback(async () => {
     if (!stall?.id) return;
     try {
@@ -142,7 +250,6 @@ export default function VendorDashboardScreen({ navigation }) {
           .from('products')
           .select('*')
           .eq('stall_id', stall.id)
-          .order('stock_quantity', { ascending: true })
           .limit(10),
       ]);
 
@@ -181,93 +288,13 @@ export default function VendorDashboardScreen({ navigation }) {
       setNotifications(notifRes.data || []);
       setChats(chatRes.data || []);
 
-      // ============================================================
-      // SUKI BUYERS - Frequent Customers
-      // ============================================================
+      // Fetch Suki Buyers
       await fetchSukiBuyers();
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
-  }, [stall, user, orderStats]);
-
-  // ============================================================
-  // SUKI BUYERS - Fetch frequent customers
-  // ============================================================
-  const fetchSukiBuyers = useCallback(async () => {
-    if (!stall?.id) return;
-
-    try {
-      // Get all completed orders with customer info
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          customer_id,
-          total_amount,
-          created_at,
-          status,
-          customer:customer_id (
-            id,
-            full_name,
-            avatar_url,
-            email
-          )
-        `)
-        .eq('stall_id', stall.id)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false });
-
-      if (ordersError) throw ordersError;
-
-      if (!ordersData || ordersData.length === 0) {
-        setSukiBuyers([]);
-        return;
-      }
-
-      // Group by customer and count orders
-      const customerMap = {};
-      ordersData.forEach(order => {
-        const customer = order.customer;
-        if (!customer) return;
-
-        if (!customerMap[customer.id]) {
-          customerMap[customer.id] = {
-            id: customer.id,
-            full_name: customer.full_name || 'Customer',
-            avatar_url: customer.avatar_url,
-            email: customer.email,
-            orderCount: 0,
-            totalSpent: 0,
-            lastOrderDate: order.created_at,
-            firstOrderDate: order.created_at,
-          };
-        }
-
-        customerMap[customer.id].orderCount += 1;
-        customerMap[customer.id].totalSpent += order.total_amount || 0;
-        
-        // Update last order date if this order is more recent
-        if (new Date(order.created_at) > new Date(customerMap[customer.id].lastOrderDate)) {
-          customerMap[customer.id].lastOrderDate = order.created_at;
-        }
-        if (new Date(order.created_at) < new Date(customerMap[customer.id].firstOrderDate)) {
-          customerMap[customer.id].firstOrderDate = order.created_at;
-        }
-      });
-
-      // Convert to array and sort by order count (most frequent first)
-      const sortedBuyers = Object.values(customerMap)
-        .sort((a, b) => b.orderCount - a.orderCount)
-        .slice(0, 10); // Top 10 suki buyers
-
-      setSukiBuyers(sortedBuyers);
-
-    } catch (error) {
-      console.error('Error fetching suki buyers:', error);
-      setSukiBuyers([]);
-    }
-  }, [stall]);
+  }, [stall, user, orderStats, fetchSukiBuyers]);
 
   useEffect(() => {
     fetchStall();
@@ -275,12 +302,15 @@ export default function VendorDashboardScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      if (stall?.id) fetchDashboardData();
+      if (stall?.id) {
+        fetchDashboardData();
+      }
     }, [stall, fetchDashboardData])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
+    dataFetchedRef.current = false; // Allow re-fetch on refresh
     await Promise.all([fetchStall(), refreshOrders(), fetchDashboardData()]);
     setRefreshing(false);
   };
@@ -313,28 +343,26 @@ export default function VendorDashboardScreen({ navigation }) {
     );
   };
 
-  // ✅ Navigate to chat with customer
-  const handleChatPress = async (customer) => {
+  // Navigate to chat with consumer
+  const handleChatPress = async (consumer) => {
     try {
-      // Check if conversation exists
       const { data: existingConv, error: convError } = await supabase
         .from('conversations')
         .select('id')
         .eq('stall_id', stall.id)
-        .eq('customer_id', customer.id)
+        .eq('customer_id', consumer.id)
         .single();
 
       if (convError && convError.code !== 'PGRST116') throw convError;
 
       let conversationId = existingConv?.id;
 
-      // If no conversation exists, create one
       if (!conversationId) {
         const { data: newConv, error: createError } = await supabase
           .from('conversations')
           .insert({
             stall_id: stall.id,
-            customer_id: customer.id,
+            customer_id: consumer.id,
             vendor_unread_count: 0,
             customer_unread_count: 0,
             last_message: 'Start a conversation',
@@ -347,13 +375,12 @@ export default function VendorDashboardScreen({ navigation }) {
         conversationId = newConv.id;
       }
 
-      // Navigate to chat detail
       navigation.navigate('VendorChatDetail', {
         conversationId: conversationId,
         customer: {
-          id: customer.id,
-          full_name: customer.full_name,
-          avatar_url: customer.avatar_url,
+          id: consumer.id,
+          full_name: consumer.full_name,
+          avatar_url: consumer.avatar_url,
         },
         stall: stall,
       });
@@ -387,9 +414,12 @@ export default function VendorDashboardScreen({ navigation }) {
   };
 
   // ============================================================
-  // SUKI BUYER CARD COMPONENT
+  // SUKI BUYER CARD COMPONENT - WITH IMAGES (FIXED BLINKING)
   // ============================================================
-  const SukiBuyerCard = ({ customer }) => {
+  const SukiBuyerCard = memo(({ consumer }) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoaded, setImageLoaded] = useState(false);
+    
     const getInitials = (name) => {
       if (!name) return '?';
       return name.charAt(0).toUpperCase();
@@ -408,30 +438,42 @@ export default function VendorDashboardScreen({ navigation }) {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
+    // Use a stable image key to prevent reloading
+    const imageKey = consumer.id;
+
     return (
       <View style={styles.sukiCard}>
         <View style={styles.sukiLeft}>
           <View style={styles.sukiAvatarContainer}>
-            {customer.avatar_url ? (
-              <Image source={{ uri: customer.avatar_url }} style={styles.sukiAvatar} />
+            {consumer.avatar_url && !imageError ? (
+              <Image 
+                key={imageKey}
+                source={{ uri: consumer.avatar_url }}
+                style={styles.sukiAvatar}
+                onError={() => setImageError(true)}
+                onLoad={() => setImageLoaded(true)}
+                progressiveRenderingEnabled={true}
+                fadeDuration={0}
+                cachePolicy="memory-disk"
+              />
             ) : (
               <View style={styles.sukiAvatarFallback}>
-                <Text style={styles.sukiAvatarText}>{getInitials(customer.full_name)}</Text>
+                <Text style={styles.sukiAvatarText}>{getInitials(consumer.full_name)}</Text>
               </View>
             )}
             <View style={styles.sukiRankBadge}>
-              <Text style={styles.sukiRankText}>{customer.orderCount}</Text>
+              <Text style={styles.sukiRankText}>{consumer.orderCount}</Text>
             </View>
           </View>
           <View style={styles.sukiInfo}>
-            <Text style={styles.sukiName} numberOfLines={1}>{customer.full_name}</Text>
-            <Text style={styles.sukiOrders}>{customer.orderCount} orders</Text>
-            <Text style={styles.sukiLastOrder}>Last order • {formatDate(customer.lastOrderDate)}</Text>
+            <Text style={styles.sukiName} numberOfLines={1}>{consumer.full_name}</Text>
+            <Text style={styles.sukiOrders}>{consumer.orderCount} orders</Text>
+            <Text style={styles.sukiLastOrder}>Last order • {formatDate(consumer.lastOrderDate)}</Text>
           </View>
         </View>
         <TouchableOpacity 
           style={styles.sukiChatButton}
-          onPress={() => handleChatPress(customer)}
+          onPress={() => handleChatPress(consumer)}
           activeOpacity={0.7}
         >
           <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
@@ -439,7 +481,7 @@ export default function VendorDashboardScreen({ navigation }) {
         </TouchableOpacity>
       </View>
     );
-  };
+  });
 
   if (loading) {
     return (
@@ -529,7 +571,7 @@ export default function VendorDashboardScreen({ navigation }) {
         )}
 
         {/* ============================================================
-            STATS GRID - 4 Cards
+            STATS GRID
         ============================================================ */}
         <View style={styles.statsGrid}>
           <StatCard
@@ -562,35 +604,14 @@ export default function VendorDashboardScreen({ navigation }) {
         </View>
 
         {/* ============================================================
-            QUICK ACTIONS - 2x3 Grid
+            STORE TOOLS - Only Reports and Notifications
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <Text style={styles.sectionTitle}>Store Tools</Text>
+            <Ionicons name="construct-outline" size={18} color={COLORS.text.lighter} />
           </View>
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorOrders')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primarySurface }]}>
-                <Ionicons name="receipt-outline" size={24} color={COLORS.primary} />
-              </View>
-              <Text style={styles.quickActionLabel}>Orders</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorProducts')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#D1FAE5' }]}>
-                <Ionicons name="cube-outline" size={24} color={COLORS.success} />
-              </View>
-              <Text style={styles.quickActionLabel}>Products</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity 
               style={styles.quickAction} 
               onPress={() => navigation.navigate('VendorReports')}
@@ -612,28 +633,6 @@ export default function VendorDashboardScreen({ navigation }) {
               </View>
               <Text style={styles.quickActionLabel}>Alerts</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorProfile')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#FCE4EC' }]}>
-                <Ionicons name="person-outline" size={24} color={COLORS.primary} />
-              </View>
-              <Text style={styles.quickActionLabel}>Profile</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorChats')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="chatbubbles-outline" size={24} color={COLORS.info} />
-              </View>
-              <Text style={styles.quickActionLabel}>Chat</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -646,7 +645,9 @@ export default function VendorDashboardScreen({ navigation }) {
             <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
           </View>
 
-          {sukiBuyers.length === 0 ? (
+          {sukiLoading && sukiBuyers.length === 0 ? (
+            <ActivityIndicator size="small" color={COLORS.primary} style={styles.loader} />
+          ) : sukiBuyers.length === 0 ? (
             <View style={styles.emptySukiContainer}>
               <Ionicons name="people-outline" size={40} color={COLORS.text.lighter} />
               <Text style={styles.emptySukiTitle}>No loyal customers yet</Text>
@@ -655,8 +656,8 @@ export default function VendorDashboardScreen({ navigation }) {
               </Text>
             </View>
           ) : (
-            sukiBuyers.map((customer, index) => (
-              <SukiBuyerCard key={customer.id || index} customer={customer} />
+            sukiBuyers.map((consumer) => (
+              <SukiBuyerCard key={consumer.id} consumer={consumer} />
             ))
           )}
         </View>
@@ -791,7 +792,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Loading ──
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -804,7 +804,6 @@ const styles = StyleSheet.create({
     color: COLORS.text.light,
   },
 
-  // ── Empty State ──
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -832,7 +831,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Store Banner ──
   storeBanner: {
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
@@ -910,7 +908,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // ── Closed Warning ──
   closedWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -930,7 +927,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Stats Grid ──
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -971,7 +967,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Section Cards ──
   sectionCard: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.lg,
@@ -1015,16 +1010,19 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Quick Actions ──
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
   quickAction: {
-    width: '30%',
+    width: '45%',
     alignItems: 'center',
-    padding: 8,
+    padding: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   quickActionIcon: {
     width: 48,
@@ -1035,129 +1033,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   quickActionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
-    color: COLORS.text.light,
+    color: COLORS.text.dark,
     textAlign: 'center',
   },
 
-  // ── Order Cards ──
-  orderCard: {
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  orderCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  orderNumber: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text.dark,
-  },
-  orderStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: RADIUS.sm,
-    backgroundColor: '#FEF3C7',
-  },
-  orderStatusCompleted: {
-    backgroundColor: '#D1FAE5',
-  },
-  orderStatusCancelled: {
-    backgroundColor: '#FEE2E2',
-  },
-  orderStatusPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  orderStatusText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-  },
-  orderItems: {
-    fontSize: 13,
-    color: COLORS.text.medium,
-    marginBottom: 4,
-  },
-  orderCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  orderTotal: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  orderTime: {
-    fontSize: 11,
-    color: COLORS.text.light,
-  },
-  loader: {
-    paddingVertical: 20,
-  },
-
-  // ── Empty Orders ──
-  emptyOrdersContainer: {
-    alignItems: 'center',
-    paddingVertical: 30,
-  },
-  emptyOrdersTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text.dark,
-    marginTop: 8,
-  },
-  emptyOrdersText: {
-    fontSize: 13,
-    color: COLORS.text.light,
-    marginTop: 2,
-  },
-
-  // ── Products ──
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.primarySurface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  rankText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text.dark,
-  },
-  productMeta: {
-    fontSize: 11,
-    color: COLORS.text.light,
-    marginTop: 1,
-  },
-
-  // ── Suki Buyers ──
+  // Suki Buyers
   sukiCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1182,6 +1064,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: '#F3F4F6',
   },
   sukiAvatarFallback: {
     width: 44,
@@ -1250,7 +1133,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Empty Suki ──
   emptySukiContainer: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -1268,7 +1150,122 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Profile ──
+  // Recent Orders
+  orderCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  orderCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  orderNumber: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+  },
+  orderStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#FEF3C7',
+  },
+  orderStatusCompleted: {
+    backgroundColor: '#D1FAE5',
+  },
+  orderStatusCancelled: {
+    backgroundColor: '#FEE2E2',
+  },
+  orderStatusPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  orderStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+  },
+  orderItems: {
+    fontSize: 13,
+    color: COLORS.text.medium,
+    marginBottom: 4,
+  },
+  orderCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderTotal: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  orderTime: {
+    fontSize: 11,
+    color: COLORS.text.light,
+  },
+  loader: {
+    paddingVertical: 20,
+  },
+
+  emptyOrdersContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  emptyOrdersTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginTop: 8,
+  },
+  emptyOrdersText: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    marginTop: 2,
+  },
+
+  // Best Sellers
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  rankText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.dark,
+  },
+  productMeta: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 1,
+  },
+
+  // Profile
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1311,7 +1308,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // ── Spacer ──
   bottomSpacer: {
     height: 30,
   },

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
@@ -20,8 +21,6 @@ import {
 } from '../../theme/vendorTheme';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
-import { VendorSectionHeader } from '../../components/vendor/VendorSectionHeader';
-import { VendorStatCard } from '../../components/vendor/VendorStatCard';
 
 const PERIODS = [
   { key: 'day', label: 'Today' },
@@ -40,6 +39,22 @@ const getStatusColor = (status) => {
   };
   return map[status] || vendorColors.text.secondary;
 };
+
+// Clean summary card - matches Customer module card style
+const SummaryCard = ({ title, value, icon, color, bg, onPress, isCurrency = false }) => (
+  <TouchableOpacity
+    style={styles.summaryCard}
+    onPress={onPress}
+    activeOpacity={0.7}
+    disabled={!onPress}
+  >
+    <View style={[styles.summaryIcon, { backgroundColor: bg }]}>
+      <Ionicons name={icon} size={20} color={color} />
+    </View>
+    <Text style={styles.summaryValue}>{isCurrency ? `₱${value.toFixed(2)}` : value}</Text>
+    <Text style={styles.summaryLabel}>{title}</Text>
+  </TouchableOpacity>
+);
 
 export default function VendorReportsScreen({ navigation }) {
   const { user } = useAuth();
@@ -143,17 +158,14 @@ export default function VendorReportsScreen({ navigation }) {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
 
-    // Peak hours
-    const hourCounts = Array(24).fill(0);
-    completed.forEach(order => {
-      const hour = new Date(order.created_at).getHours();
-      hourCounts[hour]++;
+    // Payment method breakdown
+    const paymentMethods = {};
+    orders.forEach(order => {
+      const method = order.payment_method || 'Unknown';
+      if (!paymentMethods[method]) paymentMethods[method] = { count: 0, revenue: 0 };
+      paymentMethods[method].count += 1;
+      paymentMethods[method].revenue += order.total_amount || 0;
     });
-    const peakHours = hourCounts
-      .map((count, hour) => ({ hour, count }))
-      .filter(h => h.count > 0)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
 
     return {
       totalOrders: orders.length,
@@ -164,7 +176,7 @@ export default function VendorReportsScreen({ navigation }) {
       avgOrder,
       paymentRate: Math.round(paymentRate),
       topProducts,
-      peakHours,
+      paymentMethods,
     };
   }, [orders]);
 
@@ -203,7 +215,7 @@ export default function VendorReportsScreen({ navigation }) {
         {error ? (
           <VendorEmptyState
             variant="compact"
-            icon="⚠️"
+            icon="alert-circle-outline"
             title="Failed to load reports"
             message={error}
             actionLabel="Retry"
@@ -211,45 +223,56 @@ export default function VendorReportsScreen({ navigation }) {
           />
         ) : orders.length === 0 ? (
           <VendorEmptyState
-            icon="📊"
+            icon="bar-chart-outline"
             title="No data for this period"
             message="Orders will appear here once customers place orders"
           />
         ) : (
           <>
-            {/* Revenue Cards */}
+            {/* Revenue Overview */}
             <View style={styles.statsGrid}>
-              <VendorStatCard
-                title="Revenue"
+              <SummaryCard
+                title="Total Sales"
                 value={stats.totalRevenue}
-                icon="💰"
-                gradientColors={[vendorColors.primary, vendorColors.primaryLight]}
+                icon="cash-outline"
+                color={vendorColors.primary}
+                bg={vendorColors.accentSoft}
                 isCurrency
+                onPress={() => navigation.navigate('VendorOrders')}
               />
-              <VendorStatCard
+              <SummaryCard
                 title="Orders"
                 value={stats.totalOrders}
-                icon="📋"
-                gradientColors={[vendorColors.info, '#60A5FA']}
+                icon="receipt-outline"
+                color={vendorColors.info}
+                bg={vendorColors.infoLight}
+                onPress={() => navigation.navigate('VendorOrders')}
               />
-              <VendorStatCard
+              <SummaryCard
                 title="Avg Order"
                 value={stats.avgOrder}
-                icon="📈"
-                gradientColors={[vendorColors.success, '#34D399']}
+                icon="calculator-outline"
+                color={vendorColors.success}
+                bg={vendorColors.successLight}
                 isCurrency
               />
-              <VendorStatCard
+              <SummaryCard
                 title="Payment Rate"
                 value={`${stats.paymentRate}%`}
-                icon="💳"
-                gradientColors={[vendorColors.purple, '#A78BFA']}
+                icon="card-outline"
+                color={vendorColors.purple}
+                bg={vendorColors.purpleLight}
               />
             </View>
 
-            {/* Order Status Summary */}
+            {/* Order Summary */}
             <View style={styles.section}>
-              <VendorSectionHeader title="📊 Order Summary" />
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <Ionicons name="stats-chart-outline" size={18} color={vendorColors.primary} />
+                </View>
+                <Text style={styles.sectionTitle}>Order Summary</Text>
+              </View>
               <View style={styles.summaryRow}>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryValue, { color: vendorColors.success }]}>{stats.completedOrders}</Text>
@@ -271,7 +294,12 @@ export default function VendorReportsScreen({ navigation }) {
             {/* Top Products */}
             {stats.topProducts.length > 0 && (
               <View style={styles.section}>
-                <VendorSectionHeader title="🔥 Top Products" />
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="trending-up-outline" size={18} color={vendorColors.primary} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Top Products</Text>
+                </View>
                 {stats.topProducts.map((product, idx) => (
                   <View key={idx} style={styles.productRow}>
                     <View style={styles.rankBadge}>
@@ -287,24 +315,35 @@ export default function VendorReportsScreen({ navigation }) {
               </View>
             )}
 
-            {/* Peak Hours */}
-            {stats.peakHours.length > 0 && (
+            {/* Payment Summary */}
+            {Object.keys(stats.paymentMethods).length > 0 && (
               <View style={styles.section}>
-                <VendorSectionHeader title="⏰ Peak Hours" />
-                <View style={styles.peakHoursContainer}>
-                  {stats.peakHours.map((hour, idx) => (
-                    <View key={idx} style={styles.peakHourBadge}>
-                      <Text style={styles.peakHourText}>{hour.hour}:00</Text>
-                      <Text style={styles.peakHourCount}>{hour.count} orders</Text>
-                    </View>
-                  ))}
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="card-outline" size={18} color={vendorColors.primary} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Payment Summary</Text>
                 </View>
+                {Object.entries(stats.paymentMethods).map(([method, data]) => (
+                  <View key={method} style={styles.paymentRow}>
+                    <View style={styles.paymentInfo}>
+                      <Text style={styles.paymentMethod}>{method}</Text>
+                      <Text style={styles.paymentMeta}>{data.count} orders</Text>
+                    </View>
+                    <Text style={styles.paymentRevenue}>₱{data.revenue.toFixed(2)}</Text>
+                  </View>
+                ))}
               </View>
             )}
 
             {/* Recent Orders */}
             <View style={styles.section}>
-              <VendorSectionHeader title="📋 Recent Orders" />
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <Ionicons name="list-outline" size={18} color={vendorColors.primary} />
+                </View>
+                <Text style={styles.sectionTitle}>Recent Orders</Text>
+              </View>
               {orders.slice(0, 5).map((order) => (
                 <TouchableOpacity
                   key={order.id}
@@ -372,6 +411,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: vendorSpacing.lg,
     marginBottom: vendorSpacing.md,
   },
+  summaryCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: vendorColors.surface,
+    borderRadius: vendorBorderRadius.lg,
+    padding: vendorSpacing.lg,
+    borderWidth: 1,
+    borderColor: vendorColors.border,
+    ...vendorShadows.md,
+  },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: vendorBorderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: vendorSpacing.sm,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: vendorColors.text.primary,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: vendorColors.text.secondary,
+    marginTop: 2,
+  },
   section: {
     backgroundColor: vendorColors.surface,
     marginHorizontal: vendorSpacing.lg,
@@ -379,6 +446,26 @@ const styles = StyleSheet.create({
     padding: vendorSpacing.lg,
     borderRadius: vendorBorderRadius.xl,
     ...vendorShadows.md,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: vendorSpacing.md,
+  },
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: vendorColors.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: vendorColors.text.primary,
+    flex: 1,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -417,7 +504,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: vendorColors.accent,
+    backgroundColor: vendorColors.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: vendorSpacing.md,
@@ -445,27 +532,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: vendorColors.primary,
   },
-  peakHoursContainer: {
+  paymentRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  peakHourBadge: {
-    backgroundColor: vendorColors.purpleLight,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: vendorBorderRadius.md,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: vendorColors.divider,
   },
-  peakHourText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: vendorColors.purple,
+  paymentInfo: {
+    flex: 1,
   },
-  peakHourCount: {
-    fontSize: 10,
+  paymentMethod: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: vendorColors.text.primary,
+    textTransform: 'capitalize',
+  },
+  paymentMeta: {
+    fontSize: 11,
     color: vendorColors.text.secondary,
     marginTop: 2,
+  },
+  paymentRevenue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: vendorColors.primary,
   },
   orderRow: {
     flexDirection: 'row',

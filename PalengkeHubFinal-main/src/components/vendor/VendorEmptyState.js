@@ -1,13 +1,16 @@
 // src/components/vendor/VendorEmptyState.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { vendorColors, vendorBorderRadius, vendorSpacing } from '../../theme/vendorTheme';
 
 export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, variant = 'default' }) => {
   if (variant === 'compact') {
     return (
       <View style={styles.compact}>
-        <Text style={styles.compactIcon}>{icon || '📭'}</Text>
+        <View style={styles.compactIconContainer}>
+          <Ionicons name={icon || 'file-tray-outline'} size={32} color={vendorColors.text.tertiary} />
+        </View>
         <Text style={styles.compactTitle}>{title}</Text>
         {message && <Text style={styles.compactMessage}>{message}</Text>}
         {actionLabel && onAction && (
@@ -21,7 +24,9 @@ export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, 
 
   return (
     <View style={styles.container}>
-      <Text style={styles.icon}>{icon || '📭'}</Text>
+      <View style={styles.iconContainer}>
+        <Ionicons name={icon || 'file-tray-outline'} size={48} color={vendorColors.text.tertiary} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
       {actionLabel && onAction && (
@@ -33,9 +38,11 @@ export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, 
   );
 };
 
-export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = '⚠️' }) => (
+export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = 'alert-circle-outline' }) => (
   <View style={styles.container}>
-    <Text style={styles.icon}>{icon}</Text>
+    <View style={styles.iconContainer}>
+      <Ionicons name={icon} size={48} color={vendorColors.danger} />
+    </View>
     <Text style={styles.title}>Oops!</Text>
     <Text style={styles.message}>{message}</Text>
     {onRetry && (
@@ -53,10 +60,14 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     paddingHorizontal: vendorSpacing.xxl,
   },
-  icon: {
-    fontSize: 64,
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: vendorColors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
-    opacity: 0.6,
   },
   title: {
     fontSize: 18,
@@ -105,10 +116,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: vendorColors.border,
   },
-  compactIcon: {
-    fontSize: 40,
+  compactIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: vendorColors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 12,
-    opacity: 0.5,
   },
   compactTitle: {
     fontSize: 16,

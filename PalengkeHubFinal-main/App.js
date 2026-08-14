@@ -53,6 +53,7 @@ import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
 import VendorChatDetailScreen from './src/screens/vendor/VendorChatDetailScreen';
 import VendorChatListScreen from './src/screens/vendor/VendorChatListScreen';
+import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 import { useCart } from './src/hooks/useCart';
 import VendorRatingsScreen from './src/screens/vendor/VendorRatingsScreen';
 
@@ -536,6 +537,7 @@ function RootNavigator() {
         <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
         <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
+        <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
 
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
