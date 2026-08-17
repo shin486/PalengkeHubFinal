@@ -128,30 +128,28 @@ export default function CheckoutScreen({ navigation, route }) {
     }
   };
 
- // Handle GCash modal close - Stay on Checkout, order remains pending
 const handleGcashModalClose = () => {
   Alert.alert(
     'Payment Pending',
-    'Your order has been placed but payment is not yet complete. You can complete the payment now or view your order later in the Orders screen.',
+    'Your order is placed but payment is not complete.\n\n💡 You can:\n• Continue payment now\n• View your order later in Orders\n\n⏰ Your order will be cancelled after 10 minutes.',
     [
       { 
         text: 'Continue Payment', 
         style: 'cancel',
         onPress: () => {
-          // Stay on checkout, keep modal open
-          // Do nothing, just close the alert
+          // Keep modal open
         }
       },
       { 
-        text: 'Leave Payment', 
+        text: 'Go to Orders', 
         style: 'default',
         onPress: () => {
           if (gcashTimerRef.current) {
             clearInterval(gcashTimerRef.current);
           }
           setGcashModalVisible(false);
-          // Stay on Checkout screen, don't navigate anywhere
-          // The user can see the order summary and try again later
+          // ✅ Replace instead of navigate to keep Checkout in stack
+          navigation.replace('Orders');
         }
       }
     ]
@@ -348,7 +346,7 @@ const handleGcashModalClose = () => {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.7,
@@ -433,23 +431,24 @@ const handleGcashModalClose = () => {
     if (allPaid) {
       setAllPaymentsCompleted(true);
       if (gcashTimerRef.current) clearInterval(gcashTimerRef.current);
-      setTimeout(() => {
-        setGcashModalVisible(false);
-        Alert.alert(
-          '✅ All Payments Submitted! 🎉',
-          'Your GCash payments have been submitted successfully. The vendors will verify your payments and confirm your orders.',
-          [
-            { 
-              text: 'View Orders', 
-              onPress: () => navigation.navigate('Orders')
-            },
-            { 
-              text: 'Continue Shopping', 
-              onPress: () => navigation.navigate('Home')
-            }
-          ]
-        );
-      }, 1500);
+      // After all payments are complete, use replace instead of navigate
+setTimeout(() => {
+  setGcashModalVisible(false);
+  Alert.alert(
+    '✅ All Payments Submitted! 🎉',
+    'Your GCash payments have been submitted successfully. The vendors will verify your payments and confirm your orders.',
+    [
+      { 
+        text: 'View Orders', 
+        onPress: () => navigation.replace('Orders') // ✅ Replace
+      },
+      { 
+        text: 'Continue Shopping', 
+        onPress: () => navigation.replace('Home') // ✅ Replace
+      }
+    ]
+  );
+}, 1500);
     } else {
       const nextIndex = index + 1;
       setCurrentStallIndex(nextIndex);
