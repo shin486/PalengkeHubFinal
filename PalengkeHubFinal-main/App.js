@@ -378,6 +378,7 @@ function AppStack({ isGuest }) {
       'Home',
       'ChatDetail',
       'ChatList',
+      'Chats',
       'StallDetails',
       'ProductDetails',
       'Search',
