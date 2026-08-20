@@ -21,6 +21,7 @@ import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 import { ModernOrderCard } from '../../components/vendor/ModernOrderCard';
+import PaymentApproveModal from '../../components/vendor/PaymentApproveModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
 
@@ -86,6 +87,7 @@ export default function VendorOrdersScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('pending');
   const [refreshing, setRefreshing] = useState(false);
   const [showRejectPaymentModal, setShowRejectPaymentModal] = useState(false);
+  const [showApprovePaymentModal, setShowApprovePaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -304,7 +306,10 @@ export default function VendorOrdersScreen({ navigation }) {
       onUpdateStatus={handleUpdateStatus}
       onRejectOrder={handleRejectOrder}
       onRequestPayment={handleRequestPayment}
-      onPaymentApprove={handleApprovePayment}
+      onPaymentApprove={(order) => {
+        setSelectedOrder(order);
+        setShowApprovePaymentModal(true);
+      }}
       onPaymentReject={handleRejectPayment}
       onViewDetails={(order) => navigation.navigate('VendorOrderDetail', { orderId: order.id })}
     />
@@ -433,6 +438,18 @@ export default function VendorOrdersScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Payment Approve Gate - vendor must confirm receipt review + own GCash check */}
+      <PaymentApproveModal
+        visible={showApprovePaymentModal}
+        order={selectedOrder}
+        processing={processing}
+        onClose={() => setShowApprovePaymentModal(false)}
+        onConfirm={() => {
+          setShowApprovePaymentModal(false);
+          if (selectedOrder) handleApprovePayment(selectedOrder);
+        }}
+      />
     </View>
   );
 }

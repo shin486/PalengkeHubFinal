@@ -1,6 +1,6 @@
 // src/screens/customer/ProfileScreen.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,41 +20,16 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme, useColors } from '../../contexts/ThemeContext';
 import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import axios from 'axios';
-
-const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
+import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 export default function ProfileScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
   const { t, locale, changeLanguage } = useI18n();
   const { themeMode, setTheme } = useTheme();
@@ -66,11 +42,99 @@ export default function ProfileScreen({ navigation }) {
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
 
+  // ── PIN Login state ──
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [hasPin, setHasPin] = useState(false);
+  const [pinStep, setPinStep] = useState(0); // 0 = password check, 1 = new PIN, 2 = confirm
+  const [pinIdentifier, setPinIdentifier] = useState('');
+  const [pinPassword, setPinPassword] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinSaved, setPinSaved] = useState(false);
+
   useEffect(() => {
+    checkSavedPin();
     if (user) {
       fetchUserStats();
     }
   }, [user]);
+
+  const checkSavedPin = async () => {
+    setHasPin(await hasSavedPin());
+  };
+
+  const openPinModal = () => {
+    setPinStep(0);
+    setPinIdentifier(user?.email || profile?.phone || '');
+    setPinPassword('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+    setPinSaved(false);
+    setShowPinModal(true);
+  };
+
+  // Step 0 → verify the password against Supabase (so the PIN can sign in later)
+  const handlePinVerifyCredentials = async () => {
+    if (!pinIdentifier.trim() || !pinPassword) {
+      setPinError('Ilagay ang email/phone at password mo.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError('');
+    try {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const credentials = emailRegex.test(pinIdentifier.trim())
+        ? { email: pinIdentifier.trim() }
+        : { phone: pinIdentifier.trim() };
+      const { error } = await supabase.auth.signInWithPassword({
+        ...credentials,
+        password: pinPassword,
+      });
+      if (error) {
+        setPinError('Maling password. Subukan muli.');
+        setPinBusy(false);
+        return;
+      }
+      setPinStep(1);
+    } catch (e) {
+      setPinError('Hindi ma-verify ang password. Subukan muli.');
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const handlePinNext = () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError('Ang PIN ay dapat 4 na numero.');
+      return;
+    }
+    setPinError('');
+    setPinStep(2);
+  };
+
+  const handlePinSave = async () => {
+    if (confirmPin !== newPin) {
+      setPinError('Hindi magkatugma ang PIN. Subukan muli.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError('');
+    await savePinWithCredentials(newPin, user?.id, pinIdentifier.trim(), pinPassword);
+    setPinBusy(false);
+    setHasPin(true);
+    setPinSaved(true);
+    setTimeout(() => setShowPinModal(false), 1200);
+  };
+
+  const handlePinRemove = async () => {
+    await clearPin();
+    setHasPin(false);
+    setPinSaved(false);
+    setShowPinModal(false);
+  };
 
   const fetchUserStats = async () => {
     try {
@@ -107,30 +171,29 @@ export default function ProfileScreen({ navigation }) {
     if (!result.canceled) {
       setUploadingAvatar(true);
       try {
-        const uri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const uri = asset.uri;
         
-        const response = await fetch(uri);
-        const blob = await response.blob();
+        // Determine file extension
+        const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
+        const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
         
-        const base64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64String = reader.result.split(',')[1];
-            resolve(base64String);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        
+        // Upload to uguu.se (free permanent image host — no API key needed)
         const formData = new FormData();
-        formData.append('image', base64);
+        // On web, asset.file is a File; on native, use the uri object
+        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
         
-        const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
-          params: { key: IMGBB_API_KEY },
-          headers: { 'Content-Type': 'multipart/form-data' }
+        const uploadResponse = await fetch('https://uguu.se/upload', {
+          method: 'POST',
+          body: formData,
         });
         
-        const avatarUrl = uploadResponse.data.data.url;
+        const uploadResult = await uploadResponse.json();
+        if (!uploadResult.success || !uploadResult.files?.length) {
+          throw new Error('Image host rejected the upload');
+        }
+        
+        const avatarUrl = uploadResult.files[0].url;
         console.log('✅ Avatar uploaded:', avatarUrl);
         
         const { error } = await supabase
@@ -526,6 +589,14 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
+          {/* PIN Login */}
+          <TouchableOpacity style={styles.menuItem} onPress={openPinModal}>
+            <Text style={styles.menuItemIcon}>🔢</Text>
+            <Text style={styles.menuItemText}>PIN Login</Text>
+            <Text style={styles.languageValue}>{hasPin ? 'Naka-on' : 'Naka-off'}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuItemIcon}>📍</Text>
             <Text style={styles.menuItemText}>Saved Addresses</Text>
@@ -611,6 +682,10 @@ export default function ProfileScreen({ navigation }) {
             </LinearGradient>
           </TouchableOpacity>
         )}
+        {/* VERSION LABEL */}
+        <View style={styles.versionContainer}>
+          <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
+        </View>
       </ScrollView>
 
       {/* Theme Picker Modal */}
@@ -677,11 +752,123 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+      {/* PIN Login Setup Modal */}
+      <Modal visible={showPinModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>🔢 PIN Login</Text>
+
+            {pinSaved ? (
+              <>
+                <Text style={styles.pinHint}>
+                  ✓ Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.
+                </Text>
+              </>
+            ) : pinStep === 0 ? (
+              <>
+                <Text style={styles.pinHint}>
+                  Para sa seguridad, ilagay ang email/phone at password mo. Ise-save ito
+                  sa device na ito (naka-encrypt) para makapasok ka gamit ang PIN.
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="Email o phone"
+                  placeholderTextColor={COLORS.text.lighter}
+                  value={pinIdentifier}
+                  onChangeText={(v) => { setPinIdentifier(v); setPinError(''); }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="Password"
+                  placeholderTextColor={COLORS.text.lighter}
+                  value={pinPassword}
+                  onChangeText={(v) => { setPinPassword(v); setPinError(''); }}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                {hasPin && (
+                  <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
+                    <Text style={[styles.langCancelText, { color: COLORS.error, fontWeight: '600' }]}>Tanggalin ang PIN</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.langOption, (pinIdentifier.trim() && pinPassword) ? styles.langOptionActive : null]}
+                  onPress={handlePinVerifyCredentials}
+                  disabled={pinBusy}
+                >
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagve-verify...' : 'I-verify →'}</Text>
+                </TouchableOpacity>
+              </>
+            ) : pinStep === 1 ? (
+              <>
+                <Text style={styles.pinHint}>
+                  Maglagay ng bagong 4-digit na PIN.
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="● ● ● ●"
+                  placeholderTextColor={COLORS.text.lighter}
+                  value={newPin}
+                  onChangeText={(v) => { setNewPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.langOption, newPin.length === 4 && styles.langOptionActive]}
+                  onPress={handlePinNext}
+                >
+                  <Text style={styles.langOptionText}>Susunod →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(0)}>
+                  <Text style={styles.langCancelText}>Bumalik</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.pinHint}>
+                  Ulitin ang PIN para kumpirmahin.
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  placeholder="● ● ● ● (ulitin)"
+                  placeholderTextColor={COLORS.text.lighter}
+                  value={confirmPin}
+                  onChangeText={(v) => { setConfirmPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  secureTextEntry
+                />
+                {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.langOption, confirmPin.length === 4 && styles.langOptionActive]}
+                  onPress={handlePinSave}
+                  disabled={pinBusy}
+                >
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN ✓'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(1)}>
+                  <Text style={styles.langCancelText}>Bumalik</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {!pinSaved && (
+              <TouchableOpacity style={styles.langCancelBtn} onPress={() => setShowPinModal(false)}>
+                <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -825,6 +1012,16 @@ const styles = StyleSheet.create({
   logoutButton: { marginHorizontal: 16, marginBottom: 30, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   logoutGradient: { paddingVertical: 14, alignItems: 'center' },
   logoutButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+  versionContainer: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  versionText: {
+    fontSize: 12,
+    color: COLORS.text.lighter,
+    letterSpacing: 0.3,
+  },
   // Menu styles
   menuSection: { backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, borderRadius: 20, overflow: 'hidden' },
   menuItem: {
@@ -832,20 +1029,34 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.borderLight,
   },
   menuItemIcon: { fontSize: 20, width: 28, textAlign: 'center' },
-  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: '#333' },
-  languageValue: { fontSize: 13, color: '#1a5f28', fontWeight: '600', marginRight: 8 },
-  chevron: { fontSize: 20, color: '#ccc' },
+  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: COLORS.text.dark },
+  languageValue: { fontSize: 13, color: COLORS.success, fontWeight: '600', marginRight: 8 },
+  chevron: { fontSize: 20, color: COLORS.text.lighter },
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+  modalContent: { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
   langOption: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16,
-    borderRadius: 12, marginBottom: 8, backgroundColor: '#f5f5f5',
+    borderRadius: 12, marginBottom: 8, backgroundColor: COLORS.surfaceSecondary,
   },
-  langOptionActive: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#1a5f28' },
+  langOptionActive: { backgroundColor: COLORS.successLight, borderWidth: 1, borderColor: COLORS.success },
   langOptionText: { fontSize: 16, fontWeight: '500' },
-  langCheck: { fontSize: 18, color: '#1a5f28', fontWeight: '700' },
+  langCheck: { fontSize: 18, color: COLORS.success, fontWeight: '700' },
   langCancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
-  langCancelText: { color: '#888', fontSize: 15 },
+  langCancelText: { color: COLORS.text.light, fontSize: 15 },
+  pinHint: { fontSize: 13, color: COLORS.text.light, marginBottom: 12, lineHeight: 19 },
+  pinInput: {
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 22,
+    letterSpacing: 8,
+    textAlign: 'center',
+    color: COLORS.text.dark,
+    marginBottom: 8,
+  },
+  pinError: { color: COLORS.error, fontSize: 13, marginBottom: 8, fontWeight: '600' },
 });

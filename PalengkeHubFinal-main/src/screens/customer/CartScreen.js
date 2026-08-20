@@ -1,6 +1,7 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/CartScreen.js
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,33 +15,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
+import { EmptyState } from '../../components/EmptyState';
 import { useCart } from '../../hooks/useCart';
+import { useI18n } from '../../contexts/i18nContext';
 import CheckoutContent from '../../components/CheckoutContent';
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 const TABS = {
   CART: 'cart',
@@ -48,7 +26,10 @@ const TABS = {
 };
 
 export default function CartScreen({ navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
+  const { t } = useI18n();
   const [refreshing, setRefreshing] = useState(false);
   const [hasClosedStall, setHasClosedStall] = useState(false);
   const [closedStallNames, setClosedStallNames] = useState([]);
@@ -173,16 +154,20 @@ export default function CartScreen({ navigation }) {
 
   if (cart.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🛒</Text>
-        <Text style={styles.emptyTitle}>Your cart is empty</Text>
-        <Text style={styles.emptyText}>Add items from the market to get started</Text>
-        <TouchableOpacity style={styles.shopButton} onPress={() => navigation.navigate('Home')}>
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.shopGradient}>
-            <Text style={styles.shopButtonText}>Start Shopping</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon="cart-outline"
+        title={t('cart.empty')}
+        subtitle={t('cart.empty_subtitle')}
+        actionLabel={t('home.start_shopping')}
+        onAction={() => navigation.navigate('Home')}
+        colors={{
+          icon: COLORS.text.tertiary || '#9CA3AF',
+          title: COLORS.text.secondary || '#6B7280',
+          subtitle: COLORS.text.tertiary || '#9CA3AF',
+          background: COLORS.background || '#FFFFFF',
+          iconBg: COLORS.surfaceSecondary || '#F3F4F6',
+        }}
+      />
     );
   }
 
@@ -224,38 +209,53 @@ export default function CartScreen({ navigation }) {
             
             {data.items.map((item) => (
               <View key={item.product_id} style={styles.cartItem}>
-                <View style={styles.itemInfo}>
+                {/* Product name on top, full width */}
+                <View style={styles.itemTopRow}>
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                  <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
-                </View>
-                
-                <View style={styles.itemRightSection}>
-                  {!data.isClosed ? (
-                    <View style={styles.quantityControls}>
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => updateItemQuantity(item, -1)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.quantityButtonText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => updateItemQuantity(item, 1)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.quantityButtonText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.closedItemBadge}>
-                      <Text style={styles.closedItemLabel}>Closed</Text>
-                    </View>
+                  {!data.isClosed && (
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => removeItem(item.product_id)}
+                      activeOpacity={0.6}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                   )}
-                  <Text style={styles.itemTotal}>
-                    ₱{((item.quantity || 1) * item.price).toFixed(2)}
-                  </Text>
+                </View>
+
+                <View style={styles.itemBottomRow}>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
+                  </View>
+
+                  <View style={styles.itemRightSection}>
+                    {!data.isClosed ? (
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => updateItemQuantity(item, -1)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quantityButtonText}>−</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => updateItemQuantity(item, 1)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.quantityButtonText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.closedItemBadge}>
+                        <Text style={styles.closedItemLabel}>Closed</Text>
+                      </View>
+                    )}
+                    <Text style={styles.itemTotal}>
+                      ₱{((item.quantity || 1) * item.price).toFixed(2)}
+                    </Text>
+                  </View>
                 </View>
               </View>
             ))}
@@ -325,7 +325,7 @@ export default function CartScreen({ navigation }) {
         <View style={styles.footer}>
           <View style={styles.footerRow}>
             <View style={styles.footerTotalLeft}>
-              <Text style={styles.footerTotalLabel}>Total</Text>
+              <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
               <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
             </View>
             <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
@@ -334,13 +334,13 @@ export default function CartScreen({ navigation }) {
           {hasClosedStall ? (
             <View style={styles.checkoutDisabledArea}>
               <View style={styles.disabledCheckoutButton}>
-                <Text style={styles.disabledCheckoutText}>Checkout Unavailable</Text>
+                <Text style={styles.disabledCheckoutText}>{t('cart.checkout_unavailable')}</Text>
               </View>
               <TouchableOpacity 
                 style={styles.removeClosedButton}
                 onPress={removeItemsFromClosedStalls}
               >
-                <Text style={styles.removeClosedButtonText}>Remove closed stall items</Text>
+                <Text style={styles.removeClosedButtonText}>{t('cart.remove_closed_items')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -350,7 +350,7 @@ export default function CartScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
-                <Text style={styles.checkoutButtonText}>Proceed to Checkout →</Text>
+                <Text style={styles.checkoutButtonText}>{t('cart.proceed_checkout')} →</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
@@ -360,7 +360,7 @@ export default function CartScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -549,22 +549,33 @@ const styles = StyleSheet.create({
 
   // Cart Items
   cartItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
+  itemTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  itemBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
   itemInfo: {
-    flex: 2,
+    flex: 1,
     paddingRight: 12,
   },
   itemName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.text.dark,
-    marginBottom: 4,
+    paddingRight: 8,
     lineHeight: 20,
   },
   itemPrice: {
@@ -627,6 +638,15 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     minWidth: 70,
     textAlign: 'right',
+  },
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 
   // Footer

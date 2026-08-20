@@ -1,7 +1,7 @@
 // Cloudflare Worker for admin.palengkehub.site
 // Proxies requests to the React admin app deployed on Cloudflare Pages.
 
-const PAGES_URL = 'https://f30d3c32.palengkehub-admin.pages.dev';
+const PAGES_URL = 'https://palengkehub-admin.pages.dev';
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -12,7 +12,7 @@ export default {
       return Response.redirect(url.origin + url.pathname, 302);
     }
 
-    // Redirect root to admin login page
+    // Redirect root to the admin login page
     if (url.pathname === '/' || url.pathname === '') {
       return Response.redirect('https://admin.palengkehub.site/admin-login', 302);
     }

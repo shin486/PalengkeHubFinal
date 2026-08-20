@@ -6,7 +6,7 @@ export default {
     name: "PalengkeHub-Final",
     slug: "PalengkeHub-Final",
     scheme: "palengkehub",
-    version: "1.0.0",
+    version: "1.0.6",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -26,6 +26,7 @@ export default {
       },
     },
     android: {
+      package: "com.palengkehub.app",
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/android-icon-foreground.png",

@@ -1,9 +1,5 @@
 // src/services/chatService.js
 import { supabase } from '../../lib/supabase';
-import axios from 'axios';
-
-// ✅ PUT YOUR API KEY HERE
-const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
 
 const normalizeRoleForDb = (role) => {
   if (role === 'admin') return 'customer';
@@ -139,37 +135,32 @@ export const chatService = {
     }
   },
 
-  async uploadChatImage(uri) {
+  async uploadChatImage(uri, file) {
     try {
-      console.log('📸 Uploading image to ImgBB:', uri);
+      console.log('📸 Uploading image to uguu.se:', uri);
       
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Determine file extension from URI
+      const extMatch = uri.match(/\.(\w+)(\?|$)/);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+      const fileName = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
       
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = reader.result.split(',')[1];
-          resolve(base64String);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
+      // Upload to uguu.se (free permanent image host — no API key needed)
       const formData = new FormData();
-      formData.append('image', base64);
+      // On web, `file` is a File object; on native, use the uri object
+      formData.append('files[]', file || { uri, name: fileName, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
       
-      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
-        params: {
-          key: IMGBB_API_KEY
-        },
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      const response = await fetch('https://uguu.se/upload', {
+        method: 'POST',
+        body: formData,
       });
       
-      const imageUrl = uploadResponse.data.data.url;
-      console.log('📸 Image uploaded to ImgBB:', imageUrl);
+      const result = await response.json();
+      if (!result.success || !result.files?.length) {
+        throw new Error('Image host rejected the upload');
+      }
+      
+      const imageUrl = result.files[0].url;
+      console.log('📸 Image uploaded:', imageUrl);
       return imageUrl;
     } catch (error) {
       console.error('Error uploading image:', error);

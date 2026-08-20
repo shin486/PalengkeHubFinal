@@ -1,5 +1,6 @@
+import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/StallDetailsScreen.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,27 +30,6 @@ const { width, height } = Dimensions.get('window');
 // ============================================================
 // COLORS - Clean Red & White Palette
 // ============================================================
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#6B7280',
-    light: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.06)',
-  shadowDark: 'rgba(0, 0, 0, 0.10)',
-};
 
 // ============================================================
 // SPACING CONSTANTS
@@ -139,6 +119,8 @@ const getStallCoordinates = (section, stallNumber) => {
 // MAIN COMPONENT
 // ============================================================
 export default function StallDetailsScreen({ navigation, route }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
   const { isStallFavorite, toggleStallFavorite } = useFavorites();
@@ -726,7 +708,7 @@ export default function StallDetailsScreen({ navigation, route }) {
 // ============================================================
 // STYLES - Clean Red & White
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1141,7 +1123,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.inputBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -1205,7 +1187,7 @@ const styles = StyleSheet.create({
   // ── Modal Styles - Updated ──
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
   },
   modalHeader: {
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
@@ -1256,7 +1238,7 @@ const styles = StyleSheet.create({
   },
   modalMapWrapper: {
     flex: 1,
-    backgroundColor: '#F8F9FB',
+    backgroundColor: COLORS.background,
   },
   modalFooter: {
     padding: 16,

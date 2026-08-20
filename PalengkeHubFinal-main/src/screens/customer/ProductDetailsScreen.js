@@ -1,22 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Image,
+  Vibration,
   Platform,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
+import { PriceTrendBadge } from '../../components/PriceTrendBadge';
+import { fetchPriceTrends } from '../../services/priceHistoryService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/i18nContext';
+import { shareProduct } from '../../services/shareService';
 import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useLastViewed } from '../../hooks/useLastViewed';
 
 // Conditionally load Recharts only on web (it is a web-only library)
 let RechartsLineChart, RechartsResponsiveContainer, RechartsXAxis, RechartsYAxis,
@@ -36,31 +43,6 @@ if (Platform.OS === 'web') {
     console.warn('Recharts not available:', e.message);
   }
 }
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 // Unit configurations
 const UNIT_CONFIG = {
@@ -122,54 +104,59 @@ const StarRating = ({ rating, size = 12 }) => {
 };
 
 // Price History Chart Component (Recharts on web, fallback bar chart on native)
-const PriceHistoryChart = ({ data, darkMode }) => {
-  if (!data || data.length === 0) return null;
+const PriceHistoryChart = ({ data, darkMode, styles }) => {
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
 
   const chartData = data.map(h => ({
     date: new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     price: h.price || 0,
   }));
 
-  // Web: use Recharts
-  if (Platform.OS === 'web' && RechartsLineChart) {
-    return (
-      <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
-        <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
-        <View style={{ width: '100%', height: 200 }}>
-          <RechartsResponsiveContainer width="100%" height="100%">
-            <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-              <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
-              <RechartsXAxis 
-                dataKey="date" 
-                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
-                angle={-30}
-                textAnchor="end"
-                height={40}
-              />
-              <RechartsYAxis 
-                tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
-                tickFormatter={(value) => `₱${value}`}
-                width={50}
-              />
-              <RechartsTooltip 
-                contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
-                labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
-                itemStyle={{ fontSize: 11, color: '#DC2626' }}
-                formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
-              />
-              <RechartsLine 
-                type="monotone" 
-                dataKey="price" 
-                stroke="#DC2626" 
-                strokeWidth={2}
-                dot={{ r: 3, fill: '#DC2626' }}
-                activeDot={{ r: 5, fill: '#EF4444' }}
-              />
-            </RechartsLineChart>
-          </RechartsResponsiveContainer>
+  // Web: use Recharts (guarded against missing components)
+  const hasRecharts = Platform.OS === 'web' && RechartsLineChart && RechartsResponsiveContainer;
+  if (hasRecharts) {
+    try {
+      return (
+        <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
+          <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+          <View style={{ width: '100%', height: 200 }}>
+            <RechartsResponsiveContainer width="100%" height="100%">
+              <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
+                <RechartsXAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                  angle={-30}
+                  textAnchor="end"
+                  height={40}
+                />
+                <RechartsYAxis 
+                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                  tickFormatter={(value) => `₱${value}`}
+                  width={50}
+                />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
+                  labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
+                  itemStyle={{ fontSize: 11, color: '#DC2626' }}
+                  formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
+                />
+                <RechartsLine 
+                  type="monotone" 
+                  dataKey="price" 
+                  stroke="#DC2626" 
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: '#DC2626' }}
+                  activeDot={{ r: 5, fill: '#EF4444' }}
+                />
+              </RechartsLineChart>
+            </RechartsResponsiveContainer>
+          </View>
         </View>
-      </View>
-    );
+      );
+    } catch (e) {
+      console.warn('PriceHistoryChart Recharts render error:', e.message);
+    }
   }
 
   // Native fallback: simple bar chart
@@ -203,6 +190,8 @@ const PriceHistoryChart = ({ data, darkMode }) => {
 };
 
 export default function ProductDetailsScreen({ route, navigation }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
@@ -219,9 +208,30 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [marketLoading, setMarketLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
+  // Related products from same stall
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [priceTrend, setPriceTrend] = useState(null);
+
+  // Add-to-cart toast animation
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastAnim = useRef(new Animated.Value(160)).current;
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.spring(toastAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
+      Animated.delay(1800),
+      Animated.timing(toastAnim, { toValue: 160, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToastVisible(false));
+  };
+
   const { user, isGuest, setIsGuest } = useAuth();
   const { addToCart } = useCart();
+  const { t } = useI18n();
   const { isProductFavorite, toggleProductFavorite } = useFavorites();
+  const { add: addLastViewed } = useLastViewed();
 
   useEffect(() => {
     if (productId) {
@@ -229,12 +239,46 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   }, [productId]);
 
+  // Track last viewed when product loads
+  useEffect(() => {
+    if (product && stall) {
+      addLastViewed({
+        id: product.id,
+        name: product.name,
+        image_url: product.image_url,
+        price: currentPrice || product.price,
+        stall_id: stall.id,
+        stall_name: stall.stall_name,
+        unit: product.unit,
+      });
+    }
+  }, [product]);
+
   // Fetch market data once the product is loaded
   useEffect(() => {
     if (product) {
       fetchMarketData(product);
     }
   }, [product]);
+
+  // Fetch related products from the same stall
+  useEffect(() => {
+    if (stall?.id) {
+      fetchRelatedProducts(stall.id);
+    }
+  }, [stall]);
+
+  const fetchRelatedProducts = async (stallId) => {
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, price, image_url, unit')
+        .eq('stall_id', stallId)
+        .neq('id', productId)
+        .limit(5);
+      if (data) setRelatedProducts(data);
+    } catch { /* silently fail */ }
+  };
 
   const fetchProductDetails = async () => {
     try {
@@ -264,6 +308,11 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       setProduct(productData);
       setStall(productData.stalls);
+
+      // 1b. Fetch price history trend (Bumaba/Tumaas badge)
+      fetchPriceTrends([productId]).then((trends) => {
+        if (trends.has(productId)) setPriceTrend(trends.get(productId));
+      });
       
       // 2. Fetch active promotion for this product
       const now = new Date().toISOString();
@@ -384,20 +433,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       addToCart(cartProduct, stall.id, stall, quantity);
       
-      let quantityText = '';
-      if (selectedUnit === 'kg') quantityText = `${quantity}kg`;
-      else if (selectedUnit === '500g') quantityText = `${quantity * 0.5}kg`;
-      else if (selectedUnit === '250g') quantityText = `${quantity * 0.25}kg`;
-      else quantityText = `${quantity} ${getUnitSuffix(selectedUnit)}`;
-      
-      Alert.alert(
-        'Added to Cart',
-        `${quantityText} of ${product.name} added to your cart`,
-        [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
-        ]
-      );
+      // Haptic feedback + animated toast
+      Vibration.vibrate(50);
+      showToast(`${product.name} ${t('cart.added_suffix')}`);
     }
   };
 
@@ -609,7 +647,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.screenContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Back Button */}
+      <TouchableOpacity
+        style={styles.backArrow}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+      </TouchableOpacity>
+
       {/* Product Image */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
@@ -629,9 +677,25 @@ export default function ProductDetailsScreen({ route, navigation }) {
       <View style={styles.productInfo}>
         <View style={styles.productTitleRow}>
           <Text style={styles.productName}>{product.name}</Text>
-          <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
-            <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => shareProduct({
+                name: product.name,
+                price: currentPrice,
+                unit: getUnitDisplayText(selectedUnit),
+                stallName: stall?.stall_name,
+                stallNumber: stall?.stall_number,
+                onCopied: () => Alert.alert(t('products.share'), t('products.share_copied')),
+              })}
+              style={styles.favBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.favIcon}>↗️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
+              <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.priceRow}>
@@ -647,6 +711,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </View>
           )}
         </View>
+
+        {priceTrend && (
+          <PriceTrendBadge
+            currentPrice={currentPrice}
+            previousPrice={priceTrend.previous_price}
+          />
+        )}
 
         {promotion && (
           <View style={styles.originalPriceRow}>
@@ -878,7 +949,39 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
             {/* Price History Chart */}
             {priceHistory.length > 0 && (
-              <PriceHistoryChart data={priceHistory} darkMode={darkMode} />
+              <PriceHistoryChart data={priceHistory} darkMode={darkMode} styles={styles} />
+            )}
+
+            {/* You Might Also Like */}
+            {relatedProducts.length > 0 && (
+              <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
+                <View style={styles.marketSubSectionHeader}>
+                  <MaterialIcons name="store" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
+                  <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>
+                    More from {stall?.stall_name || 'this stall'}
+                  </Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                  {relatedProducts.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.relatedCard}
+                      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.relatedImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.relatedInfo}>
+                        <Text numberOfLines={2} style={styles.relatedName}>{item.name}</Text>
+                        <Text style={styles.relatedPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             )}
 
             {/* Vendor Comparison Table */}
@@ -1015,46 +1118,158 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </Text>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity 
-          style={[styles.button, styles.addToCartButton]}
-          onPress={handleAddToCart}
-          disabled={!product?.is_available}
-        >
-          <LinearGradient
-            colors={['#DC2626', '#EF4444']}
-            style={styles.buttonGradient}
-          >
-            <Text style={styles.buttonText}>
-              {product?.is_available ? `Add to Cart (₱${totalPrice.toFixed(2)})` : 'Out of Stock'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.button, styles.buyNowButton]}
-          onPress={handleBuyNow}
-          disabled={!product?.is_available}
-        >
-          <LinearGradient
-            colors={['#10B981', '#059669']}
-            style={styles.buttonGradient}
-          >
-            <Text style={styles.buttonText}>
-              {product?.is_available ? 'Buy Now' : 'Unavailable'}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
     </ScrollView>
+
+      {/* Fixed Action Buttons - always visible while scrolling */}
+      <View style={styles.fixedFooter}>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.button, styles.addToCartButton]}
+            onPress={handleAddToCart}
+            disabled={!product?.is_available}
+          >
+            <LinearGradient
+              colors={['#DC2626', '#EF4444']}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText} numberOfLines={2}>
+                {product?.is_available ? `${t('products.add_to_cart')} (₱${totalPrice.toFixed(2)})` : t('products.out_of_stock')}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.buyNowButton]}
+            onPress={handleBuyNow}
+            disabled={!product?.is_available}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText}>
+                {product?.is_available ? t('products.buy_now') : 'Unavailable'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Add-to-Cart Toast - floats above the buttons, always on screen */}
+      {toastVisible && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
+        >
+          <View style={styles.toastContent}>
+            <View style={styles.toastIcon}>
+              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.toastTextWrap}>
+              <Text style={styles.toastTitle}>{t('cart.added_to_cart')}</Text>
+              <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  screenContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  backArrow: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 120,
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  toastIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#22C55E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  toastTextWrap: {
+    flex: 1,
+  },
+  toastTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  toastSubtitle: {
+    color: '#D1D5DB',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  relatedCard: {
+    width: 130,
+    marginRight: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  relatedImage: {
+    width: '100%',
+    height: 100,
+    backgroundColor: COLORS.inputBg,
+  },
+  relatedInfo: {
+    padding: 10,
+  },
+  relatedName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  relatedPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#C62828',
   },
   centerContainer: {
     flex: 1,
@@ -1065,7 +1280,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
   },
   errorText: {
     fontSize: 16,
@@ -1073,7 +1288,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   backButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1084,7 +1299,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   imageContainer: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     alignItems: 'center',
   },
@@ -1096,7 +1311,7 @@ const styles = StyleSheet.create({
   productImagePlaceholder: {
     width: 200,
     height: 200,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.inputBg,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1105,7 +1320,7 @@ const styles = StyleSheet.create({
     fontSize: 60,
   },
   productInfo: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     marginTop: 1,
   },
@@ -1118,7 +1333,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.dark,
     flex: 1,
     marginRight: 12,
   },
@@ -1132,16 +1347,16 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: COLORS.primary,
     marginRight: 8,
   },
   productUnit: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
   },
   productDescription: {
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.text.medium,
     lineHeight: 22,
     marginBottom: 15,
   },
@@ -1151,7 +1366,7 @@ const styles = StyleSheet.create({
   },
   availabilityLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.light,
     marginRight: 10,
   },
   availabilityBadge: {
@@ -1160,30 +1375,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   availableBadge: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: COLORS.successLight,
   },
   unavailableBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
   },
   availabilityText: {
     fontSize: 12,
     fontWeight: '600',
   },
   availableText: {
-    color: '#059669',
+    color: COLORS.success,
   },
   unavailableText: {
-    color: '#DC2626',
+    color: COLORS.error,
   },
   section: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 20,
     marginTop: 10,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.dark,
     marginBottom: 15,
   },
   unitsContainer: {
@@ -1389,9 +1604,18 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    padding: 16,
     gap: 12,
-    marginBottom: 20,
+  },
+  fixedFooter: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   button: {
     flex: 1,
@@ -1411,6 +1635,8 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 15,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   promoBadge: {
     backgroundColor: COLORS.primary,

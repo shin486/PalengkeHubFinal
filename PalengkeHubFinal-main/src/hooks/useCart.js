@@ -2,14 +2,30 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
+// Shared module-level cart state so all useCart() calls share the same cart
+let sharedCart = [];
+const listeners = new Set();
+
+const updateSharedCart = (newCart) => {
+  sharedCart = newCart;
+  listeners.forEach(fn => fn(sharedCart));
+};
+
 export const useCart = () => {
   const { user, isGuest } = useAuth();
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(sharedCart);
   const [loading, setLoading] = useState(true);
+
+  // Subscribe to shared cart updates
+  useEffect(() => {
+    const listener = (newCart) => setCart(newCart);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
 
   const fetchCart = useCallback(async () => {
     if (isGuest || !user) {
-      setCart([]);
+      updateSharedCart([]);
       setLoading(false);
       return;
     }
@@ -27,7 +43,7 @@ export const useCart = () => {
 
       if (error) {
         console.error('❌ Error fetching cart:', error);
-        setCart([]);
+        updateSharedCart([]);
         return;
       }
 
@@ -77,10 +93,10 @@ export const useCart = () => {
       }));
       
       console.log('✅ Cart loaded:', formattedItems.length, 'items');
-      setCart(formattedItems);
+      updateSharedCart(formattedItems);
     } catch (error) {
       console.error('❌ Error fetching cart:', error);
-      setCart([]);
+      updateSharedCart([]);
     } finally {
       setLoading(false);
     }
@@ -120,7 +136,7 @@ export const useCart = () => {
       updatedCart = [...cart, newItem];
     }
     
-    setCart(updatedCart);
+    updateSharedCart(updatedCart);
     
     try {
       // Get existing cart to ensure we update the correct row
@@ -164,7 +180,7 @@ export const useCart = () => {
     
     if (newQuantity <= 0) {
       const updatedCart = cart.filter(item => item.product_id !== productId);
-      setCart(updatedCart);
+      updateSharedCart(updatedCart);
       await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
@@ -177,7 +193,7 @@ export const useCart = () => {
         ? { ...item, quantity: newQuantity }
         : item
     );
-    setCart(updatedCart);
+    updateSharedCart(updatedCart);
 
     await supabase
       .from('carts')
@@ -191,7 +207,7 @@ export const useCart = () => {
     if (!user) return;
     
     const updatedCart = cart.filter(item => item.product_id !== productId);
-    setCart(updatedCart);
+    updateSharedCart(updatedCart);
     
     await supabase
       .from('carts')
@@ -205,7 +221,7 @@ export const useCart = () => {
     if (!user) return;
     
     // Clear local state first for immediate UI feedback
-    setCart([]);
+    updateSharedCart([]);
     
     try {
       // Update database with empty items array
@@ -241,6 +257,7 @@ export const useCart = () => {
 
   return {
     cart,
+    cartCount: cart?.length || 0,
     cartTotal,
     loading,
     addToCart,

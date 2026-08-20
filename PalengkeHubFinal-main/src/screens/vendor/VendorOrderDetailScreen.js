@@ -25,6 +25,7 @@ import {
 import { VendorStatusBadge, VendorPaymentStatusBadge } from '../../components/vendor/VendorStatusBadge';
 import { VendorSkeletonCard, VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorSectionHeader } from '../../components/vendor/VendorSectionHeader';
+import PaymentApproveModal from '../../components/vendor/PaymentApproveModal';
 
 const formatDate = (dateStr) => {
   try {
@@ -78,6 +79,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   const [updating, setUpdating] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
@@ -453,6 +455,16 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               </View>
             )}
 
+            {typeof order.payment_scan_matched === 'boolean' && (
+              <View style={[styles.scanVerdict, order.payment_scan_matched ? styles.scanVerdictOk : styles.scanVerdictWarn]}>
+                <Text style={[styles.scanVerdictText, { color: order.payment_scan_matched ? vendorColors.success : vendorColors.warning }]}>
+                  {order.payment_scan_matched
+                    ? '✅ Receipt scan: reference number and amount matched'
+                    : '⚠️ Receipt scan: could not confirm a match — verify manually'}
+                </Text>
+              </View>
+            )}
+
             {order.payment_receipt_url && (
               <TouchableOpacity
                 style={styles.receiptButton}
@@ -473,7 +485,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               <View style={styles.verifyActions}>
                 <TouchableOpacity
                   style={[styles.verifyBtn, styles.approveBtn]}
-                  onPress={handleApprovePayment}
+                  onPress={() => setShowApproveModal(true)}
                   disabled={updating}
                 >
                   <Text style={styles.verifyBtnText}>
@@ -645,6 +657,18 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
           )}
         </View>
       </Modal>
+
+      {/* Payment Approve Gate - vendor must confirm receipt review + own GCash check */}
+      <PaymentApproveModal
+        visible={showApproveModal}
+        order={order}
+        processing={updating}
+        onClose={() => setShowApproveModal(false)}
+        onConfirm={() => {
+          setShowApproveModal(false);
+          handleApprovePayment();
+        }}
+      />
     </View>
   );
 }
@@ -1077,5 +1101,20 @@ const styles = StyleSheet.create({
   receiptImage: {
     width: '100%',
     height: '80%',
+  },
+  scanVerdict: {
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  scanVerdictOk: {
+    backgroundColor: 'rgba(16,185,129,0.10)',
+  },
+  scanVerdictWarn: {
+    backgroundColor: 'rgba(245,158,11,0.12)',
+  },
+  scanVerdictText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

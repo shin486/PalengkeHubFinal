@@ -21,6 +21,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
 import * as Haptics from 'expo-haptics';
+import { PinPadModal } from '../../components/PinPadModal';
+import { hasSavedPin } from '../../services/pinService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -142,8 +144,21 @@ export const LoginScreen = ({ setIsGuest }) => {
   const formOpacity = useRef(new Animated.Value(0)).current;
   const logoFloat   = useRef(new Animated.Value(0)).current;
 
-  const { login, loginAsAccount } = useAuth();
+  const { login, loginAsAccount, checkUser } = useAuth();
   const navigation = useNavigation();
+
+  // ── PIN login state ──
+  const [pinVisible, setPinVisible] = useState(false);
+
+  // If this device has a saved PIN, show the PIN pad instead of the password form
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = await hasSavedPin();
+      if (!cancelled && saved) setPinVisible(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Multi-account picker state ──
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -665,6 +680,16 @@ export const LoginScreen = ({ setIsGuest }) => {
           </View>
         </View>
       )}
+      {/* PIN pad for elderly quick login */}
+      <PinPadModal
+        visible={pinVisible}
+        onClose={() => setPinVisible(false)}
+        onSuccess={async () => {
+          setPinVisible(false);
+          // Load the user — RootNavigator auto-navigates on auth state change
+          await checkUser();
+        }}
+      />
     </KeyboardAvoidingView>
   );
 };

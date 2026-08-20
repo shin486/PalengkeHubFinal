@@ -1,5 +1,5 @@
 // src/screens/customer/ChatListScreen.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,12 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { chatService } from '../../services/chatService';
 import { Header } from '../../components/Header';
+import { useColors } from '../../contexts/ThemeContext';
 
 export default function ChatListScreen({ navigation }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,7 +98,7 @@ export default function ChatListScreen({ navigation }) {
         renderItem={renderConversation}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -111,17 +114,17 @@ export default function ChatListScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+const createStyles = (COLORS) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
   listContent: { padding: 16, flexGrow: 1 },
   conversationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -131,18 +134,18 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   avatarEmoji: { fontSize: 24 },
   conversationInfo: { flex: 1 },
-  stallName: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
-  lastMessage: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  time: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  stallName: { fontSize: 16, fontWeight: 'bold', color: COLORS.text.primary },
+  lastMessage: { fontSize: 13, color: COLORS.text.tertiary, marginTop: 2 },
+  time: { fontSize: 11, color: COLORS.text.quaternary, marginTop: 2 },
   unreadBadge: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     minWidth: 24,
     height: 24,
@@ -150,9 +153,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 6,
   },
-  unreadText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+  unreadText: { color: COLORS.text.inverse, fontSize: 12, fontWeight: 'bold' },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 60, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
-  emptyText: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.text.primary, marginBottom: 8 },
+  emptyText: { fontSize: 14, color: COLORS.text.tertiary, textAlign: 'center' },
 });

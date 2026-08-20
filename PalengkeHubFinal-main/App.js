@@ -1,5 +1,5 @@
 // App.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { CartProvider } from './src/contexts/CartContext';
@@ -48,6 +50,7 @@ import OrdersScreen from './src/screens/customer/OrdersScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
 import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
+import PickupPassScreen from './src/screens/customer/PickupPassScreen';
 import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
@@ -441,6 +444,7 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
+      <Stack.Screen name="PickupPass" component={PickupPassScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         
@@ -466,6 +470,37 @@ let navigationContainerRef = null;
 // ============================================================
 function RootNavigator() {
   const { user, loading, isGuest, setIsGuest, profile } = useAuth();
+
+  // Android hardware back button / gesture: navigate back INSIDE the app instead
+  // of closing it. The app runs as a web bundle inside a Capacitor WebView which
+  // has no browser history, so without this listener the system back button
+  // exits the app instead of going to the previous screen.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const handlePromise = CapacitorApp.addListener('backButton', () => {
+      if (
+        navigationContainerRef &&
+        navigationContainerRef.isReady() &&
+        navigationContainerRef.canGoBack()
+      ) {
+        navigationContainerRef.goBack();
+      } else {
+        // At the root screen - exit the app (standard Android behavior)
+        CapacitorApp.exitApp();
+      }
+    });
+
+    return () => {
+      if (handlePromise && typeof handlePromise.then === 'function') {
+        handlePromise
+          .then((handle) => {
+            if (handle && handle.remove) handle.remove();
+          })
+          .catch(() => {});
+      }
+    };
+  }, []);
 
   console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
 

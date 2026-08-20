@@ -16,9 +16,11 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
   // Detect if running locally (file://) or on deployed site
   const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  // After login, redirect to admin dashboard — MUST stay on same domain (admin.palengkehub.site)
+  // After login, redirect to the React admin web dashboard. MUST stay on same domain
   // so the Supabase auth session (stored in localStorage) persists.
-  const REDIRECT_URL = isLocal ? 'admin.html' : 'https://admin.palengkehub.site/admin.html';
+  // The React app is served under /admin/ on admin.palengkehub.site.
+  // Local: relative path keeps login + dashboard on the same origin for the session to persist.
+  const REDIRECT_URL = isLocal ? '/admin/' : 'https://admin.palengkehub.site/admin/';
 
   // IMPORTANT: Only init supabase if the CDN loaded successfully
   // If window.supabase is undefined, the form still works with method="post" fallback

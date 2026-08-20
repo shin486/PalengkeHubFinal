@@ -4,7 +4,7 @@
 // ============================================
 
 // --- Config ---
-const SUPABASE_URL = "https://qpmauvmhrdlpbbbaevk.supabase.co";
+const SUPABASE_URL = "https://jjpgmpufwpbgqjzqymvj.supabase.co";
 const ALLOWED_ORIGINS: string = "*";
 const ENABLED_SERVICES = ['rest', 'auth', 'storage'];
 
@@ -166,6 +166,11 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const shortMessage = `PalengkeHub OTP: ${code}. Valid for 5 minutes. Do not share this code.`;
 
+    // Resolve the Semaphore sender name: prefer the env-configured registered name,
+    // fall back to the request's sender_name, then the brand default.
+    // Semaphore requires an EXACT match to a sender name registered on the account (max 11 chars).
+    const semaphoreSender = (semaphoreSenderName || sender_name || 'PalengkeHub').trim().slice(0, 11);
+
     const responseHeaders = new Headers();
     addCorsHeaders(responseHeaders, request);
     responseHeaders.set('Content-Type', 'application/json');
@@ -183,9 +188,8 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         semaphoreParams.append('apikey', semaphoreApiKey);
         semaphoreParams.append('number', phone_number);
         semaphoreParams.append('message', shortMessage);
-        // Only include sendername if configured in env (Semaphore requires a registered sender name)
-        if (semaphoreSenderName) {
-          semaphoreParams.append('sendername', semaphoreSenderName.slice(0, 11));
+        if (semaphoreSender) {
+          semaphoreParams.append('sendername', semaphoreSender);
         }
 
         const response = await fetch('https://api.semaphore.co/api/v4/messages', {
@@ -277,9 +281,8 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         semaphoreParams.append('apikey', semaphoreApiKey);
         semaphoreParams.append('number', phone_number);
         semaphoreParams.append('message', shortMessage);
-        // Only include sendername if configured in env (Semaphore requires a registered sender name)
-        if (semaphoreSenderName) {
-          semaphoreParams.append('sendername', semaphoreSenderName.slice(0, 11));
+        if (semaphoreSender) {
+          semaphoreParams.append('sendername', semaphoreSender);
         }
 
         const response = await fetch('https://api.semaphore.co/api/v4/messages', {

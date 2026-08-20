@@ -6,6 +6,12 @@ const ThemeContext = createContext();
 
 export const useTheme = () => useContext(ThemeContext);
 
+// Legacy-compatible, theme-aware colors (keeps the COLORS.text.dark style naming used by older screens)
+export const useColors = () => {
+  const { colors } = useTheme();
+  return colors;
+};
+
 const THEME_KEY = '@palengkehub_theme';
 
 const COLORS = {
@@ -16,7 +22,7 @@ const COLORS = {
     accent: '#F87171',
     accentLight: '#FEE2E2',
     accentSoft: '#FEF2F2',
-    background: '#F8F9FA',
+        background: '#F8F9FA',
     surface: '#FFFFFF',
     surfaceSecondary: '#F5F5F5',
     card: '#FFFFFF',
@@ -26,6 +32,13 @@ const COLORS = {
       tertiary: '#6B7280',
       quaternary: '#9CA3AF',
       inverse: '#FFFFFF',
+      // Legacy naming aliases (kept for backward compatibility with older screens)
+      dark: '#111827',
+      medium: '#374151',
+      light: '#6B7280',
+      lighter: '#9CA3AF',
+      white: '#FFFFFF',
+      tertiaryer: '#6B7280',
     },
     border: '#E5E7EB',
     borderLight: '#F3F4F6',
@@ -41,6 +54,11 @@ const COLORS = {
     inputBg: '#F3F4F6',
     badgeBg: '#FEE2E2',
     statusBar: 'dark',
+    // Screen-specific brand/surface tokens (theme-aware)
+    gold: '#F59E0B',
+    primarySurface: '#FEF2F2',
+    gcash: '#007DFE',
+    gcashLight: '#E8F4FF',
   },
   dark: {
     primary: '#EF4444',
@@ -59,6 +77,13 @@ const COLORS = {
       tertiary: '#9CA3AF',
       quaternary: '#6B7280',
       inverse: '#111827',
+      // Legacy naming aliases (kept for backward compatibility with older screens)
+      dark: '#F9FAFB',
+      medium: '#D1D5DB',
+      light: '#9CA3AF',
+      lighter: '#6B7280',
+      white: '#111827',
+      tertiaryer: '#9CA3AF',
     },
     border: '#2A2A3E',
     borderLight: '#1F1F3A',
@@ -74,6 +99,11 @@ const COLORS = {
     inputBg: '#1F1F3A',
     badgeBg: '#7F1D1D',
     statusBar: 'light',
+    // Screen-specific brand/surface tokens (theme-aware)
+    gold: '#FBBF24',
+    primarySurface: '#1A0A0A',
+    gcash: '#007DFE',
+    gcashLight: '#1E3A8A',
   },
 };
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useColors } from '../../contexts/ThemeContext';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 
 export default function StallsDirectoryScreen({ navigation, isGuest }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stalls, setStalls] = useState([]);
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('All');
@@ -55,7 +58,7 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
       activeOpacity={0.7}
     >
       <LinearGradient
-        colors={['#FFFFFF', '#F9FAFB']}
+        colors={[COLORS.surface, COLORS.background]}
         style={styles.stallGradient}
       >
         <View style={styles.stallHeader}>
@@ -90,7 +93,7 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
+        <ActivityIndicator size="large" color={COLORS.accent} />
         <Text style={styles.loadingText}>Loading stalls...</Text>
       </View>
     );
@@ -156,10 +159,10 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: COLORS.text.light,
   },
   filterScroll: {
     paddingVertical: 12,
@@ -180,21 +183,21 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.card,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   filterChipActive: {
-    backgroundColor: '#FF6B6B',
-    borderColor: '#FF6B6B',
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   filterChipText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   filterChipTextActive: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   countContainer: {
     paddingHorizontal: 16,
@@ -202,7 +205,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   listContainer: {
     padding: 16,
@@ -212,7 +215,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -230,7 +233,7 @@ const styles = StyleSheet.create({
   stallNumber: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: COLORS.accent,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -243,16 +246,16 @@ const styles = StyleSheet.create({
   ratingValue: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   stallName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   sectionBadge: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -261,11 +264,11 @@ const styles = StyleSheet.create({
   },
   sectionText: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   stallDescription: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
     lineHeight: 18,
     marginBottom: 12,
   },
@@ -274,7 +277,7 @@ const styles = StyleSheet.create({
   },
   productCountText: {
     fontSize: 13,
-    color: '#FF6B6B',
+    color: COLORS.accent,
     fontWeight: '500',
   },
   emptyContainer: {
@@ -283,7 +286,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
     textAlign: 'center',
   },
 });

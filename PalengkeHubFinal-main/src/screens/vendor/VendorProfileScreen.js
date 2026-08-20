@@ -257,7 +257,7 @@ const GoogleMapsWeb = ({ latitude, longitude, onLocationSelect, onClose }) => {
 // MAIN COMPONENT
 // ============================================================
 export default function VendorProfileScreen({ navigation }) {
-  const { user, profile } = useAuth();
+  const { user, profile, logout, resetToLogin } = useAuth();
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -317,16 +317,33 @@ export default function VendorProfileScreen({ navigation }) {
     await fetchStall();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      const confirmLogout = window.confirm('Are you sure you want to logout?');
+      if (!confirmLogout) return;
+      console.log('🔴 Vendor logging out (web)...');
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Error during logout:', err);
+      }
+      window.location.href = '/';
+      return;
+    }
+
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          await supabase.auth.signOut();
-          if (Platform.OS === 'web') window.location.href = '/';
-          else navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          const result = await logout();
+          if (result.success) {
+            resetToLogin();
+          } else {
+            Alert.alert('Error', result.error || 'Failed to logout');
+          }
         }
       }
     ]);
