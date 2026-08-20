@@ -155,18 +155,19 @@ export const Header = ({
 // ============================================================
 const styles = StyleSheet.create({
   header: {
-    // No rounded corners - full width to avoid white space in dark mode
+    // Full width gradient - no horizontal padding to avoid white space in dark mode
     shadowColor: 'rgba(198,40,40,0.25)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 12,
     elevation: 6,
-    paddingHorizontal: SPACING.lg,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     minHeight: 52,
+    paddingHorizontal: SPACING.lg,
   },
   
   // ── Left Section ──
