@@ -325,6 +325,16 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // ✅ Expose setActiveRouteName globally so screens can update the header visibility
+  useEffect(() => {
+    global.setActiveRouteName = setActiveRouteName;
+    global.updateRouteName = setActiveRouteName;
+    return () => {
+      delete global.setActiveRouteName;
+      delete global.updateRouteName;
+    };
+  }, []);
+
   useEffect(() => {
     const fetchUnreadCount = async () => {
       const { data: { user } } = await supabase.auth.getUser();
