@@ -14,25 +14,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
-
-// ============================================================
-// COLORS - Matching PalengkeHub Branding
-// ============================================================
-const COLORS = {
-  primary: '#C62828',
-  primaryLight: '#E53935',
-  primaryDark: '#B71C1C',
-  primarySurface: '#FFEBEE',
-  background: '#FFFFFF',
-  text: {
-    white: '#FFFFFF',
-    whiteOpacity: 'rgba(255,255,255,0.85)',
-    whiteLight: 'rgba(255,255,255,0.6)',
-  },
-  shadow: 'rgba(198,40,40,0.25)',
-};
 
 // ============================================================
 // SPACING CONSTANTS
@@ -63,6 +47,7 @@ export const Header = ({
 }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const COLORS = useColors();
 
   const handleBack = () => {
     if (onBackPress) {
@@ -170,9 +155,8 @@ export const Header = ({
 // ============================================================
 const styles = StyleSheet.create({
   header: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: COLORS.shadow,
+    // No rounded corners - full width to avoid white space in dark mode
+    shadowColor: 'rgba(198,40,40,0.25)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 12,
@@ -213,7 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.shadow,
+    shadowColor: 'rgba(198,40,40,0.3)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -275,12 +259,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: '#C62828',
   },
   cartBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: '#C62828',
     textAlign: 'center',
     includeFontPadding: false,
   },
