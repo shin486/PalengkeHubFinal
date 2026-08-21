@@ -19,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 import { ModernOrderCard } from '../../components/vendor/ModernOrderCard';
 import PaymentApproveModal from '../../components/vendor/PaymentApproveModal';
@@ -26,32 +27,8 @@ import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
 
 // ============================================================
-// COLORS - Matches Customer Side
+// COLORS - Theme-aware (from ThemeContext)
 // ============================================================
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  info: '#3B82F6',
-  purple: '#7C3AED',
-  shadow: 'rgba(0, 0, 0, 0.06)',
-  shadowDark: 'rgba(0, 0, 0, 0.10)',
-};
 
 const SPACING = {
   xs: 4,
@@ -83,6 +60,8 @@ const STATUS_TABS = [
 
 export default function VendorOrdersScreen({ navigation }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [refreshing, setRefreshing] = useState(false);
@@ -457,7 +436,7 @@ export default function VendorOrdersScreen({ navigation }) {
 // ============================================================
 // STYLES - Matches Customer Side
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

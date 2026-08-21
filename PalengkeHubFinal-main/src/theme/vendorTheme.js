@@ -2,6 +2,9 @@
 // Unified design system for the Vendor module
 // EXACTLY matches the Customer module's design language
 
+import { useColors, useTheme } from '../contexts/ThemeContext';
+
+// Legacy static colors (kept for backward compatibility)
 export const vendorColors = {
   primary: '#DC2626',
   primaryLight: '#EF4444',
@@ -43,6 +46,47 @@ export const vendorColors = {
   gcashLight: '#E8F4FF',
 };
 
+// ✅ Theme-aware vendor colors hook — uses ThemeContext colors with vendor-specific extras
+export const useVendorColors = () => {
+  const COLORS = useColors();
+  const { isDark } = useTheme();
+  return {
+    // Theme-aware base (spread first, then vendor aliases override)
+    ...COLORS,
+    // Vendor-specific aliases mapped to theme-aware values
+    primary: COLORS.primary,
+    primaryLight: COLORS.primaryLight,
+    primaryDark: COLORS.primaryDark,
+    accent: COLORS.accent,
+    accentLight: COLORS.accentLight,
+    accentSoft: COLORS.accentSoft,
+    background: COLORS.background,
+    surface: COLORS.surface,
+    surfaceAlt: COLORS.surfaceSecondary,
+    divider: COLORS.border,
+    border: COLORS.border,
+    borderLight: COLORS.borderLight,
+    shadow: COLORS.shadow,
+    shadowDark: COLORS.shadowDark,
+    // Vendor-specific (non-theme)
+    success: COLORS.success,
+    successLight: COLORS.successLight,
+    error: COLORS.error,
+    errorLight: COLORS.errorLight,
+    danger: COLORS.error,
+    dangerLight: COLORS.errorLight,
+    warning: COLORS.warning,
+    warningLight: COLORS.warningLight,
+    info: COLORS.info || '#3B82F6',
+    infoLight: COLORS.infoLight || '#DBEAFE',
+    purple: COLORS.purple || '#7C3AED',
+    purpleLight: COLORS.purpleLight || '#EDE9FE',
+    gcash: COLORS.gcash,
+    gcashLight: COLORS.gcashLight,
+    isDark,
+  };
+};
+
 export const vendorSpacing = {
   xs: 4,
   sm: 8,
@@ -60,6 +104,21 @@ export const vendorBorderRadius = {
   xl: 20,
   xxl: 24,
   full: 999,
+};
+
+// ✅ Theme-aware vendor typography
+export const useVendorTypography = () => {
+  const COLORS = useColors();
+  return {
+    h1: { fontSize: 28, fontWeight: 'bold', color: COLORS.text.dark },
+    h2: { fontSize: 22, fontWeight: 'bold', color: COLORS.text.dark },
+    h3: { fontSize: 18, fontWeight: 'bold', color: COLORS.text.dark },
+    h4: { fontSize: 16, fontWeight: '600', color: COLORS.text.dark },
+    body: { fontSize: 14, color: COLORS.text.dark },
+    bodySmall: { fontSize: 12, color: COLORS.text.medium },
+    caption: { fontSize: 11, color: COLORS.text.lighter },
+    label: { fontSize: 14, fontWeight: '600', color: COLORS.text.dark, marginBottom: 8 },
+  };
 };
 
 export const vendorTypography = {
@@ -109,23 +168,46 @@ export const vendorGradients = {
   directions: ['#DC2626', '#EF4444'],
 };
 
+// ✅ Theme-aware status color helpers
+const darkStatusMap = {
+  pending: '#FBBF24',
+  accepted: '#60A5FA',
+  confirmed: '#60A5FA',
+  preparing: '#A78BFA',
+  ready: '#34D399',
+  completed: '#9CA3AF',
+  cancelled: '#F87171',
+  expired: '#9CA3AF',
+  rejected: '#F87171',
+  paid: '#34D399',
+  awaiting_verification: '#FBBF24',
+  verified: '#34D399',
+  rejected_payment: '#F87171',
+};
+
+const lightStatusMap = {
+  pending: '#F59E0B',
+  accepted: '#3B82F6',
+  confirmed: '#3B82F6',
+  preparing: '#7C3AED',
+  ready: '#10B981',
+  completed: '#9CA3AF',
+  cancelled: '#DC2626',
+  expired: '#6B7280',
+  rejected: '#DC2626',
+  paid: '#10B981',
+  awaiting_verification: '#F59E0B',
+  verified: '#10B981',
+  rejected_payment: '#DC2626',
+};
+
 export const getStatusColor = (status) => {
-  const statusMap = {
-    pending: vendorColors.warning,
-    accepted: vendorColors.info,
-    confirmed: vendorColors.info,
-    preparing: vendorColors.purple,
-    ready: vendorColors.success,
-    completed: vendorColors.text.tertiary,
-    cancelled: vendorColors.error,
-    expired: vendorColors.text.secondary,
-    rejected: vendorColors.error,
-    paid: vendorColors.success,
-    awaiting_verification: vendorColors.warning,
-    verified: vendorColors.success,
-    rejected_payment: vendorColors.error,
-  };
-  return statusMap[status] || vendorColors.text.secondary;
+  return lightStatusMap[status] || '#6B7280';
+};
+
+export const getStatusColorForTheme = (status, isDark) => {
+  const map = isDark ? darkStatusMap : lightStatusMap;
+  return map[status] || '#9CA3AF';
 };
 
 export const getStatusLabel = (status) => {
@@ -148,18 +230,7 @@ export const getStatusLabel = (status) => {
 };
 
 export const getPaymentStatusColor = (status) => {
-  const map = {
-    pending: vendorColors.warning,
-    awaiting_payment: vendorColors.warning,
-    awaiting_verification: vendorColors.warning,
-    verified: vendorColors.success,
-    paid: vendorColors.success,
-    rejected: vendorColors.error,
-    refunded: vendorColors.info,
-    expired: vendorColors.text.secondary,
-    cancelled: vendorColors.text.secondary,
-  };
-  return map[status] || vendorColors.text.secondary;
+  return lightStatusMap[status] || '#6B7280';
 };
 
 export const getPaymentStatusLabel = (status) => {
@@ -175,23 +246,4 @@ export const getPaymentStatusLabel = (status) => {
     cancelled: 'Cancelled',
   };
   return map[status] || status;
-};
-
-export const vendorCardStyle = {
-  backgroundColor: vendorColors.surface,
-  borderRadius: vendorBorderRadius.lg,
-  padding: vendorSpacing.lg,
-  marginBottom: vendorSpacing.md,
-  borderWidth: 1,
-  borderColor: vendorColors.border,
-  ...vendorShadows.md,
-};
-
-export const vendorSectionStyle = {
-  backgroundColor: vendorColors.surface,
-  marginHorizontal: vendorSpacing.lg,
-  marginBottom: vendorSpacing.lg,
-  padding: vendorSpacing.lg,
-  borderRadius: vendorBorderRadius.xl,
-  ...vendorShadows.md,
 };

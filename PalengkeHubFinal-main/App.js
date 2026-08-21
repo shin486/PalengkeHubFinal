@@ -378,7 +378,6 @@ function AppStack({ isGuest }) {
       'Home',
       'ChatDetail',
       'ChatList',
-      'Chats',
       'StallDetails',
       'ProductDetails',
       'Search',
@@ -396,23 +395,25 @@ function AppStack({ isGuest }) {
     
     switch (routeName) {
       case 'Cart':
-        return { title: 'My PalengKart', subtitle: '' };
+        return { title: '🛒 My PalengKart', subtitle: '' };
       case 'Orders':
-        return { title: 'My Orders', subtitle: 'Track your orders here' };
+        return { title: '📦 My Orders', subtitle: 'Track your orders here' };
+      case 'Chats':
+        return { title: '💬 Messages', subtitle: 'Your conversations' };
       case 'Profile':
-        return { title: 'My Profile', subtitle: 'Manage your account' };
+        return { title: '👤 My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
-        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
+        return { title: '🏪 Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'Favorites':
-        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
+        return { title: '❤️ Favorites', subtitle: 'Your saved products and stalls' };
       case 'Notifications':
-        return { title: 'Notifications', subtitle: 'Your alerts' };
+        return { title: '🔔 Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
-        return { title: 'Report Issue', subtitle: 'Help us improve' };
+        return { title: '🚨 Report Issue', subtitle: 'Help us improve' };
       case 'CustomerReports':
-        return { title: 'My Reports', subtitle: 'Track your reports' };
+        return { title: '📊 My Reports', subtitle: 'Track your reports' };
       default:
-        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: '🏬 PalengkeHub', subtitle: 'Lipa City Public Market' };
     }
   };
 
