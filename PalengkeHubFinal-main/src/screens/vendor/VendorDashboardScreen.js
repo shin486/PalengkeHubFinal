@@ -1,6 +1,6 @@
 // src/screens/vendor/VendorDashboardScreen.js
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -18,35 +18,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 
 // ============================================================
-// COLORS - Matches Customer Side
+// COLORS - Theme-aware (from ThemeContext)
 // ============================================================
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  primarySurface: '#FEF2F2',
-  background: '#F8F9FB',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  info: '#3B82F6',
-  purple: '#7C3AED',
-  shadow: 'rgba(0, 0, 0, 0.06)',
-  shadowDark: 'rgba(0, 0, 0, 0.10)',
-};
 
 const SPACING = {
   xs: 4,
@@ -68,15 +45,18 @@ const RADIUS = {
 
 export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [salesData, setSalesData] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [chats, setChats] = useState([]);
   const [bestSellers, setBestSellers] = useState([]);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [sukiBuyers, setSukiBuyers] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
+  const [sukiLoading, setSukiLoading] = useState(false);
+  const dataFetchedRef = useRef(false);
 
   const [stats, setStats] = useState({
     revenueToday: 0,
@@ -113,6 +93,114 @@ export default function VendorDashboardScreen({ navigation }) {
     refreshOrders,
   } = useVendorOrders(stall?.id);
 
+  // ============================================================
+  // SUKI BUYERS - Fetch frequent customers (with cache check)
+  // ============================================================
+  const fetchSukiBuyers = useCallback(async () => {
+    if (!stall?.id) return;
+    
+    // Skip if already fetched and not refreshing
+    if (dataFetchedRef.current && !refreshing) {
+      console.log('⏭️ Suki buyers already loaded, skipping...');
+      return;
+    }
+    
+    if (sukiLoading) return;
+
+    try {
+      setSukiLoading(true);
+      console.log('🔄 Fetching suki buyers...');
+
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          consumer_id,
+          total_amount,
+          created_at,
+          status
+        `)
+        .eq('stall_id', stall.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+
+      if (ordersError) throw ordersError;
+
+      if (!ordersData || ordersData.length === 0) {
+        setSukiBuyers([]);
+        dataFetchedRef.current = true;
+        setSukiLoading(false);
+        return;
+      }
+
+      const consumerIds = [...new Set(ordersData.map(order => order.consumer_id).filter(id => id))];
+      
+      if (consumerIds.length === 0) {
+        setSukiBuyers([]);
+        dataFetchedRef.current = true;
+        setSukiLoading(false);
+        return;
+      }
+
+      const { data: consumersData, error: consumersError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, email')
+        .in('id', consumerIds);
+
+      if (consumersError) throw consumersError;
+
+      const consumerMap = {};
+      consumersData?.forEach(consumer => {
+        consumerMap[consumer.id] = {
+          id: consumer.id,
+          full_name: consumer.full_name || 'Customer',
+          avatar_url: consumer.avatar_url,
+          email: consumer.email,
+          orderCount: 0,
+          totalSpent: 0,
+          lastOrderDate: null,
+          firstOrderDate: null,
+        };
+      });
+
+      ordersData.forEach(order => {
+        const consumerId = order.consumer_id;
+        if (!consumerId || !consumerMap[consumerId]) return;
+        const consumer = consumerMap[consumerId];
+        consumer.orderCount += 1;
+        consumer.totalSpent += order.total_amount || 0;
+        if (!consumer.lastOrderDate || new Date(order.created_at) > new Date(consumer.lastOrderDate)) {
+          consumer.lastOrderDate = order.created_at;
+        }
+        if (!consumer.firstOrderDate || new Date(order.created_at) < new Date(consumer.firstOrderDate)) {
+          consumer.firstOrderDate = order.created_at;
+        }
+      });
+
+      const sortedBuyers = Object.values(consumerMap)
+        .filter(c => c.orderCount > 0)
+        .sort((a, b) => b.orderCount - a.orderCount)
+        .slice(0, 10);
+
+      // Only update if data changed
+      setSukiBuyers(prev => {
+        if (prev.length === sortedBuyers.length && 
+            prev.every((p, i) => p.id === sortedBuyers[i]?.id)) {
+          return prev; // No change
+        }
+        return sortedBuyers;
+      });
+      
+      dataFetchedRef.current = true;
+
+    } catch (error) {
+      console.error('Error fetching suki buyers:', error);
+      setSukiBuyers([]);
+    } finally {
+      setSukiLoading(false);
+    }
+  }, [stall, sukiLoading, refreshing]);
+
   const fetchDashboardData = useCallback(async () => {
     if (!stall?.id) return;
     try {
@@ -141,7 +229,6 @@ export default function VendorDashboardScreen({ navigation }) {
           .from('products')
           .select('*')
           .eq('stall_id', stall.id)
-          .order('stock_quantity', { ascending: true })
           .limit(10),
       ]);
 
@@ -159,9 +246,8 @@ export default function VendorDashboardScreen({ navigation }) {
         cancelledToday: cancelledToday.length,
       });
 
-      const allCompletedOrders = [
-        ...todayOrders.filter(o => o.status === 'completed'),
-      ];
+      // Best Sellers
+      const allCompletedOrders = todayOrders.filter(o => o.status === 'completed');
       const productMap = {};
       allCompletedOrders.forEach(order => {
         (order.items || []).forEach(item => {
@@ -178,19 +264,16 @@ export default function VendorDashboardScreen({ navigation }) {
           .slice(0, 5)
       );
 
-      const products = productsRes.data || [];
-      setLowStockProducts(
-        products
-          .filter(p => (p.stock_quantity || 0) <= (p.low_stock_threshold || 5))
-          .slice(0, 5)
-      );
-
       setNotifications(notifRes.data || []);
       setChats(chatRes.data || []);
+
+      // Fetch Suki Buyers
+      await fetchSukiBuyers();
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
-  }, [stall, user, orderStats]);
+  }, [stall, user, orderStats, fetchSukiBuyers]);
 
   useEffect(() => {
     fetchStall();
@@ -198,12 +281,15 @@ export default function VendorDashboardScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      if (stall?.id) fetchDashboardData();
+      if (stall?.id) {
+        fetchDashboardData();
+      }
     }, [stall, fetchDashboardData])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
+    dataFetchedRef.current = false; // Allow re-fetch on refresh
     await Promise.all([fetchStall(), refreshOrders(), fetchDashboardData()]);
     setRefreshing(false);
   };
@@ -236,7 +322,57 @@ export default function VendorDashboardScreen({ navigation }) {
     );
   };
 
-  // ✅ Custom Stat Card Component - No Emojis, No "?"
+  // Navigate to chat with consumer
+  const handleChatPress = async (consumer) => {
+    try {
+      const { data: existingConv, error: convError } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('stall_id', stall.id)
+        .eq('customer_id', consumer.id)
+        .single();
+
+      if (convError && convError.code !== 'PGRST116') throw convError;
+
+      let conversationId = existingConv?.id;
+
+      if (!conversationId) {
+        const { data: newConv, error: createError } = await supabase
+          .from('conversations')
+          .insert({
+            stall_id: stall.id,
+            customer_id: consumer.id,
+            vendor_unread_count: 0,
+            customer_unread_count: 0,
+            last_message: 'Start a conversation',
+            last_message_time: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
+        conversationId = newConv.id;
+      }
+
+      navigation.navigate('VendorChatDetail', {
+        conversationId: conversationId,
+        customer: {
+          id: consumer.id,
+          full_name: consumer.full_name,
+          avatar_url: consumer.avatar_url,
+        },
+        stall: stall,
+      });
+
+    } catch (error) {
+      console.error('Error opening chat:', error);
+      Alert.alert('Error', 'Could not open chat. Please try again.');
+    }
+  };
+
+  // ============================================================
+  // STAT CARD COMPONENT
+  // ============================================================
   const StatCard = ({ title, value, icon, iconBg, onPress, isCurrency = false }) => {
     const displayValue = isCurrency ? `₱${value.toFixed(2)}` : value;
     
@@ -256,10 +392,80 @@ export default function VendorDashboardScreen({ navigation }) {
     );
   };
 
+  // ============================================================
+  // SUKI BUYER CARD COMPONENT - WITH IMAGES (FIXED BLINKING)
+  // ============================================================
+  const SukiBuyerCard = memo(({ consumer }) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoaded, setImageLoaded] = useState(false);
+    
+    const getInitials = (name) => {
+      if (!name) return '?';
+      return name.charAt(0).toUpperCase();
+    };
+
+    const formatDate = (dateStr) => {
+      if (!dateStr) return 'N/A';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      
+      if (days === 0) return 'Today';
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    // Use a stable image key to prevent reloading
+    const imageKey = consumer.id;
+
+    return (
+      <View style={styles.sukiCard}>
+        <View style={styles.sukiLeft}>
+          <View style={styles.sukiAvatarContainer}>
+            {consumer.avatar_url && !imageError ? (
+              <Image 
+                key={imageKey}
+                source={{ uri: consumer.avatar_url }}
+                style={styles.sukiAvatar}
+                onError={() => setImageError(true)}
+                onLoad={() => setImageLoaded(true)}
+                progressiveRenderingEnabled={true}
+                fadeDuration={0}
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={styles.sukiAvatarFallback}>
+                <Text style={styles.sukiAvatarText}>{getInitials(consumer.full_name)}</Text>
+              </View>
+            )}
+            <View style={styles.sukiRankBadge}>
+              <Text style={styles.sukiRankText}>{consumer.orderCount}</Text>
+            </View>
+          </View>
+          <View style={styles.sukiInfo}>
+            <Text style={styles.sukiName} numberOfLines={1}>{consumer.full_name}</Text>
+            <Text style={styles.sukiOrders}>{consumer.orderCount} orders</Text>
+            <Text style={styles.sukiLastOrder}>Last order • {formatDate(consumer.lastOrderDate)}</Text>
+          </View>
+        </View>
+        <TouchableOpacity 
+          style={styles.sukiChatButton}
+          onPress={() => handleChatPress(consumer)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+          <Text style={styles.sukiChatText}>Chat</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  });
+
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Vendor Dashboard" subtitle="Loading..." />
+        <Header title="Dashboard" subtitle="Loading..." />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading dashboard...</Text>
@@ -271,7 +477,7 @@ export default function VendorDashboardScreen({ navigation }) {
   if (!stall) {
     return (
       <View style={styles.container}>
-        <Header title="Vendor Dashboard" subtitle="No stall assigned" />
+        <Header title="Dashboard" subtitle="No stall assigned" />
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
             <Ionicons name="storefront-outline" size={56} color={COLORS.primary} />
@@ -285,7 +491,7 @@ export default function VendorDashboardScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Header title="Vendor Dashboard" subtitle={stall.stall_name || 'Manage your stall'} />
+      <Header title="Dashboard" subtitle={stall.stall_name || 'Manage your stall'} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -344,7 +550,7 @@ export default function VendorDashboardScreen({ navigation }) {
         )}
 
         {/* ============================================================
-            STATS GRID - Using Custom StatCard (No "?")
+            STATS GRID
         ============================================================ */}
         <View style={styles.statsGrid}>
           <StatCard
@@ -377,35 +583,14 @@ export default function VendorDashboardScreen({ navigation }) {
         </View>
 
         {/* ============================================================
-            QUICK ACTIONS
+            STORE TOOLS - Only Reports and Notifications
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <Text style={styles.sectionTitle}>Store Tools</Text>
+            <Ionicons name="construct-outline" size={18} color={COLORS.text.lighter} />
           </View>
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorOrders')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primarySurface }]}>
-                <Ionicons name="receipt-outline" size={24} color={COLORS.primary} />
-              </View>
-              <Text style={styles.quickActionLabel}>Orders</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorProducts')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#D1FAE5' }]}>
-                <Ionicons name="cube-outline" size={24} color={COLORS.success} />
-              </View>
-              <Text style={styles.quickActionLabel}>Products</Text>
-            </TouchableOpacity>
-
+          <View style={styles.quickActionsGrid}>
             <TouchableOpacity 
               style={styles.quickAction} 
               onPress={() => navigation.navigate('VendorReports')}
@@ -428,6 +613,32 @@ export default function VendorDashboardScreen({ navigation }) {
               <Text style={styles.quickActionLabel}>Alerts</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* ============================================================
+            SUKI BUYERS - REPLACES LOW STOCK
+        ============================================================ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Suki Buyers</Text>
+            <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
+          </View>
+
+          {sukiLoading && sukiBuyers.length === 0 ? (
+            <ActivityIndicator size="small" color={COLORS.primary} style={styles.loader} />
+          ) : sukiBuyers.length === 0 ? (
+            <View style={styles.emptySukiContainer}>
+              <Ionicons name="people-outline" size={40} color={COLORS.text.lighter} />
+              <Text style={styles.emptySukiTitle}>No loyal customers yet</Text>
+              <Text style={styles.emptySukiText}>
+                Customers who frequently order from you will appear here
+              </Text>
+            </View>
+          ) : (
+            sukiBuyers.map((consumer) => (
+              <SukiBuyerCard key={consumer.id} consumer={consumer} />
+            ))
+          )}
         </View>
 
         {/* ============================================================
@@ -467,7 +678,8 @@ export default function VendorDashboardScreen({ navigation }) {
               >
                 <View style={styles.orderCardHeader}>
                   <Text style={styles.orderNumber}>Order #{order.order_number?.slice(-8) || order.id?.slice(-8)}</Text>
-                  <View style={[styles.orderStatusBadge, 
+                  <View style={[
+                    styles.orderStatusBadge,
                     order.status === 'completed' && styles.orderStatusCompleted,
                     order.status === 'cancelled' && styles.orderStatusCancelled,
                     order.status === 'pending' && styles.orderStatusPending,
@@ -475,7 +687,7 @@ export default function VendorDashboardScreen({ navigation }) {
                     <Text style={styles.orderStatusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
                   </View>
                 </View>
-                <Text style={styles.orderItems}>
+                <Text style={styles.orderItems} numberOfLines={1}>
                   {order.items?.map(item => item.name).join(', ') || 'No items'}
                 </Text>
                 <View style={styles.orderCardFooter}>
@@ -510,42 +722,6 @@ export default function VendorDashboardScreen({ navigation }) {
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={COLORS.text.lighter} />
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* ============================================================
-            LOW STOCK ALERT
-        ============================================================ */}
-        {lowStockProducts.length > 0 && (
-          <View style={[styles.sectionCard, styles.lowStockCard]}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="warning-outline" size={18} color={COLORS.primary} />
-              <Text style={[styles.sectionTitle, { color: COLORS.primary }]}>Low Stock Alert</Text>
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('VendorProducts')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.seeAllText}>Manage →</Text>
-              </TouchableOpacity>
-            </View>
-            {lowStockProducts.map((product, idx) => (
-              <View key={idx} style={[styles.productRow, styles.lowStockRow]}>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <Text style={[styles.productMeta, { color: COLORS.primary }]}>
-                    {product.stock_quantity || 0} left
-                  </Text>
-                </View>
-                <View style={[
-                  styles.lowStockBadge,
-                  (product.stock_quantity || 0) <= 0 && styles.outOfStockBadge
-                ]}>
-                  <Text style={styles.lowStockBadgeText}>
-                    {(product.stock_quantity || 0) <= 0 ? 'Out of Stock' : 'Low Stock'}
-                  </Text>
-                </View>
               </View>
             ))}
           </View>
@@ -589,13 +765,12 @@ export default function VendorDashboardScreen({ navigation }) {
 // ============================================================
 // STYLES
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
 
-  // ── Loading ──
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -608,7 +783,6 @@ const styles = StyleSheet.create({
     color: COLORS.text.light,
   },
 
-  // ── Empty State ──
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -636,7 +810,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Store Banner ──
   storeBanner: {
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
@@ -714,7 +887,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // ── Closed Warning ──
   closedWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -734,7 +906,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Stats Grid ──
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -775,7 +946,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Section Cards ──
   sectionCard: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.lg,
@@ -819,16 +989,19 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Quick Actions ──
-  quickActionsRow: {
+  quickActionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 8,
   },
   quickAction: {
-    flex: 1,
+    width: '45%',
     alignItems: 'center',
-    padding: 8,
+    padding: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   quickActionIcon: {
     width: 48,
@@ -839,12 +1012,124 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   quickActionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
-    color: COLORS.text.light,
+    color: COLORS.text.dark,
+    textAlign: 'center',
   },
 
-  // ── Order Cards ──
+  // Suki Buyers
+  sukiCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  sukiLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sukiAvatarContainer: {
+    position: 'relative',
+    marginRight: SPACING.md,
+  },
+  sukiAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F4F6',
+  },
+  sukiAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sukiAvatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sukiRankBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.primary,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+    paddingHorizontal: 4,
+  },
+  sukiRankText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sukiInfo: {
+    flex: 1,
+  },
+  sukiName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+  },
+  sukiOrders: {
+    fontSize: 12,
+    color: COLORS.text.light,
+    marginTop: 1,
+  },
+  sukiLastOrder: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+    marginTop: 1,
+  },
+  sukiChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primarySurface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  sukiChatText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+
+  emptySukiContainer: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  emptySukiTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginTop: 8,
+  },
+  emptySukiText: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+
+  // Recent Orders
   orderCard: {
     backgroundColor: COLORS.background,
     borderRadius: RADIUS.md,
@@ -907,7 +1192,6 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
 
-  // ── Empty Orders ──
   emptyOrdersContainer: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -924,7 +1208,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Products ──
+  // Best Sellers
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -959,33 +1243,8 @@ const styles = StyleSheet.create({
     color: COLORS.text.light,
     marginTop: 1,
   },
-  lowStockRow: {
-    backgroundColor: COLORS.primarySurface,
-    borderRadius: RADIUS.sm,
-    paddingHorizontal: 10,
-    marginVertical: 4,
-    borderBottomWidth: 0,
-  },
-  lowStockBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.sm,
-  },
-  outOfStockBadge: {
-    backgroundColor: '#FEE2E2',
-  },
-  lowStockBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.warning,
-  },
-  lowStockCard: {
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
 
-  // ── Profile ──
+  // Profile
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1028,7 +1287,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // ── Spacer ──
   bottomSpacer: {
     height: 30,
   },

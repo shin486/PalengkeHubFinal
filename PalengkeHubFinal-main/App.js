@@ -59,6 +59,7 @@ import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
 import VendorChatDetailScreen from './src/screens/vendor/VendorChatDetailScreen';
 import VendorChatListScreen from './src/screens/vendor/VendorChatListScreen';
+import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 import { useCart } from './src/hooks/useCart';
 import VendorRatingsScreen from './src/screens/vendor/VendorRatingsScreen';
 
@@ -329,6 +330,16 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // ✅ Expose setActiveRouteName globally so screens can update the header visibility
+  useEffect(() => {
+    global.setActiveRouteName = setActiveRouteName;
+    global.updateRouteName = setActiveRouteName;
+    return () => {
+      delete global.setActiveRouteName;
+      delete global.updateRouteName;
+    };
+  }, []);
+
   useEffect(() => {
     const fetchUnreadCount = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -389,23 +400,25 @@ function AppStack({ isGuest }) {
     
     switch (routeName) {
       case 'Cart':
-        return { title: 'My PalengKart', subtitle: '' };
+        return { title: '🛒 My PalengKart', subtitle: '' };
       case 'Orders':
-        return { title: 'My Orders', subtitle: 'Track your orders here' };
+        return { title: '📦 My Orders', subtitle: 'Track your orders here' };
+      case 'Chats':
+        return { title: '💬 Messages', subtitle: 'Your conversations' };
       case 'Profile':
-        return { title: 'My Profile', subtitle: 'Manage your account' };
+        return { title: '👤 My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
-        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
+        return { title: '🏪 Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'Favorites':
-        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
+        return { title: '❤️ Favorites', subtitle: 'Your saved products and stalls' };
       case 'Notifications':
-        return { title: 'Notifications', subtitle: 'Your alerts' };
+        return { title: '🔔 Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
-        return { title: 'Report Issue', subtitle: 'Help us improve' };
+        return { title: '🚨 Report Issue', subtitle: 'Help us improve' };
       case 'CustomerReports':
-        return { title: 'My Reports', subtitle: 'Track your reports' };
+        return { title: '📊 My Reports', subtitle: 'Track your reports' };
       default:
-        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: '🏬 PalengkeHub', subtitle: 'Lipa City Public Market' };
     }
   };
 
@@ -585,6 +598,7 @@ function RootNavigator() {
         <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
         <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
+        <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
 
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />

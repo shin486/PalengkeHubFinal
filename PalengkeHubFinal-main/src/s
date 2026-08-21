@@ -15,7 +15,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { useColors } from '../../contexts/ThemeContext';
 import { useVendorProducts } from '../../hooks/useVendorProducts';
 import { ModernProductCard } from '../../components/vendor/ModernProductCard';
 import { AddProductModal } from '../../components/vendor/AddProductModal';
@@ -23,8 +22,32 @@ import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
 
 // ============================================================
-// COLORS - Theme-aware (from ThemeContext)
+// COLORS - Matches Customer Side
 // ============================================================
+const COLORS = {
+  primary: '#DC2626',
+  primaryLight: '#EF4444',
+  primaryDark: '#B91C1C',
+  primarySurface: '#FEF2F2',
+  background: '#F8F9FB',
+  surface: '#FFFFFF',
+  text: {
+    dark: '#1F2937',
+    medium: '#374151',
+    light: '#6B7280',
+    lighter: '#9CA3AF',
+    white: '#FFFFFF',
+  },
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
+  info: '#3B82F6',
+  purple: '#7C3AED',
+  shadow: 'rgba(0, 0, 0, 0.06)',
+  shadowDark: 'rgba(0, 0, 0, 0.10)',
+};
 
 const SPACING = {
   xs: 4,
@@ -44,25 +67,15 @@ const RADIUS = {
   xxl: 24,
 };
 
+// Simple availability filters - Available / Hidden
 const FILTERS = [
   { key: 'all', label: 'All', icon: 'grid-outline' },
   { key: 'available', label: 'Available', icon: 'checkmark-circle-outline' },
-  { key: 'unavailable', label: 'Hidden', icon: 'eye-off-outline' },
-  { key: 'low_stock', label: 'Low Stock', icon: 'warning-outline' },
-  { key: 'out_of_stock', label: 'Out of Stock', icon: 'close-circle-outline' },
+  { key: 'hidden', label: 'Hidden', icon: 'eye-off-outline' },
 ];
-
-const checkStock = (product) => {
-  const qty = product.stock_quantity || 0;
-  if (qty <= 0) return 'out_of_stock';
-  if (qty <= (product.low_stock_threshold || 5)) return 'low_stock';
-  return 'in_stock';
-};
 
 export default function VendorProductsScreen({ navigation }) {
   const { user } = useAuth();
-  const COLORS = useColors();
-  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -104,9 +117,7 @@ export default function VendorProductsScreen({ navigation }) {
   const filteredProducts = useMemo(() => {
     if (activeFilter === 'all') return products;
     if (activeFilter === 'available') return products.filter(p => p.is_available);
-    if (activeFilter === 'unavailable') return products.filter(p => !p.is_available);
-    if (activeFilter === 'low_stock') return products.filter(p => p.is_available && checkStock(p) === 'low_stock');
-    if (activeFilter === 'out_of_stock') return products.filter(p => p.is_available && checkStock(p) === 'out_of_stock');
+    if (activeFilter === 'hidden') return products.filter(p => !p.is_available);
     return products;
   }, [products, activeFilter]);
 
@@ -115,8 +126,6 @@ export default function VendorProductsScreen({ navigation }) {
       total: products.length,
       available: products.filter(p => p.is_available).length,
       hidden: products.filter(p => !p.is_available).length,
-      lowStock: products.filter(p => p.is_available && checkStock(p) === 'low_stock').length,
-      outOfStock: products.filter(p => p.is_available && checkStock(p) === 'out_of_stock').length,
     };
   }, [products]);
 
@@ -142,8 +151,7 @@ export default function VendorProductsScreen({ navigation }) {
     const configs = {
       total: { icon: 'cube-outline', color: COLORS.primary, bg: COLORS.primarySurface },
       available: { icon: 'checkmark-circle-outline', color: COLORS.success, bg: '#D1FAE5' },
-      lowStock: { icon: 'warning-outline', color: COLORS.warning, bg: '#FEF3C7' },
-      outOfStock: { icon: 'close-circle-outline', color: COLORS.error, bg: '#FEE2E2' },
+      hidden: { icon: 'eye-off-outline', color: COLORS.text.light, bg: '#F3F4F6' },
     };
     return configs[key] || configs.total;
   };
@@ -153,9 +161,7 @@ export default function VendorProductsScreen({ navigation }) {
     const icons = {
       'all': 'grid-outline',
       'available': 'checkmark-circle-outline',
-      'unavailable': 'eye-off-outline',
-      'low_stock': 'warning-outline',
-      'out_of_stock': 'close-circle-outline',
+      'hidden': 'eye-off-outline',
     };
     return icons[key] || 'grid-outline';
   };
@@ -166,24 +172,22 @@ export default function VendorProductsScreen({ navigation }) {
     const colors = {
       'all': COLORS.primary,
       'available': COLORS.success,
-      'unavailable': COLORS.text.light,
-      'low_stock': COLORS.warning,
-      'out_of_stock': COLORS.error,
+      'hidden': COLORS.text.light,
     };
     return colors[key] || COLORS.text.medium;
   };
 
   return (
     <View style={styles.container}>
-      <Header title="Products" subtitle={stall?.stall_name || 'Manage your inventory'} />
+      <Header title="Products" subtitle={stall?.stall_name || 'Manage your products'} />
 
       {/* Stats Overview - No Emojis */}
       <View style={styles.statsRow}>
-        {['total', 'available', 'lowStock', 'outOfStock'].map((key) => {
+        {['total', 'available', 'hidden'].map((key) => {
           const config = getStatConfig(key);
           const value = stats[key] || 0;
-          const label = key === 'total' ? 'Total' : key === 'available' ? 'Available' : key === 'lowStock' ? 'Low Stock' : 'Out of Stock';
-          
+          const label = key === 'total' ? 'Total' : key === 'available' ? 'Available' : 'Hidden';
+
           return (
             <View key={key} style={styles.statCard}>
               <View style={[styles.statIconWrapper, { backgroundColor: config.bg }]}>
@@ -202,7 +206,7 @@ export default function VendorProductsScreen({ navigation }) {
           {FILTERS.map((filter) => {
             const isActive = activeFilter === filter.key;
             const iconColor = getFilterIconColor(filter.key, isActive);
-            
+
             return (
               <TouchableOpacity
                 key={filter.key}
@@ -230,15 +234,6 @@ export default function VendorProductsScreen({ navigation }) {
           <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add New Product</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.promotionsButton}
-          onPress={() => navigation.navigate('VendorPromotions')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="pricetag-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.promotionsButtonText}>Special Prices</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Products List */}
@@ -261,7 +256,7 @@ export default function VendorProductsScreen({ navigation }) {
             <Ionicons name="cube-outline" size={48} color={COLORS.text.lighter} />
           </View>
           <Text style={styles.emptyTitle}>
-            {products.length === 0 ? 'No products yet' : `No ${activeFilter.replace('_', ' ')} products`}
+            {products.length === 0 ? 'No products yet' : `No ${activeFilter} products`}
           </Text>
           <Text style={styles.emptyText}>
             {products.length === 0
@@ -306,7 +301,7 @@ export default function VendorProductsScreen({ navigation }) {
 // ============================================================
 // STYLES - Matches Customer Side
 // ============================================================
-const createStyles = (COLORS) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -370,7 +365,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: RADIUS.full,
+    borderRadius: 999,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -410,23 +405,6 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   addButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  promotionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: COLORS.surface,
-    paddingVertical: 14,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    marginTop: SPACING.sm,
-  },
-  promotionsButtonText: {
-    color: COLORS.primary,
     fontSize: 15,
     fontWeight: '600',
   },

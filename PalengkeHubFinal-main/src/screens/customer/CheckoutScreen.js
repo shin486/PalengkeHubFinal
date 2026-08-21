@@ -495,7 +495,7 @@ const handleGcashModalClose = () => {
   updatedPayments[index].isProcessing = true;
   setGcashPayments(updatedPayments);
   setGcashScanError(null);
-  setGcashScanStatus('Scanning receipt…');
+  setGcashScanStatus('🔍 Scanning receipt…');
   try {
     // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
     let scan = null;
@@ -559,7 +559,7 @@ const handleGcashModalClose = () => {
       return;
     }
 
-    setGcashScanStatus('Checking for duplicates…');
+    setGcashScanStatus('🔍 Checking for duplicates…');
 
     // 3) The same GCash reference cannot be used on another order.
     const { data: duplicateRef } = await supabase
@@ -600,7 +600,7 @@ const handleGcashModalClose = () => {
       }
     }
 
-    setGcashScanStatus('Uploading receipt…');
+    setGcashScanStatus('📤 Uploading receipt…');
     const receiptUrl = await uploadGcashReceipt(payment.receiptUri, payment.stallId);
     if (!receiptUrl) {
       setGcashScanError('Failed to upload your receipt. Please try again.');
@@ -632,16 +632,16 @@ const handleGcashModalClose = () => {
       setTimeout(() => {
         setGcashModalVisible(false);
         Alert.alert(
-          'All Payments Submitted!',
-          'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.',
+          '✅ All Payments Submitted! 🎉',
+          'Your GCash payments have been submitted successfully. The vendors will verify your payments and confirm your orders.',
           [
             { 
               text: 'View Orders', 
-              onPress: () => navigation.navigate('Orders')
+              onPress: () => navigation.replace('Orders') // ✅ Replace
             },
             { 
               text: 'Continue Shopping', 
-              onPress: () => navigation.navigate('Home')
+              onPress: () => navigation.replace('Home') // ✅ Replace
             }
           ]
         );
@@ -650,7 +650,7 @@ const handleGcashModalClose = () => {
       const nextIndex = index + 1;
       setCurrentStallIndex(nextIndex);
       Alert.alert(
-        'Payment Submitted!',
+        '✅ Payment Submitted!',
         `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`,
         [{ text: 'Continue' }]
       );
@@ -1146,7 +1146,7 @@ const handleGcashModalClose = () => {
                           <Ionicons name={p.isPaid ? "checkmark-circle" : "ellipse-outline"} size={16} color={p.isPaid ? COLORS.success : COLORS.text.light} />
                           <Text style={[styles.gcashStatusItemName, p.isPaid && styles.gcashStatusItemPaid]} numberOfLines={1}>{p.stallName}</Text>
                         </View>
-                        <Text style={styles.gcashStatusItemAmount}>₱{p.total.toFixed(2)}</Text>
+                        <Text style={styles.gcashStatusItemAmount}>₱{p.total.toFixed(2)}{p.isPaid && ' ✅'}</Text>
                       </View>
                     ))}
                   </View>

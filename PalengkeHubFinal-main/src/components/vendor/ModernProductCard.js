@@ -9,18 +9,7 @@ import {
   vendorShadows,
 } from '../../theme/vendorTheme';
 
-const getStockStatus = (product) => {
-  const qty = product.stock_quantity || 0;
-  const threshold = product.low_stock_threshold || 5;
-  
-  if (qty <= 0) return { label: 'Out of Stock', color: vendorColors.danger, bg: vendorColors.dangerLight };
-  if (qty <= threshold) return { label: 'Low Stock', color: vendorColors.warning, bg: vendorColors.warningLight };
-  return { label: `${qty} in stock`, color: vendorColors.success, bg: vendorColors.successLight };
-};
-
 const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onPress }) => {
-  const stockStatus = getStockStatus(product);
-
   const handleDelete = () => {
     Alert.alert(
       'Delete Product',
@@ -41,12 +30,16 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
           <Image source={{ uri: product.image_url }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={styles.placeholder}>
-            <Ionicons name="cart-outline" size={26} color={vendorColors.primary} />
+            <Ionicons name="image-outline" size={32} color={vendorColors.text.tertiary} />
           </View>
         )}
-        <View style={[styles.stockBadge, { backgroundColor: stockStatus.bg }]}>
-          <Text style={[styles.stockText, { color: stockStatus.color }]}>
-            {stockStatus.label}
+        <View style={[
+          styles.availabilityBadge,
+          { backgroundColor: product.is_available ? vendorColors.successLight : vendorColors.dangerLight }
+        ]}>
+          <View style={[styles.availabilityDot, { backgroundColor: product.is_available ? vendorColors.success : vendorColors.danger }]} />
+          <Text style={[styles.availabilityText, { color: product.is_available ? vendorColors.success : vendorColors.danger }]}>
+            {product.is_available ? 'Available' : 'Hidden'}
           </Text>
         </View>
       </View>
@@ -74,19 +67,13 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
           </View>
         </View>
 
-        <View style={styles.metaRow}>
-          <Text style={styles.salesText}>
-            {product.sales_count ? `${product.sales_count} sold` : 'No sales yet'}
-          </Text>
-        </View>
-
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, styles.editBtn]} onPress={() => onEdit(product)}>
-            <Ionicons name="create-outline" size={14} color="#FFFFFF" />
+            <Ionicons name="create-outline" size={14} color={vendorColors.primary} />
             <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+            <Ionicons name="trash-outline" size={14} color={vendorColors.danger} />
           </TouchableOpacity>
         </View>
       </View>
@@ -120,22 +107,27 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: vendorBorderRadius.md,
-    backgroundColor: vendorColors.accent,
+    backgroundColor: vendorColors.surfaceAlt,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderEmoji: {
-    fontSize: 32,
-  },
-  stockBadge: {
+  availabilityBadge: {
     position: 'absolute',
     bottom: -6,
     left: -4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: vendorBorderRadius.sm,
   },
-  stockText: {
+  availabilityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  availabilityText: {
     fontSize: 9,
     fontWeight: '700',
   },
@@ -184,13 +176,6 @@ const styles = StyleSheet.create({
     color: vendorColors.text.secondary,
     fontWeight: '500',
   },
-  metaRow: {
-    marginBottom: 4,
-  },
-  salesText: {
-    fontSize: 11,
-    color: vendorColors.text.tertiary,
-  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -198,6 +183,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: vendorBorderRadius.sm,
@@ -216,8 +204,5 @@ const styles = StyleSheet.create({
     backgroundColor: vendorColors.dangerLight,
     borderWidth: 1,
     borderColor: vendorColors.danger,
-  },
-  deleteBtnText: {
-    fontSize: 12,
   },
 });

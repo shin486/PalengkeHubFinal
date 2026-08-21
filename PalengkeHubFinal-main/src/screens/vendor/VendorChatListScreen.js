@@ -1,6 +1,6 @@
 // src/screens/vendor/VendorChatListScreen.js
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,25 +15,13 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 import { supabase } from '../../../lib/supabase';
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#1F2937',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-};
 
 export default function VendorChatListScreen({ navigation }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stall, setStall] = useState(null);
@@ -209,7 +197,7 @@ export default function VendorChatListScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <StatusBar barStyle={COLORS.statusBar} backgroundColor={COLORS.background} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Messages</Text>
         </View>
@@ -223,7 +211,7 @@ export default function VendorChatListScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle={COLORS.statusBar} backgroundColor={COLORS.background} />
       
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Messages</Text>
@@ -253,7 +241,7 @@ export default function VendorChatListScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

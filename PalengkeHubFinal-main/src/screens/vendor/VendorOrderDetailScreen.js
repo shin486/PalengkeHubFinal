@@ -13,8 +13,8 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
-import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import {
   vendorColors,
@@ -60,8 +60,8 @@ const getTimeline = (status) => {
     { key: 'pending', label: 'Order Placed', icon: 'document-text-outline' },
     { key: 'confirmed', label: 'Order Confirmed', icon: 'checkmark-circle-outline' },
     { key: 'preparing', label: 'Preparing', icon: 'restaurant-outline' },
-    { key: 'ready', label: 'Ready for Pickup', icon: 'notifications-outline' },
-    { key: 'completed', label: 'Completed', icon: 'cube-outline' },
+    { key: 'ready', label: 'Ready for Pickup', icon: 'flag-outline' },
+    { key: 'completed', label: 'Completed', icon: 'checkmark-done-outline' },
   ];
   const idx = steps.findIndex(s => s.key === status);
   return { steps, currentIdx: idx === -1 ? -1 : idx };
@@ -296,7 +296,9 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       <View style={styles.container}>
         <Header title="Order Details" showBack onBackPress={() => navigation.goBack()} />
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color={vendorColors.warning} />
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={vendorColors.danger} />
+          </View>
           <Text style={styles.errorTitle}>Unable to load order</Text>
           <Text style={styles.errorText}>{error || 'Order not found'}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchOrder(); }}>
@@ -347,7 +349,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                     idx <= currentIdx && styles.timelineDotActive,
                     idx === currentIdx && styles.timelineDotCurrent,
                   ]}>
-                    <Ionicons name={step.icon} size={16} color={idx <= currentIdx ? '#FFFFFF' : '#9CA3AF'} />
+                    <Ionicons name={step.icon} size={14} color={idx <= currentIdx ? vendorColors.primary : vendorColors.text.tertiary} />
                   </View>
                   <Text style={[
                     styles.timelineLabel,
@@ -375,13 +377,9 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               {order.profiles?.avatar_url ? (
                 <Image source={{ uri: order.profiles.avatar_url }} style={styles.customerAvatarImg} />
               ) : (
-                order.profiles?.full_name ? (
-                  <Text style={styles.customerAvatarText}>
-                    {order.profiles.full_name.charAt(0).toUpperCase()}
-                  </Text>
-                ) : (
-                  <Ionicons name="person" size={20} color="#6B7280" />
-                )
+                <Text style={styles.customerAvatarText}>
+                  {order.profiles?.full_name?.charAt(0)?.toUpperCase() || 'C'}
+                </Text>
               )}
             </View>
             <View style={styles.customerDetails}>
@@ -461,8 +459,8 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               <View style={[styles.scanVerdict, order.payment_scan_matched ? styles.scanVerdictOk : styles.scanVerdictWarn]}>
                 <Text style={[styles.scanVerdictText, { color: order.payment_scan_matched ? vendorColors.success : vendorColors.warning }]}>
                   {order.payment_scan_matched
-                    ? 'Receipt scan: reference number and amount matched'
-                    : 'Receipt scan: could not confirm a match — verify manually'}
+                    ? '✅ Receipt scan: reference number and amount matched'
+                    : '⚠️ Receipt scan: could not confirm a match — verify manually'}
                 </Text>
               </View>
             )}
@@ -979,8 +977,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
-  errorEmoji: {
-    fontSize: 48,
+  errorIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: vendorColors.dangerLight,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 12,
   },
   errorTitle: {

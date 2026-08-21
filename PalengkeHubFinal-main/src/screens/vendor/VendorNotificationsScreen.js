@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,12 +24,12 @@ import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
 
 const getNotificationIcon = (type) => {
   switch (type) {
-    case 'order': return 'cube-outline';
+    case 'order': return 'receipt-outline';
     case 'payment': return 'card-outline';
-    case 'price_drop': return 'trending-down';
-    case 'chat': return 'chatbubbles-outline';
-    case 'low_stock': return 'warning-outline';
+    case 'price_drop': return 'trending-down-outline';
+    case 'chat': return 'chatbubble-outline';
     case 'review': return 'star-outline';
+    case 'announcement':
     case 'system': return 'megaphone-outline';
     default: return 'notifications-outline';
   }
@@ -41,9 +41,9 @@ const getNotificationColor = (type) => {
     case 'payment': return vendorColors.success;
     case 'price_drop': return vendorColors.warning;
     case 'chat': return vendorColors.purple;
-    case 'low_stock': return vendorColors.danger;
     case 'review': return vendorColors.warning;
-    case 'system': return vendorColors.text.secondary;
+    case 'announcement':
+    case 'system': return vendorColors.primary;
     default: return vendorColors.text.secondary;
   }
 };
@@ -77,16 +77,39 @@ export default function VendorNotificationsScreen({ navigation }) {
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const [notifRes, annRes] = await Promise.all([
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('announcements')
+          .select('*')
+          .in('audience', ['vendors', 'both'])
+          .gte('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ]);
 
-      if (error) throw error;
-      setNotifications(data || []);
-      setUnreadCount((data || []).filter(n => !n.is_read).length);
+      if (notifRes.error) throw notifRes.error;
+      if (annRes.error) throw annRes.error;
+
+      // Convert announcements to notification-like items
+      const announcementItems = (annRes.data || []).map(ann => ({
+        id: `ann-${ann.id}`,
+        title: ann.title,
+        message: ann.content,
+        type: 'announcement',
+        is_read: false,
+        created_at: ann.created_at,
+        is_announcement: true,
+      }));
+
+      const allItems = [...announcementItems, ...(notifRes.data || [])];
+      setNotifications(allItems);
+      setUnreadCount(allItems.filter(n => !n.is_read).length);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -107,7 +130,7 @@ export default function VendorNotificationsScreen({ navigation }) {
   };
 
   const markAsRead = async (notification) => {
-    if (notification.is_read) return;
+    if (notification.is_read || notification.is_announcement) return;
     try {
       await supabase
         .from('notifications')
@@ -131,7 +154,7 @@ export default function VendorNotificationsScreen({ navigation }) {
         .eq('user_id', user.id)
         .eq('is_read', false);
 
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setNotifications(prev => prev.map(n => n.is_announcement ? n : { ...n, is_read: true }));
       setUnreadCount(0);
     } catch (error) {
       console.error('Error marking all read:', error);
@@ -185,7 +208,7 @@ export default function VendorNotificationsScreen({ navigation }) {
         <VendorEmptyState
           icon="notifications-outline"
           title="No notifications"
-          message="Updates about your orders, payments, and products will appear here"
+          message="Updates about your orders, payments, and announcements will appear here"
         />
       ) : (
         <FlatList
@@ -231,9 +254,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: vendorSpacing.md,
-  },
-  icon: {
-    fontSize: 22,
   },
   content: {
     flex: 1,
