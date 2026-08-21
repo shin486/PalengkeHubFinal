@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
@@ -203,7 +204,7 @@ export default function VendorReportsScreen({ navigation }) {
         {error ? (
           <VendorEmptyState
             variant="compact"
-            icon="⚠️"
+            icon="alert-circle"
             title="Failed to load reports"
             message={error}
             actionLabel="Retry"
@@ -211,7 +212,7 @@ export default function VendorReportsScreen({ navigation }) {
           />
         ) : orders.length === 0 ? (
           <VendorEmptyState
-            icon="📊"
+            icon="bar-chart-outline"
             title="No data for this period"
             message="Orders will appear here once customers place orders"
           />
@@ -222,34 +223,34 @@ export default function VendorReportsScreen({ navigation }) {
               <VendorStatCard
                 title="Revenue"
                 value={stats.totalRevenue}
-                icon="💰"
+                icon="wallet-outline"
                 gradientColors={[vendorColors.primary, vendorColors.primaryLight]}
                 isCurrency
               />
               <VendorStatCard
                 title="Orders"
                 value={stats.totalOrders}
-                icon="📋"
+                icon="clipboard-outline"
                 gradientColors={[vendorColors.info, '#60A5FA']}
               />
               <VendorStatCard
                 title="Avg Order"
                 value={stats.avgOrder}
-                icon="📈"
+                icon="trending-up"
                 gradientColors={[vendorColors.success, '#34D399']}
                 isCurrency
               />
               <VendorStatCard
                 title="Payment Rate"
                 value={`${stats.paymentRate}%`}
-                icon="💳"
+                icon="card-outline"
                 gradientColors={[vendorColors.purple, '#A78BFA']}
               />
             </View>
 
             {/* Order Status Summary */}
             <View style={styles.section}>
-              <VendorSectionHeader title="📊 Order Summary" />
+              <VendorSectionHeader title="Order Summary" />
               <View style={styles.summaryRow}>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryValue, { color: vendorColors.success }]}>{stats.completedOrders}</Text>
@@ -271,7 +272,7 @@ export default function VendorReportsScreen({ navigation }) {
             {/* Top Products */}
             {stats.topProducts.length > 0 && (
               <View style={styles.section}>
-                <VendorSectionHeader title="🔥 Top Products" />
+                <VendorSectionHeader title="Top Products" />
                 {stats.topProducts.map((product, idx) => (
                   <View key={idx} style={styles.productRow}>
                     <View style={styles.rankBadge}>
@@ -290,7 +291,7 @@ export default function VendorReportsScreen({ navigation }) {
             {/* Peak Hours */}
             {stats.peakHours.length > 0 && (
               <View style={styles.section}>
-                <VendorSectionHeader title="⏰ Peak Hours" />
+                <VendorSectionHeader title="Peak Hours" />
                 <View style={styles.peakHoursContainer}>
                   {stats.peakHours.map((hour, idx) => (
                     <View key={idx} style={styles.peakHourBadge}>
@@ -304,7 +305,7 @@ export default function VendorReportsScreen({ navigation }) {
 
             {/* Recent Orders */}
             <View style={styles.section}>
-              <VendorSectionHeader title="📋 Recent Orders" />
+              <VendorSectionHeader title="Recent Orders" />
               {orders.slice(0, 5).map((order) => (
                 <TouchableOpacity
                   key={order.id}

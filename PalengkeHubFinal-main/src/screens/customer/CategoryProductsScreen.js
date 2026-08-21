@@ -176,7 +176,7 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPr
               />
             ) : (
               <View style={styles.productImagePlaceholder}>
-                <Ionicons name="image-outline" size={32} color="#D1D5DB" />
+                <Image source={require('../../assets/palengkehublogo.jpg')} style={{ width: 44, height: 44, borderRadius: 8, opacity: 0.7 }} resizeMode="contain" />
               </View>
             )}
             {hasPromotion && discountText && (
@@ -613,7 +613,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
         <View style={styles.headerContent}>
           <View style={styles.headerIconContainer}>
-            <Text style={styles.headerEmoji}>{config.emoji}</Text>
+            <Ionicons name={config.icon} size={28} color={COLORS.primary} />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -690,7 +690,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
       ============================================================ */}
       {sortedProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>{config.emoji}</Text>
+          <Ionicons name={config.icon} size={48} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>No {categoryName} Available</Text>
           <Text style={styles.emptyText}>
             Check other categories or visit again later.

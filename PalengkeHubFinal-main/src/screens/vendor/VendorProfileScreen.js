@@ -12,8 +12,11 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
+import { uploadImageToStorage } from '../../utils/imageUpload';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -30,6 +33,7 @@ export default function VendorProfileScreen({ navigation }) {
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingStallImage, setUploadingStallImage] = useState(false);
 
   const fetchStall = useCallback(async () => {
     if (!user?.id) return;
@@ -58,6 +62,51 @@ export default function VendorProfileScreen({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchStall();
+  };
+
+  const uploadStallImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant gallery permissions to add a stall photo');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !stall?.id) return;
+
+    setUploadingStallImage(true);
+    try {
+      const asset = result.assets[0];
+      const uri = asset.uri;
+
+      const { url: imageUrl } = await uploadImageToStorage({
+        uri,
+        folder: 'stalls',
+        mimeType: asset.mimeType,
+        fileAsset: asset.file, // Web only: real File/Blob
+      });
+
+      const { error } = await supabase
+        .from('stalls')
+        .update({ image_url: imageUrl })
+        .eq('id', stall.id);
+
+      if (error) throw error;
+
+      await fetchStall();
+      Alert.alert('Success', 'Stall photo updated!');
+    } catch (error) {
+      console.error('Error uploading stall image:', error);
+      Alert.alert('Error', 'Failed to upload stall photo. Please try again.');
+    } finally {
+      setUploadingStallImage(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -125,13 +174,13 @@ export default function VendorProfileScreen({ navigation }) {
           <Text style={styles.name}>{profile?.full_name || 'Vendor'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>🛍️ Vendor</Text>
+            <Text style={styles.roleText}>Vendor</Text>
           </View>
         </View>
 
         {/* Stall Information */}
         <View style={styles.section}>
-          <VendorSectionHeader title="🏪 Stall Information" />
+          <VendorSectionHeader title="Stall Information" />
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Stall Number</Text>
             <Text style={styles.infoValue}>{stall?.stall_number || '—'}</Text>
@@ -152,29 +201,54 @@ export default function VendorProfileScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Stall Photo */}
+        <View style={styles.section}>
+          <VendorSectionHeader title="Stall Photo" />
+          <TouchableOpacity
+            style={styles.stallPhotoContainer}
+            onPress={uploadStallImage}
+            disabled={uploadingStallImage}
+          >
+            {stall?.image_url ? (
+              <Image source={{ uri: stall.image_url }} style={styles.stallPhoto} resizeMode="cover" />
+            ) : (
+              <View style={styles.stallPhotoPlaceholder}>
+                <Ionicons name="storefront-outline" size={40} color={vendorColors.primary} />
+                <Text style={styles.stallPhotoHint}>Tap to add a photo of your stall</Text>
+              </View>
+            )}
+            {uploadingStallImage && (
+              <View style={styles.stallPhotoOverlay}>
+                <ActivityIndicator size="large" color="#FFF" />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
         {/* Account Actions */}
         <View style={styles.section}>
-          <VendorSectionHeader title="⚙️ Account" />
+          <VendorSectionHeader title="Account" />
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('VendorRatings')}>
-            <Text style={styles.menuIcon}>⭐</Text>
+            <Ionicons name="star-outline" size={20} color="#6B7280" />
             <Text style={styles.menuLabel}>Ratings & Reviews</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('VendorReportsList')}>
-            <Text style={styles.menuIcon}>📋</Text>
+            <Ionicons name="clipboard-outline" size={20} color="#6B7280" />
             <Text style={styles.menuLabel}>My Reports</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('VendorReportIssue')}>
-            <Text style={styles.menuIcon}>🚩</Text>
+            <Ionicons name="flag-outline" size={20} color="#6B7280" />
             <Text style={styles.menuLabel}>Report an Issue</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>🚪 Logout</Text>
+          <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -296,5 +370,33 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+  stallPhotoContainer: {
+    marginTop: vendorSpacing.md,
+    borderRadius: vendorBorderRadius.lg,
+    overflow: 'hidden',
+    height: 160,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  stallPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  stallPhotoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stallPhotoHint: {
+    fontSize: 13,
+    color: vendorColors.text.secondary,
+  },
+  stallPhotoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

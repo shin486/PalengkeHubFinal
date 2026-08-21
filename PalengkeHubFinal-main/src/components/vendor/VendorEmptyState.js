@@ -1,13 +1,14 @@
 // src/components/vendor/VendorEmptyState.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { vendorColors, vendorBorderRadius, vendorSpacing } from '../../theme/vendorTheme';
 
 export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, variant = 'default' }) => {
   if (variant === 'compact') {
     return (
       <View style={styles.compact}>
-        <Text style={styles.compactIcon}>{icon || '📭'}</Text>
+        <Ionicons name={icon || 'mail-open-outline'} size={28} color={vendorColors.text.tertiary} />
         <Text style={styles.compactTitle}>{title}</Text>
         {message && <Text style={styles.compactMessage}>{message}</Text>}
         {actionLabel && onAction && (
@@ -21,7 +22,7 @@ export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, 
 
   return (
     <View style={styles.container}>
-      <Text style={styles.icon}>{icon || '📭'}</Text>
+      <Ionicons name={icon || 'mail-open-outline'} size={48} color={vendorColors.text.tertiary} />
       <Text style={styles.title}>{title}</Text>
       {message && <Text style={styles.message}>{message}</Text>}
       {actionLabel && onAction && (
@@ -33,9 +34,9 @@ export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, 
   );
 };
 
-export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = '⚠️' }) => (
+export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = 'alert-circle' }) => (
   <View style={styles.container}>
-    <Text style={styles.icon}>{icon}</Text>
+    <Ionicons name={icon} size={48} color={vendorColors.danger} />
     <Text style={styles.title}>Oops!</Text>
     <Text style={styles.message}>{message}</Text>
     {onRetry && (

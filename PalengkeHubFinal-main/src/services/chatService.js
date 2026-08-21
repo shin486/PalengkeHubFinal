@@ -1,5 +1,6 @@
 // src/services/chatService.js
 import { supabase } from '../../lib/supabase';
+import { uploadImageToStorage } from '../utils/imageUpload';
 
 const normalizeRoleForDb = (role) => {
   if (role === 'admin') return 'customer';
@@ -137,31 +138,16 @@ export const chatService = {
 
   async uploadChatImage(uri, file) {
     try {
-      console.log('📸 Uploading image to uguu.se:', uri);
-      
-      // Determine file extension from URI
-      const extMatch = uri.match(/\.(\w+)(\?|$)/);
-      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
-      const fileName = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      
-      // Upload to uguu.se (free permanent image host — no API key needed)
-      const formData = new FormData();
-      // On web, `file` is a File object; on native, use the uri object
-      formData.append('files[]', file || { uri, name: fileName, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-      
-      const response = await fetch('https://uguu.se/upload', {
-        method: 'POST',
-        body: formData,
+      console.log('📸 Uploading image to Supabase Storage:', uri);
+      const { url } = await uploadImageToStorage({
+        uri,
+        folder: 'chat',
+        mimeType: null,
+        fileAsset: file,
       });
-      
-      const result = await response.json();
-      if (!result.success || !result.files?.length) {
-        throw new Error('Image host rejected the upload');
-      }
-      
-      const imageUrl = result.files[0].url;
-      console.log('📸 Image uploaded:', imageUrl);
-      return imageUrl;
+      if (!url) throw new Error('No public URL returned from upload');
+      console.log('📸 Image uploaded:', url);
+      return url;
     } catch (error) {
       console.error('Error uploading image:', error);
       return null;

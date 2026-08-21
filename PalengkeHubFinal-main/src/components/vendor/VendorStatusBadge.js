@@ -29,12 +29,12 @@ export const VendorStatusBadge = ({ status, size = 'sm', style }) => {
 
 export const VendorPaymentStatusBadge = ({ status, size = 'sm' }) => {
   const map = {
-    pending: { color: vendorColors.warning, label: '⏳ Pending' },
-    awaiting_verification: { color: vendorColors.warning, label: '⏳ Awaiting Verification' },
-    verified: { color: vendorColors.success, label: '✅ Verified' },
-    paid: { color: vendorColors.success, label: '💳 Paid' },
-    rejected: { color: vendorColors.danger, label: '🚫 Rejected' },
-    refunded: { color: vendorColors.info, label: '💰 Refunded' },
+    pending: { color: vendorColors.warning, label: 'Pending' },
+    awaiting_verification: { color: vendorColors.warning, label: 'Awaiting Verification' },
+    verified: { color: vendorColors.success, label: 'Verified' },
+    paid: { color: vendorColors.success, label: 'Paid' },
+    rejected: { color: vendorColors.danger, label: 'Rejected' },
+    refunded: { color: vendorColors.info, label: 'Refunded' },
   };
   const info = map[status] || { color: vendorColors.text.tertiary, label: status };
   const isSmall = size === 'sm';

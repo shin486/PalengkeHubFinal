@@ -1,6 +1,7 @@
 // src/components/vendor/ModernProductCard.js
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Switch, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   vendorColors,
   vendorSpacing,
@@ -40,7 +41,7 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
           <Image source={{ uri: product.image_url }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderEmoji}>🛒</Text>
+            <Ionicons name="cart-outline" size={26} color={vendorColors.primary} />
           </View>
         )}
         <View style={[styles.stockBadge, { backgroundColor: stockStatus.bg }]}>
@@ -75,16 +76,17 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
 
         <View style={styles.metaRow}>
           <Text style={styles.salesText}>
-            {product.sales_count ? `🔥 ${product.sales_count} sold` : 'No sales yet'}
+            {product.sales_count ? `${product.sales_count} sold` : 'No sales yet'}
           </Text>
         </View>
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, styles.editBtn]} onPress={() => onEdit(product)}>
-            <Text style={styles.editBtnText}>✏️ Edit</Text>
+            <Ionicons name="create-outline" size={14} color="#FFFFFF" />
+            <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={handleDelete}>
-            <Text style={styles.deleteBtnText}>🗑️</Text>
+            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>

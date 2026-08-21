@@ -12,6 +12,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
@@ -243,9 +244,11 @@ export default function VendorRatingsScreen({ navigation }) {
       <View style={styles.ratingHeader}>
         <View style={styles.customerInfo}>
           <View style={styles.customerAvatar}>
-            <Text style={styles.customerAvatarText}>
-              {item.consumer?.full_name?.charAt(0)?.toUpperCase() || '👤'}
-            </Text>
+            {item.consumer?.full_name ? (
+              <Text style={styles.customerAvatarText}>{item.consumer.full_name.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <Ionicons name="person" size={18} color="#6B7280" />
+            )}
           </View>
           <View>
             <Text style={styles.customerName}>{item.consumer?.full_name || 'Customer'}</Text>
@@ -292,7 +295,8 @@ export default function VendorRatingsScreen({ navigation }) {
           }}
         >
           <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.replyGradient}>
-            <Text style={styles.replyButtonText}>📝 Reply to Review</Text>
+            <Ionicons name="create-outline" size={14} color="#FFFFFF" />
+            <Text style={styles.replyButtonText}>Reply to Review</Text>
           </LinearGradient>
         </TouchableOpacity>
       )}
@@ -301,7 +305,8 @@ export default function VendorRatingsScreen({ navigation }) {
         style={styles.deleteButton}
         onPress={() => handleDeleteRating(item)}
       >
-        <Text style={styles.deleteButtonText}>🗑️ Remove</Text>
+        <Ionicons name="trash-outline" size={14} color="#EF4444" />
+        <Text style={styles.deleteButtonText}>Remove</Text>
       </TouchableOpacity>
     </View>
   );
@@ -362,7 +367,7 @@ export default function VendorRatingsScreen({ navigation }) {
         {/* Product Performance */}
         {productRatings.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📊 Product Performance</Text>
+            <Text style={styles.sectionTitle}>Product Performance</Text>
             {productRatings.map(product => (
               <View key={product.id} style={styles.productRatingCard}>
                 <Text style={styles.productRatingName}>{product.name}</Text>
@@ -381,13 +386,13 @@ export default function VendorRatingsScreen({ navigation }) {
         {/* Reviews List */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>📝 Customer Reviews</Text>
+            <Text style={styles.sectionTitle}>Customer Reviews</Text>
           </View>
           {renderStarFilter()}
           
           {filteredRatings().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>⭐</Text>
+              <Ionicons name="star-outline" size={40} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>No reviews yet</Text>
               <Text style={styles.emptyText}>When customers leave reviews, they'll appear here</Text>
             </View>

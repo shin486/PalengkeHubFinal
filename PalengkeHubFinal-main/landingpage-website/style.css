@@ -353,12 +353,12 @@ nav a:hover::after{width:100%;}
   pointer-events:none;
   z-index:3;
 }
-.emoji-1{top:2%;left:0%;animation-delay:0.2s, 3.2s;}
-.emoji-2{top:12%;right:-2%;animation-delay:0.4s, 3.6s;}
-.emoji-3{bottom:28%;left:-4%;animation-delay:0.6s, 4s;}
+.emoji-1{top:2%;left:2%;animation-delay:0.2s, 3.2s;}
+.emoji-2{top:12%;right:2%;animation-delay:0.4s, 3.6s;}
+.emoji-3{bottom:28%;left:0%;animation-delay:0.6s, 4s;}
 .emoji-4{top:48%;left:2%;animation-delay:0.8s, 4.4s;}
 .emoji-5{bottom:10%;right:2%;animation-delay:1s, 4.8s;}
-.emoji-6{top:64%;right:-6%;animation-delay:1.2s, 5.2s;}
+.emoji-6{top:64%;right:0%;animation-delay:1.2s, 5.2s;}
 @keyframes emojiFloatIn{
   0%{opacity:0;transform:translateY(20px) scale(0.5);}
   100%{opacity:1;transform:translateY(0) scale(1);}
@@ -1092,6 +1092,12 @@ footer{background:var(--red-deep);color:rgba(255,255,255,0.75);padding:64px 0 32
   .nav-cta{padding:8px 14px;font-size:0.78rem;}
 }
 
+/* Hide floating emojis when the hero art gets too narrow for them
+   to sit beside the phone mockup without overlapping it */
+@media (max-width:1000px){
+  .hero-emoji{display:none;}
+}
+
 @media (max-width:860px){
   /* Video & section padding adjustments */
   .video-showcase{padding:70px 0 60px;}
@@ -1335,4 +1341,139 @@ footer{background:var(--red-deep);color:rgba(255,255,255,0.75);padding:64px 0 32
   .video-wrap video{aspect-ratio:16/10;}
   .map-wrap iframe{height:220px;}
   .scallop,.wave-divider{height:16px;}
+}
+
+/* ============================================
+   New: Phone tagline, Categories, Download CTA
+   ============================================ */
+
+/* Phone tagline (replaces fake stats) */
+.phone-tagline{
+  font-family:var(--display);
+  font-weight:600;
+  font-size:1.05rem;
+  color:#fff;
+  text-align:center;
+}
+.phone-tagline-sub{
+  font-size:0.78rem;
+  color:rgba(255,255,255,0.7);
+  text-align:center;
+  letter-spacing:0.02em;
+}
+
+/* Categories */
+.categories{
+  background:var(--white);
+  padding:110px 0 100px;
+  border-bottom:1px solid rgba(230,57,70,0.1);
+}
+.categories .section-head{text-align:center;margin-left:auto;margin-right:auto;}
+.categories-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:24px;
+}
+.category-card{
+  background:#fff;
+  border:1px solid rgba(230,57,70,0.1);
+  border-radius:18px;
+  padding:32px 24px;
+  text-align:center;
+  box-shadow:0 12px 24px -18px rgba(122,28,30,0.3);
+  transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.category-card:hover{
+  transform:translateY(-6px);
+  box-shadow:0 24px 40px -18px rgba(122,28,30,0.35);
+  border-color:rgba(230,57,70,0.4);
+}
+.category-emoji{
+  font-size:2.6rem;
+  display:block;
+  margin-bottom:14px;
+  filter:drop-shadow(0 6px 12px rgba(0,0,0,0.12));
+  transition:transform .3s ease;
+}
+.category-card:hover .category-emoji{transform:scale(1.15);}
+.category-card h3{
+  font-family:var(--display);
+  font-weight:600;
+  font-size:1.2rem;
+  color:var(--red-deep);
+  margin-bottom:8px;
+}
+.category-card p{
+  font-size:0.9rem;
+  color:#55514C;
+  line-height:1.5;
+}
+
+/* Download CTA box */
+.download-box{
+  display:flex;
+  align-items:center;
+  gap:28px;
+  background:rgba(255,255,255,0.1);
+  border:1px solid rgba(255,255,255,0.2);
+  border-radius:20px;
+  padding:24px 32px;
+}
+.qr-code{
+  background:#fff;
+  border-radius:12px;
+  padding:8px;
+  box-shadow:0 8px 24px -8px rgba(0,0,0,0.4);
+  flex-shrink:0;
+}
+.download-cta{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:12px;
+  text-align:left;
+}
+.btn-download{
+  font-size:1.05rem;
+  padding:17px 36px;
+}
+.download-hint{
+  font-size:0.85rem;
+  color:rgba(255,255,255,0.8);
+}
+.btn-secondary{
+  border-color:rgba(255,255,255,0.5);
+  padding:12px 26px;
+  font-size:0.9rem;
+}
+
+/* Footer download button */
+.footer-download{
+  display:inline-block;
+  margin-top:20px;
+  background:var(--semi-red);
+  color:#fff;
+  padding:12px 24px;
+  border-radius:999px;
+  font-weight:700;
+  font-size:0.9rem;
+  text-decoration:none;
+  transition:all .25s ease;
+  box-shadow:0 8px 20px -8px rgba(230,57,70,0.5);
+}
+.footer-download:hover{
+  background:var(--semi-red-deep);
+  transform:translateY(-2px);
+}
+
+/* Responsive for new sections */
+@media (max-width:860px){
+  .categories-grid{grid-template-columns:repeat(2,1fr);}
+  .download-box{flex-direction:column;text-align:center;padding:24px 20px;}
+  .download-cta{align-items:center;text-align:center;}
+}
+@media (max-width:480px){
+  .categories{padding:60px 0 50px;}
+  .categories-grid{grid-template-columns:1fr;max-width:340px;margin:0 auto;}
+  .download-box{gap:18px;}
 }

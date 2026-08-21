@@ -58,11 +58,6 @@ export default function VendorBottomNavigation({
   const insets = useSafeAreaInsets();
   const animatedValues = useRef({});
 
-  // For hiding/showing the entire bottom nav
-  const translateY = useRef(new Animated.Value(0)).current;
-  const lastScrollY = useRef(0);
-  const isHidden = useRef(false);
-
   // Initialize animated values for each tab
   useEffect(() => {
     state.routes.forEach((route, index) => {
@@ -74,42 +69,6 @@ export default function VendorBottomNavigation({
       }
     });
   }, [state.routes]);
-
-  // Listen for scroll events from the active screen
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('state', () => {
-      const currentRoute = state.routes[state.index];
-      const scrollY = currentRoute.params?.scrollY || 0;
-
-      if (scrollY !== undefined && scrollY !== lastScrollY.current) {
-        const isScrollingDown = scrollY > lastScrollY.current;
-        const isAtTop = scrollY < 20;
-        const isScrollingPastThreshold = scrollY > 30;
-
-        if (isScrollingDown && isScrollingPastThreshold && !isHidden.current) {
-          isHidden.current = true;
-          Animated.spring(translateY, {
-            toValue: 120,
-            useNativeDriver: true,
-            tension: 200,
-            friction: 20,
-          }).start();
-        } else if ((!isScrollingDown || isAtTop) && isHidden.current) {
-          isHidden.current = false;
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 200,
-            friction: 20,
-          }).start();
-        }
-
-        lastScrollY.current = scrollY;
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation, state]);
 
   // Handle tab press with animation
   const handlePress = (route, index) => {
@@ -187,7 +146,6 @@ export default function VendorBottomNavigation({
         styles.container,
         {
           paddingBottom: insets.bottom || SPACING.sm,
-          transform: [{ translateY: translateY }],
         }
       ]}
     >
@@ -225,7 +183,7 @@ export default function VendorBottomNavigation({
                 <View style={styles.iconWrapper}>
                   <Ionicons
                     name={config.icon}
-                    size={24}
+                    size={20}
                     color={isFocused ? COLORS.primary : COLORS.text.inactive}
                   />
                   {badgeCount > 0 && (
@@ -272,9 +230,9 @@ const styles = StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.sm,
-    height: 68,
+    paddingTop: 3,
+    paddingBottom: 3,
+    height: 56,
   },
   tabItem: {
     flex: 1,
@@ -291,15 +249,15 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 28,
-    marginBottom: 2,
+    height: 22,
+    marginBottom: 1,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '500',
     letterSpacing: 0.2,
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
   tabLabelActive: {
     color: COLORS.primary,

@@ -1,0 +1,49 @@
+﻿{
+    "access_token":  "eyJhbGciOiJFUzI1NiIsImtpZCI6IjFmZWQyYTc0LTg4NWItNDgzOC1iYWE3LWIyOTIwOWE3NWNiNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2pqcGdtcHVmd3BiZ3FqenF5bXZqLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJmMTkwNGQyYy0xYWFmLTQyMjYtODNmOS0wODY5ZGUzN2RlNjYiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg3Mjk1ODI1LCJpYXQiOjE3ODcyOTIyMjUsImVtYWlsIjoiZmxvd3Rlc3QuY3VzdG9tZXIuMTc4NzI5MjIyNEBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoiZmxvd3Rlc3QuY3VzdG9tZXIuMTc4NzI5MjIyNEBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiJmMTkwNGQyYy0xYWFmLTQyMjYtODNmOS0wODY5ZGUzN2RlNjYifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc4NzI5MjIyNX1dLCJzZXNzaW9uX2lkIjoiZjIxNzRlMjItZDg2My00MWMzLTk0ODgtNWVmNjk0YWQ2YTg5IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.w-Vu_5pWfmruT-Wr72oGmM-A5tOIb5xY9FG24RmtvTJABxqlsscXaVSBr3c9Ru3bfVN37HNiMLYnBhB9_LXWmg",
+    "token_type":  "bearer",
+    "expires_at":  1787295825,
+    "expires_in":  3600,
+    "refresh_token":  "nf7rnmto7pw4",
+    "user":  {
+                 "id":  "f1904d2c-1aaf-4226-83f9-0869de37de66",
+                 "aud":  "authenticated",
+                 "role":  "authenticated",
+                 "email":  "flowtest.customer.1787292224@gmail.com",
+                 "email_confirmed_at":  "2026-08-21T06:03:45.327461168Z",
+                 "phone":  "",
+                 "last_sign_in_at":  "2026-08-21T06:03:45.354737405Z",
+                 "app_metadata":  {
+                                      "provider":  "email",
+                                      "providers":  [
+                                                        "email"
+                                                    ]
+                                  },
+                 "user_metadata":  {
+                                       "email":  "flowtest.customer.1787292224@gmail.com",
+                                       "email_verified":  true,
+                                       "phone_verified":  false,
+                                       "sub":  "f1904d2c-1aaf-4226-83f9-0869de37de66"
+                                   },
+                 "identities":  [
+                                    {
+                                        "identity_id":  "9805cc8e-a177-4097-b5a9-e1f8067ca911",
+                                        "id":  "f1904d2c-1aaf-4226-83f9-0869de37de66",
+                                        "user_id":  "f1904d2c-1aaf-4226-83f9-0869de37de66",
+                                        "identity_data":  {
+                                                              "email":  "flowtest.customer.1787292224@gmail.com",
+                                                              "email_verified":  true,
+                                                              "phone_verified":  false,
+                                                              "sub":  "f1904d2c-1aaf-4226-83f9-0869de37de66"
+                                                          },
+                                        "provider":  "email",
+                                        "last_sign_in_at":  "2026-08-21T06:03:45.30143726Z",
+                                        "created_at":  "2026-08-21T06:03:45.302352Z",
+                                        "updated_at":  "2026-08-21T06:03:45.302352Z",
+                                        "email":  "flowtest.customer.1787292224@gmail.com"
+                                    }
+                                ],
+                 "created_at":  "2026-08-21T06:03:45.215545Z",
+                 "updated_at":  "2026-08-21T06:03:45.392937Z",
+                 "is_anonymous":  false
+             }
+}

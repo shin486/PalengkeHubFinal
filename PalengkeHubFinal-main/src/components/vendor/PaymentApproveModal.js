@@ -48,8 +48,8 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
             {hasScan && (
               <Text style={[styles.scanText, { color: scanMatched ? vendorColors.success : vendorColors.warning }]}>
                 {scanMatched
-                  ? '✅ Receipt scan matched this reference number'
-                  : '⚠️ Receipt scan could not confirm a match — verify manually'}
+                  ? 'Receipt scan matched this reference number'
+                  : 'Receipt scan could not confirm a match — verify manually'}
               </Text>
             )}
           </View>
@@ -106,7 +106,7 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
               {processing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.confirmText}>✓ Approve Payment</Text>
+                <Text style={styles.confirmText}>Approve Payment</Text>
               )}
             </TouchableOpacity>
           </View>

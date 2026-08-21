@@ -10,34 +10,31 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import axios from 'axios';
-
-// ✅ USE THE SAME IMGBB API KEY as chatService
-const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
+import { uploadImageToStorage as shareImageUpload } from '../../utils/imageUpload';
 
 // Available unit options with labels
 const UNIT_OPTIONS = [
-  { id: 'kg', label: 'Per Kilo (kg)', icon: '⚖️', defaultPrice: 0 },
-  { id: '500g', label: 'Per 500g', icon: '📦', defaultPrice: 0 },
-  { id: '250g', label: 'Per 250g', icon: '📦', defaultPrice: 0 },
-  { id: 'piece', label: 'Per Piece', icon: '🔢', defaultPrice: 0 },
-  { id: 'bundle', label: 'Per Bundle', icon: '🌿', defaultPrice: 0 },
-  { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: '🥚', defaultPrice: 0 },
-  { id: 'pack', label: 'Per Pack', icon: '📦', defaultPrice: 0 },
+  { id: 'kg', label: 'Per Kilo (kg)', icon: 'scale-outline', defaultPrice: 0 },
+  { id: '500g', label: 'Per 500g', icon: 'cube-outline', defaultPrice: 0 },
+  { id: '250g', label: 'Per 250g', icon: 'cube-outline', defaultPrice: 0 },
+  { id: 'piece', label: 'Per Piece', icon: 'grid-outline', defaultPrice: 0 },
+  { id: 'bundle', label: 'Per Bundle', icon: 'leaf-outline', defaultPrice: 0 },
+  { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: 'egg-outline', defaultPrice: 0 },
+  { id: 'pack', label: 'Per Pack', icon: 'cube-outline', defaultPrice: 0 },
 ];
 
 // Predefined categories
 const CATEGORY_OPTIONS = [
-  { id: 'vegetables', label: 'Vegetables', icon: '🥬' },
-  { id: 'meat', label: 'Meat', icon: '🥩' },
-  { id: 'rice', label: 'Rice & Grains', icon: '🍚' },
-  { id: 'fruits', label: 'Fruits', icon: '🍎' },
-  { id: 'poultry', label: 'Poultry', icon: '🐔' },
-  { id: 'other', label: 'Other', icon: '🛠️' },
+  { id: 'vegetables', label: 'Vegetables', icon: 'leaf-outline' },
+  { id: 'meat', label: 'Meat', icon: 'restaurant-outline' },
+  { id: 'rice', label: 'Rice & Grains', icon: 'basket-outline' },
+  { id: 'fruits', label: 'Fruits', icon: 'nutrition-outline' },
+  { id: 'poultry', label: 'Poultry', icon: 'egg-outline' },
+  { id: 'other', label: 'Other', icon: 'construct-outline' },
 ];
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
@@ -115,49 +112,30 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     });
 
     if (!result.canceled) {
-      await uploadImageToImgBB(result.assets[0].uri);
+      await uploadImageToStorage(result.assets[0]);
     }
   };
 
-  // ✅ EXACT SAME FUNCTION as chatService.uploadChatImage
-  const uploadImageToImgBB = async (uri) => {
+  // Upload product image to Supabase Storage (reliable, no third-party limits)
+  const uploadImageToStorage = async (asset) => {
     setUploadingImage(true);
     try {
-      console.log('📸 Uploading product image to ImgBB:', uri);
+      const assetUri = asset?.uri || '';
+      console.log('📸 Uploading product image to Supabase Storage:', assetUri);
       
-      // Fetch the image
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Convert to base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = reader.result.split(',')[1];
-          resolve(base64String);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      const { url } = await shareImageUpload({
+        uri: assetUri,
+        folder: 'products',
+        mimeType: asset?.mimeType,
+        fileAsset: asset?.file, // Web only: real File/Blob
       });
       
-      // Upload to ImgBB
-      const formData = new FormData();
-      formData.append('image', base64);
-      
-      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
-        params: {
-          key: IMGBB_API_KEY
-        },
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      const imageUrl = uploadResponse.data.data.url;
-      console.log('📸 Product image uploaded to ImgBB:', imageUrl);
+      if (!url) {
+        throw new Error('Upload succeeded but no public URL was returned.');
+      }
       
       // Update form data with the image URL
-      setFormData(prev => ({ ...prev, image_url: imageUrl }));
+      setFormData(prev => ({ ...prev, image_url: url }));
       
       Alert.alert('Success', 'Product image uploaded successfully!');
     } catch (error) {
@@ -252,7 +230,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                 />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderIcon}>📷</Text>
+                  <Ionicons name="image-outline" size={28} color="#9CA3AF" />
                   <Text style={styles.imagePlaceholderText}>Tap to add image</Text>
                 </View>
               )}
@@ -297,7 +275,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   ]}
                   onPress={() => setFormData({ ...formData, category: cat.id })}
                 >
-                  <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
+                  <Ionicons name={cat.icon} size={16} color={formData.category === cat.id ? '#FFFFFF' : '#6B7280'} />
                   <Text
                     style={[
                       styles.categoryChipText,
@@ -323,7 +301,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   ]}
                   onPress={() => toggleUnit(unit.id)}
                 >
-                  <Text style={styles.unitChipIcon}>{unit.icon}</Text>
+                  <Ionicons name={unit.icon} size={16} color={selectedUnits.includes(unit.id) ? '#FFFFFF' : '#6B7280'} />
                   <Text style={[
                     styles.unitChipText,
                     selectedUnits.includes(unit.id) && styles.unitChipTextActive
@@ -335,13 +313,13 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             </View>
 
             {/* Unit Prices Section */}
-            <Text style={styles.label}>💰 Unit Prices</Text>
+            <Text style={styles.label}>Unit Prices</Text>
             <Text style={styles.subLabel}>Set price for each unit</Text>
             
             {selectedUnits.includes('kg') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Text style={styles.unitPriceIcon}>⚖️</Text>
+                  <Ionicons name="scale-outline" size={16} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per Kilo (kg) *</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -361,7 +339,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('500g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Text style={styles.unitPriceIcon}>📦</Text>
+                  <Ionicons name="cube-outline" size={16} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per 500g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -381,7 +359,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('250g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Text style={styles.unitPriceIcon}>📦</Text>
+                  <Ionicons name="cube-outline" size={16} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per 250g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>

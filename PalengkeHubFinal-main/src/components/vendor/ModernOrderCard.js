@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   vendorColors,
   vendorSpacing,
@@ -128,13 +129,15 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
         {/* Customer */}
         <View style={styles.customerRow}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {order.profiles?.full_name?.charAt(0)?.toUpperCase() || '👤'}
-            </Text>
+            {order.profiles?.full_name ? (
+              <Text style={styles.avatarText}>{order.profiles.full_name.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <Ionicons name="person" size={18} color="#6B7280" />
+            )}
           </View>
           <View style={styles.customerInfo}>
             <Text style={styles.customerName}>{order.profiles?.full_name || 'Customer'}</Text>
-            {order.profiles?.phone && <Text style={styles.customerPhone}>📞 {order.profiles.phone}</Text>}
+            {order.profiles?.phone && <Text style={styles.customerPhone}>{order.profiles.phone}</Text>}
           </View>
         </View>
 
@@ -155,14 +158,14 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
 
         {/* Pickup time */}
         <View style={styles.pickupRow}>
-          <Text style={styles.pickupLabel}>🛎️ Pickup:</Text>
+          <Text style={styles.pickupLabel}>Pickup:</Text>
           <Text style={styles.pickupTime}>{formatPickupTime(order.pickup_time)}</Text>
         </View>
 
         {/* Payment status */}
         {order.payment_status && (
           <View style={styles.paymentRow}>
-            <Text style={styles.paymentLabel}>💳 Payment:</Text>
+            <Text style={styles.paymentLabel}>Payment:</Text>
             <VendorPaymentStatusBadge status={order.payment_status} size="sm" />
           </View>
         )}
@@ -170,7 +173,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
         {/* Special instructions */}
         {order.special_instructions && (
           <View style={styles.instructions}>
-            <Text style={styles.instructionsLabel}>📝 Special Instructions</Text>
+            <Text style={styles.instructionsLabel}>Special Instructions</Text>
             <Text style={styles.instructionsText} numberOfLines={2}>
               {order.special_instructions}
             </Text>
@@ -187,7 +190,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
           <View style={styles.actionRow}>
             {/* View details */}
             <TouchableOpacity style={styles.detailsBtn} onPress={openDetails}>
-              <Text style={styles.detailsBtnText}>👁️ View</Text>
+              <Text style={styles.detailsBtnText}>View</Text>
             </TouchableOpacity>
 
             {/* Payment verification buttons */}
@@ -197,13 +200,13 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                   style={[styles.actionBtn, styles.approveBtn]}
                   onPress={() => onPaymentApprove(order)}
                 >
-                  <Text style={styles.actionBtnText}>✓ Approve</Text>
+                  <Text style={styles.actionBtnText}>Approve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.rejectPaymentBtn]}
                   onPress={() => onPaymentReject(order)}
                 >
-                  <Text style={styles.actionBtnText}>✗ Reject</Text>
+                  <Text style={styles.actionBtnText}>Reject</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -211,21 +214,21 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {/* Propose change */}
             {canProposeChange && onProposeChange && (
               <TouchableOpacity style={[styles.actionBtn, styles.proposeBtn]} onPress={() => onProposeChange(order)}>
-                <Text style={styles.actionBtnText}>✏️ Negotiate</Text>
+                <Text style={styles.actionBtnText}>Negotiate</Text>
               </TouchableOpacity>
             )}
 
             {/* Request payment */}
             {canRequestPayment && onRequestPayment && (
               <TouchableOpacity style={[styles.actionBtn, styles.paymentBtn]} onPress={() => onRequestPayment(order)}>
-                <Text style={styles.actionBtnText}>💰 Request Pay</Text>
+                <Text style={styles.actionBtnText}>Request Pay</Text>
               </TouchableOpacity>
             )}
 
             {/* Reject */}
             {canReject && (
               <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => setShowRejectModal(true)}>
-                <Text style={styles.actionBtnText}>✗ Reject</Text>
+                <Text style={styles.actionBtnText}>Reject</Text>
               </TouchableOpacity>
             )}
 

@@ -46,13 +46,13 @@ if (Platform.OS === 'web') {
 
 // Unit configurations
 const UNIT_CONFIG = {
-  'kg':    { label: 'Per Kilo (kg)',  icon: '⚖️', suffix: 'kg',    multiplier: 1.00 },
-  '500g':  { label: 'Per 500g',       icon: '📦', suffix: '500g',  multiplier: 0.50 },
-  '250g':  { label: 'Per 250g',       icon: '📦', suffix: '250g',  multiplier: 0.25 },
-  'piece': { label: 'Per Piece',      icon: '🔢', suffix: 'pc',    multiplier: 0.25 },
-  'bundle':{ label: 'Per Bundle',     icon: '🌿', suffix: 'bundle',multiplier: 0.35 },
-  'dozen': { label: 'Per Dozen (12pcs)', icon: '🥚', suffix: 'dozen', multiplier: 2.40 },
-  'pack':  { label: 'Per Pack',       icon: '📦', suffix: 'pack',  multiplier: 0.80 },
+  'kg':    { label: 'Per Kilo (kg)',  icon: 'scale-outline', suffix: 'kg',    multiplier: 1.00 },
+  '500g':  { label: 'Per 500g',       icon: 'cube-outline', suffix: '500g',  multiplier: 0.50 },
+  '250g':  { label: 'Per 250g',       icon: 'cube-outline', suffix: '250g',  multiplier: 0.25 },
+  'piece': { label: 'Per Piece',      icon: 'apps-outline', suffix: 'pc',    multiplier: 0.25 },
+  'bundle':{ label: 'Per Bundle',     icon: 'leaf-outline', suffix: 'bundle',multiplier: 0.35 },
+  'dozen': { label: 'Per Dozen (12pcs)', icon: 'egg-outline', suffix: 'dozen', multiplier: 2.40 },
+  'pack':  { label: 'Per Pack',       icon: 'cube-outline', suffix: 'pack',  multiplier: 0.80 },
 };
 
 // Helper: apply promotion discount
@@ -668,7 +668,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           />
         ) : (
           <View style={styles.productImagePlaceholder}>
-            <Text style={styles.productEmoji}>🛒</Text>
+            <Ionicons name="cart-outline" size={48} color="#D1D5DB" />
           </View>
         )}
       </View>
@@ -690,10 +690,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
               style={styles.favBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.favIcon}>↗️</Text>
+              <Ionicons name="share-outline" size={22} color={COLORS.text.light} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
-              <Text style={styles.favIcon}>{isProductFavorite(product.id) ? '❤️' : '🤍'}</Text>
+              <Ionicons name={isProductFavorite(product.id) ? 'heart' : 'heart-outline'} size={22} color={isProductFavorite(product.id) ? '#EF4444' : COLORS.text.light} />
             </TouchableOpacity>
           </View>
         </View>
@@ -766,7 +766,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
                   ]}
                   onPress={() => handleUnitChange(unit)}
                 >
-                  <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || '📦'}</Text>
+                  <Ionicons name={UNIT_CONFIG[unit]?.icon || 'cube-outline'} size={18} color={COLORS.primary} />
                   <Text style={[
                     styles.unitChipText,
                     selectedUnit === unit && styles.unitChipTextActive

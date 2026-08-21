@@ -10,6 +10,7 @@ import {
   ScrollView, // ✅ ADD THIS
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 const isWeb = Platform.OS === 'web';
 
@@ -24,17 +25,17 @@ export const AdminSidebar = ({
 }) => {
   // Complete menu items
   const menuItems = [
-    { id: 'overview', label: 'Overview', icon: '📊', color: '#DC2626' },
-    { id: 'users', label: 'Users', icon: '👥', color: '#3B82F6' },
-    { id: 'vendors', label: 'Vendors', icon: '🏪', color: '#10B981' },
-    { id: 'compliance', label: 'Compliance', icon: '✅', color: '#8B5CF6' },
-    { id: 'applications', label: 'Applications', icon: '📋', color: '#F59E0B' },
-    { id: 'stalls', label: 'Stalls', icon: '📍', color: '#EC4899' },
-    { id: 'orders', label: 'Orders', icon: '📦', color: '#14B8A6' },
-    { id: 'announcements', label: 'Announcements', icon: '📢', color: '#8B5CF6' },
-    { id: 'violations', label: 'Violations', icon: '⚠️', color: '#EF4444' },
-    { id: 'complaints', label: 'Complaints', icon: '💬', color: '#EC4899' },
-    { id: 'reports', label: 'Reports', icon: '📄', color: '#6B7280' },
+    { id: 'overview', label: 'Overview', icon: 'bar-chart-outline', color: '#DC2626' },
+    { id: 'users', label: 'Users', icon: 'people-outline', color: '#3B82F6' },
+    { id: 'vendors', label: 'Vendors', icon: 'storefront-outline', color: '#10B981' },
+    { id: 'compliance', label: 'Compliance', icon: 'checkmark-circle-outline', color: '#8B5CF6' },
+    { id: 'applications', label: 'Applications', icon: 'clipboard-outline', color: '#F59E0B' },
+    { id: 'stalls', label: 'Stalls', icon: 'location-outline', color: '#EC4899' },
+    { id: 'orders', label: 'Orders', icon: 'cube-outline', color: '#14B8A6' },
+    { id: 'announcements', label: 'Announcements', icon: 'megaphone-outline', color: '#8B5CF6' },
+    { id: 'violations', label: 'Violations', icon: 'warning-outline', color: '#EF4444' },
+    { id: 'complaints', label: 'Complaints', icon: 'chatbubbles-outline', color: '#EC4899' },
+    { id: 'reports', label: 'Reports', icon: 'document-text-outline', color: '#6B7280' },
   ];
 
   return (
@@ -79,7 +80,7 @@ export const AdminSidebar = ({
             ]}
             onPress={() => setActiveSection(item.id)}
           >
-            <Text style={styles.navIcon}>{item.icon}</Text>
+            <Ionicons name={item.icon} size={20} color={activeSection === item.id ? '#FFFFFF' : item.color} />
             {!collapsed && (
               <View style={styles.navTextContainer}>
                 <Text style={[styles.navLabel, activeSection === item.id && styles.navLabelActive]}>
@@ -97,7 +98,7 @@ export const AdminSidebar = ({
       {/* User Info & Logout - Fixed at bottom */}
       <View style={styles.userSection}>
         <View style={styles.userAvatar}>
-          <Text style={styles.userAvatarText}>👤</Text>
+          <Ionicons name="person" size={20} color="#FFFFFF" />
         </View>
         {!collapsed && (
           <View style={styles.userInfo}>
@@ -106,7 +107,7 @@ export const AdminSidebar = ({
           </View>
         )}
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutIcon}>🚪</Text>
+          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
           {!collapsed && <Text style={styles.logoutText}>Logout</Text>}
         </TouchableOpacity>
       </View>

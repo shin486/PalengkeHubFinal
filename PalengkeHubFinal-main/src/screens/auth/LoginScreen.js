@@ -590,7 +590,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 <View style={styles.pickerAccountInfo}>
                   <Text style={styles.pickerAccountName}>{account.full_name || 'Unnamed account'}</Text>
                   <Text style={styles.pickerAccountMeta}>
-                    {account.role === 'vendor' ? '🏪 Vendor' : account.role === 'admin' ? '👨‍💼 Admin' : '🛍️ Customer'}
+                    {account.role === 'vendor' ? 'Vendor' : account.role === 'admin' ? 'Admin' : 'Customer'}
                   </Text>
                 </View>
                 <Text style={styles.pickerArrow}>›</Text>

@@ -13,15 +13,16 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 const reportTypes = [
-  { id: 'product', label: '🚫 Product Issue', icon: '📦', color: '#C62828' },
-  { id: 'vendor', label: '🏪 Vendor Problem', icon: '👤', color: '#F59E0B' },
-  { id: 'order', label: '📋 Order Issue', icon: '🛒', color: '#3B82F6' },
-  { id: 'payment', label: '💳 Payment Problem', icon: '💰', color: '#22C55E' },
-  { id: 'other', label: 'Other Concerns', icon: '📝', color: '#8B5CF6' },
+  { id: 'product', label: 'Product Issue', icon: 'cube-outline', color: '#C62828' },
+  { id: 'vendor', label: 'Vendor Problem', icon: 'storefront-outline', color: '#F59E0B' },
+  { id: 'order', label: 'Order Issue', icon: 'receipt-outline', color: '#3B82F6' },
+  { id: 'payment', label: 'Payment Problem', icon: 'card-outline', color: '#22C55E' },
+  { id: 'other', label: 'Other Concerns', icon: 'document-text-outline', color: '#8B5CF6' },
 ];
 
 const reasons = {
@@ -123,7 +124,7 @@ export default function ReportIssueScreen({ navigation, route }) {
       if (error) throw error;
 
       Alert.alert(
-        '✅ Report Submitted',
+        'Report Submitted',
         'Thank you for your report. Our team will review it and get back to you within 24-48 hours.',
         [
           {
@@ -182,7 +183,7 @@ export default function ReportIssueScreen({ navigation, route }) {
                   setCustomReason('');
                 }}
               >
-                <Text style={styles.reportTypeIcon}>{type.icon}</Text>
+                <Ionicons name={type.icon} size={22} color={type.color} />
                 <Text style={styles.reportTypeLabel}>{type.label}</Text>
               </TouchableOpacity>
             ))}
@@ -293,7 +294,7 @@ export default function ReportIssueScreen({ navigation, route }) {
 
             {/* Info Note */}
             <View style={styles.infoNote}>
-              <Text style={styles.infoIcon}>ℹ️</Text>
+              <Ionicons name="information-circle-outline" size={20} color={COLORS.info} />
               <Text style={styles.infoText}>
                 All reports are confidential and will be reviewed by our admin team.
                 We take all reports seriously and will investigate thoroughly.

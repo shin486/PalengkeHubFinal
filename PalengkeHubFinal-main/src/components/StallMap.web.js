@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Linking, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function StallMap({ 
   latitude, 
@@ -22,7 +23,7 @@ export default function StallMap({
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
-        <Text style={styles.placeholderText}>📍 Location not available</Text>
+        <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>
     );
@@ -36,7 +37,7 @@ export default function StallMap({
       activeOpacity={0.7}
     >
       <View style={styles.mapPlaceholder}>
-        <Text style={styles.mapEmoji}>🗺️</Text>
+        <Ionicons name="map-outline" size={48} color="#D1D5DB" />
         <Text style={styles.mapTitle}>{stallName || 'Stall Location'}</Text>
         <Text style={styles.mapSubtitle}>
           {stallNumber ? `Stall #${stallNumber}` : ''} {section ? `- ${section}` : ''}

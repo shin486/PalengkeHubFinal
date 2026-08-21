@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function StallsDirectoryScreen({ navigation, isGuest }) {
   const COLORS = useColors();
@@ -65,7 +66,7 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
           <Text style={styles.stallNumber}>#{item.stall_number}</Text>
           {item.average_rating > 0 && (
             <View style={styles.ratingContainer}>
-              <Text style={styles.ratingStar}>⭐</Text>
+              <Ionicons name="star" size={14} color="#F59E0B" />
               <Text style={styles.ratingValue}>{item.average_rating.toFixed(1)}</Text>
             </View>
           )}

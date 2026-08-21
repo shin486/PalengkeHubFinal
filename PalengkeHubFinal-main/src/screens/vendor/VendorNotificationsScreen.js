@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,14 +24,14 @@ import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
 
 const getNotificationIcon = (type) => {
   switch (type) {
-    case 'order': return '📦';
-    case 'payment': return '💳';
-    case 'price_drop': return '📉';
-    case 'chat': return '💬';
-    case 'low_stock': return '⚠️';
-    case 'review': return '⭐';
-    case 'system': return '📢';
-    default: return '🔔';
+    case 'order': return 'cube-outline';
+    case 'payment': return 'card-outline';
+    case 'price_drop': return 'trending-down';
+    case 'chat': return 'chatbubbles-outline';
+    case 'low_stock': return 'warning-outline';
+    case 'review': return 'star-outline';
+    case 'system': return 'megaphone-outline';
+    default: return 'notifications-outline';
   }
 };
 
@@ -148,7 +149,7 @@ export default function VendorNotificationsScreen({ navigation }) {
         activeOpacity={0.7}
       >
         <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
-          <Text style={styles.icon}>{icon}</Text>
+          <Ionicons name={icon} size={22} color={color} />
         </View>
         <View style={styles.content}>
           <Text style={[styles.title, !item.is_read && styles.titleUnread]} numberOfLines={2}>
@@ -182,7 +183,7 @@ export default function VendorNotificationsScreen({ navigation }) {
         <VendorSkeletonList count={5} />
       ) : notifications.length === 0 ? (
         <VendorEmptyState
-          icon="🔔"
+          icon="notifications-outline"
           title="No notifications"
           message="Updates about your orders, payments, and products will appear here"
         />

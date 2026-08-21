@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-
 export default function StallMap({ 
   latitude, 
   longitude, 
@@ -15,7 +14,7 @@ export default function StallMap({
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
-        <Text style={styles.placeholderText}>📍 Location not available</Text>
+        <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>
     );

@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +26,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadImageToStorage } from '../../utils/imageUpload';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 export default function ProfileScreen({ navigation }) {
@@ -41,6 +43,7 @@ export default function ProfileScreen({ navigation }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   // ── PIN Login state ──
   const [showPinModal, setShowPinModal] = useState(false);
@@ -136,6 +139,13 @@ export default function ProfileScreen({ navigation }) {
     setShowPinModal(false);
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await checkUser();
+    await fetchUserStats();
+    setRefreshing(false);
+  };
+
   const fetchUserStats = async () => {
     try {
       const { count: orderCount } = await supabase
@@ -173,40 +183,26 @@ export default function ProfileScreen({ navigation }) {
       try {
         const asset = result.assets[0];
         const uri = asset.uri;
-        
-        // Determine file extension
-        const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
-        const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
-        
-        // Upload to uguu.se (free permanent image host — no API key needed)
-        const formData = new FormData();
-        // On web, asset.file is a File; on native, use the uri object
-        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
-        
-        const uploadResponse = await fetch('https://uguu.se/upload', {
-          method: 'POST',
-          body: formData,
+        console.log('✅ Uploading avatar:', uri);
+
+        const { url: avatarUrl } = await uploadImageToStorage({
+          uri,
+          folder: 'avatars',
+          mimeType: asset.mimeType,
+          fileAsset: asset.file, // Web only: real File/Blob
         });
-        
-        const uploadResult = await uploadResponse.json();
-        if (!uploadResult.success || !uploadResult.files?.length) {
-          throw new Error('Image host rejected the upload');
-        }
-        
-        const avatarUrl = uploadResult.files[0].url;
         console.log('✅ Avatar uploaded:', avatarUrl);
-        
+
         const { error } = await supabase
           .from('profiles')
           .update({ avatar_url: avatarUrl })
           .eq('id', user.id);
-        
+
         if (error) throw error;
-        
+
         await checkUser();
         setAvatarError(false);
         Alert.alert('Success', 'Profile picture updated!');
-        
       } catch (error) {
         console.error('Upload error:', error);
         Alert.alert('Error', 'Failed to upload image. Please try again.');
@@ -358,17 +354,17 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.guestName}>Guest User</Text>
             <Text style={styles.guestEmail}>browsing without account</Text>
             <View style={styles.guestBadge}>
-              <Text style={styles.guestBadgeText}>👋 Guest Mode</Text>
+              <Text style={styles.guestBadgeText}>Guest Mode</Text>
             </View>
           </View>
 
           {/* Benefits Section */}
           <View style={styles.benefitsCard}>
-            <Text style={styles.benefitsTitle}>✨ Sign in to unlock</Text>
+            <Text style={styles.benefitsTitle}>Sign in to unlock</Text>
             
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Text style={styles.benefitIcon}>🛒</Text>
+                <Ionicons name="cart-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Save your cart items</Text>
@@ -378,7 +374,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Text style={styles.benefitIcon}>📦</Text>
+                <Ionicons name="cube-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Place orders</Text>
@@ -388,7 +384,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Text style={styles.benefitIcon}>📋</Text>
+                <Ionicons name="receipt-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>View order history</Text>
@@ -398,7 +394,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Text style={styles.benefitIcon}>⭐</Text>
+                <Ionicons name="star-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Rate stalls</Text>
@@ -408,7 +404,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Text style={styles.benefitIcon}>❤️</Text>
+                <Ionicons name="heart-outline" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Save favorite stalls</Text>
@@ -447,15 +443,16 @@ export default function ProfileScreen({ navigation }) {
     );
   }
 
-  // ========== LOGGED IN USER ==========
+      // ========== LOGGED IN USER ==========
   const hasProfilePhoto = profile?.avatar_url && !avatarError;
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* User Avatar Section with Upload */}
         <View style={styles.avatarSection}>
@@ -475,13 +472,17 @@ export default function ProfileScreen({ navigation }) {
                 colors={['#DC2626', '#EF4444', '#F87171']}
                 style={styles.avatarGradient}
               >
-                <Text style={styles.avatarEmoji}>
-                  {profile?.full_name?.charAt(0)?.toUpperCase() || '👤'}
-                </Text>
+                {profile?.full_name ? (
+                  <Text style={styles.avatarEmoji}>
+                    {profile.full_name.charAt(0).toUpperCase()}
+                  </Text>
+                ) : (
+                  <Ionicons name="person" size={28} color="#FFFFFF" />
+                )}
               </LinearGradient>
             )}
             <View style={styles.editAvatarBadge}>
-              <Text style={styles.editAvatarBadgeText}>📷</Text>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
           
@@ -489,7 +490,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.userEmail}>{user?.email}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>
-              {profile?.role === 'vendor' ? '🛍️ Vendor' : '🛒 Shopper'}
+              {profile?.role === 'vendor' ? 'Vendor' : 'Shopper'}
             </Text>
           </View>
 
@@ -560,20 +561,20 @@ export default function ProfileScreen({ navigation }) {
         {/* Menu Items */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
-            <Text style={styles.menuItemIcon}>❤️</Text>
+            <Ionicons name="heart-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>{t('favorites.title')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
-            <Text style={styles.menuItemIcon}>📋</Text>
+            <Ionicons name="receipt-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>{t('orders.title')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           {/* Theme Selector */}
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemePicker(true)}>
-            <Text style={styles.menuItemIcon}>{themeMode === 'dark' ? '🌙' : '☀️'}</Text>
+            <Ionicons name={themeMode === 'dark' ? 'moon-outline' : 'sunny-outline'} size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>Theme</Text>
             <Text style={styles.languageValue}>
               {themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'System'}
@@ -583,7 +584,7 @@ export default function ProfileScreen({ navigation }) {
 
           {/* Language Selector */}
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguagePicker(true)}>
-            <Text style={styles.menuItemIcon}>🌐</Text>
+            <Ionicons name="globe-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>{t('profile.language')}</Text>
             <Text style={styles.languageValue}>{locale === 'en' ? 'English' : 'Filipino'}</Text>
             <Text style={styles.chevron}>›</Text>
@@ -591,26 +592,26 @@ export default function ProfileScreen({ navigation }) {
 
           {/* PIN Login */}
           <TouchableOpacity style={styles.menuItem} onPress={openPinModal}>
-            <Text style={styles.menuItemIcon}>🔢</Text>
+            <Ionicons name="keypad-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>PIN Login</Text>
             <Text style={styles.languageValue}>{hasPin ? 'Naka-on' : 'Naka-off'}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuItemIcon}>📍</Text>
+            <Ionicons name="location-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>Saved Addresses</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuItemIcon}>❓</Text>
+            <Ionicons name="help-circle-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>Help & Support</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuItemIcon}>🔒</Text>
+            <Ionicons name="lock-closed-outline" size={22} color={COLORS.primary} />
             <Text style={styles.menuItemText}>Privacy Policy</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
@@ -684,7 +685,7 @@ export default function ProfileScreen({ navigation }) {
         )}
         {/* VERSION LABEL */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
+          <Text style={styles.versionText}>PalengkeHub v1.0.8 (build 9)</Text>
         </View>
       </ScrollView>
 
@@ -697,21 +698,21 @@ export default function ProfileScreen({ navigation }) {
               style={[styles.langOption, themeMode === 'light' && styles.langOptionActive]}
               onPress={() => { setTheme('light'); setShowThemePicker(false); }}
             >
-              <Text style={styles.langOptionText}>☀️  Light</Text>
+              <Text style={styles.langOptionText}>Light</Text>
               {themeMode === 'light' && <Text style={styles.langCheck}>✓</Text>}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, themeMode === 'dark' && styles.langOptionActive]}
               onPress={() => { setTheme('dark'); setShowThemePicker(false); }}
             >
-              <Text style={styles.langOptionText}>🌙  Dark</Text>
+              <Text style={styles.langOptionText}>Dark</Text>
               {themeMode === 'dark' && <Text style={styles.langCheck}>✓</Text>}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, themeMode === 'system' && styles.langOptionActive]}
               onPress={() => { setTheme('system'); setShowThemePicker(false); }}
             >
-              <Text style={styles.langOptionText}>📱  System Default</Text>
+              <Text style={styles.langOptionText}>System Default</Text>
               {themeMode === 'system' && <Text style={styles.langCheck}>✓</Text>}
             </TouchableOpacity>
             <TouchableOpacity
@@ -733,14 +734,14 @@ export default function ProfileScreen({ navigation }) {
               style={[styles.langOption, locale === 'en' && styles.langOptionActive]}
               onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
             >
-              <Text style={styles.langOptionText}>🇺🇸  English</Text>
+              <Text style={styles.langOptionText}>English</Text>
               {locale === 'en' && <Text style={styles.langCheck}>✓</Text>}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, locale === 'fil' && styles.langOptionActive]}
               onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
             >
-              <Text style={styles.langOptionText}>🇵🇭  Filipino</Text>
+              <Text style={styles.langOptionText}>Filipino</Text>
               {locale === 'fil' && <Text style={styles.langCheck}>✓</Text>}
             </TouchableOpacity>
             <TouchableOpacity
@@ -756,7 +757,7 @@ export default function ProfileScreen({ navigation }) {
       <Modal visible={showPinModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🔢 PIN Login</Text>
+            <Text style={styles.modalTitle}>PIN Login</Text>
 
             {pinSaved ? (
               <>
@@ -848,7 +849,7 @@ export default function ProfileScreen({ navigation }) {
                   onPress={handlePinSave}
                   disabled={pinBusy}
                 >
-                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN ✓'}</Text>
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(1)}>
                   <Text style={styles.langCancelText}>Bumalik</Text>

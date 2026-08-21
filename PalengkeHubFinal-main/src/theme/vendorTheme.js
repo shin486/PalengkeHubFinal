@@ -115,19 +115,19 @@ export const getStatusColor = (status) => {
 
 export const getStatusLabel = (status) => {
   const labelMap = {
-    pending: '⏳ Pending',
-    accepted: '✅ Accepted',
-    confirmed: '✅ Confirmed',
-    preparing: '👨‍🍳 Preparing',
-    ready: '🛎️ Ready for Pickup',
-    completed: '📦 Completed',
-    cancelled: '❌ Cancelled',
-    expired: '⏰ Expired',
-    rejected: '🚫 Rejected',
-    paid: '💳 Paid',
-    awaiting_verification: '⏳ Awaiting Verification',
-    verified: '✅ Verified',
-    rejected_payment: '🚫 Payment Rejected',
+    pending: 'Pending',
+    accepted: 'Accepted',
+    confirmed: 'Confirmed',
+    preparing: 'Preparing',
+    ready: 'Ready for Pickup',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    expired: 'Expired',
+    rejected: 'Rejected',
+    paid: 'Paid',
+    awaiting_verification: 'Awaiting Verification',
+    verified: 'Verified',
+    rejected_payment: 'Payment Rejected',
   };
   return labelMap[status] || status;
 };

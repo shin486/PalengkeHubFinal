@@ -8,6 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import { verifyPin, getStoredCredentials } from '../services/pinService';
 
 // Big-button 4-digit PIN pad shown on the login screen when the user has
@@ -130,7 +131,7 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Animated.View style={[styles.card, { transform: [{ translateX: shakeAnim }] }]}>
-          <Text style={styles.lockIcon}>🔒</Text>
+          <Ionicons name="lock-closed-outline" size={28} color="#DC2626" />
           <Text style={styles.title}>Ipasok ang iyong PIN</Text>
           <Text style={styles.subtitle}>4-digit na PIN para makapasok agad</Text>
 

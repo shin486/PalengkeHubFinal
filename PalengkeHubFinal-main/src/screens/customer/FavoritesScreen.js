@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function FavoritesScreen({ navigation }) {
   const COLORS = useColors();
@@ -47,7 +48,7 @@ export default function FavoritesScreen({ navigation }) {
         <Image source={{ uri: product.image_url }} style={styles.productImage} />
       ) : (
         <View style={styles.productImagePlaceholder}>
-          <Text style={styles.productEmoji}>🛒</Text>
+          <Ionicons name="cart-outline" size={28} color="#D1D5DB" />
         </View>
       )}
       <View style={styles.productInfo}>
@@ -59,7 +60,7 @@ export default function FavoritesScreen({ navigation }) {
         style={styles.heartBtn}
         onPress={() => toggleProductFavorite(product)}
       >
-        <Text style={styles.heartIconFilled}>❤️</Text>
+        <Ionicons name="heart" size={20} color="#EF4444" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -76,7 +77,7 @@ export default function FavoritesScreen({ navigation }) {
           <Image source={{ uri: stall.image_url }} style={styles.stallAvatar} />
         ) : (
           <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.stallAvatarGradient}>
-            <Text style={styles.stallAvatarEmoji}>🏪</Text>
+            <Ionicons name="storefront-outline" size={24} color="#FFFFFF" />
           </LinearGradient>
         )}
       </View>
@@ -85,14 +86,14 @@ export default function FavoritesScreen({ navigation }) {
         {stall.stall_number && <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>}
         {stall.section && <Text style={styles.stallSection}>{stall.section}</Text>}
         {stall.rating > 0 && (
-          <Text style={styles.stallRating}>⭐ {parseFloat(stall.rating).toFixed(1)}</Text>
+          <Text style={styles.stallRating}><Ionicons name="star" size={14} color="#F59E0B" /> {parseFloat(stall.rating).toFixed(1)}</Text>
         )}
       </View>
       <TouchableOpacity
         style={styles.heartBtn}
         onPress={() => toggleStallFavorite(stall)}
       >
-        <Text style={styles.heartIconFilled}>❤️</Text>
+        <Ionicons name="heart" size={20} color="#EF4444" />
       </TouchableOpacity>
     </TouchableOpacity>
   );

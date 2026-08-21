@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Header } from '../../components/Header';
@@ -84,11 +85,11 @@ export default function VendorReportsListScreen({ navigation }) {
 
   const getReportIcon = (type) => {
     switch (type) {
-      case 'customer_behavior': return '👤';
-      case 'order_issue': return '📋';
-      case 'payment_issue': return '💰';
-      case 'fraud': return '⚠️';
-      default: return '📝';
+      case 'customer_behavior': return 'person-outline';
+      case 'order_issue': return 'clipboard-outline';
+      case 'payment_issue': return 'cash-outline';
+      case 'fraud': return 'warning-outline';
+      default: return 'document-text-outline';
     }
   };
 
@@ -129,7 +130,7 @@ export default function VendorReportsListScreen({ navigation }) {
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
       
       <Header 
-        title="📋 Customer Reports"
+        title="Customer Reports"
         subtitle="Track your reported issues"
       />
 
@@ -170,7 +171,7 @@ export default function VendorReportsListScreen({ navigation }) {
             end={{ x: 1, y: 0 }}
             style={styles.newButtonGradient}
           >
-            <Text style={styles.newButtonIcon}>🚩</Text>
+            <Ionicons name="flag-outline" size={16} color="#FFFFFF" />
             <Text style={styles.newButtonText}>Report New Issue</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -181,7 +182,7 @@ export default function VendorReportsListScreen({ navigation }) {
           
           {reports.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📭</Text>
+              <Ionicons name="mail-open-outline" size={40} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>No Reports Yet</Text>
               <Text style={styles.emptyText}>
                 You haven't submitted any customer reports. Tap the button above to report an issue.
@@ -192,7 +193,7 @@ export default function VendorReportsListScreen({ navigation }) {
               <View key={report.id} style={styles.reportCard}>
                 <View style={styles.reportHeader}>
                   <View style={styles.reportTypeContainer}>
-                    <Text style={styles.reportIcon}>{getReportIcon(report.report_type)}</Text>
+                    <Ionicons name={getReportIcon(report.report_type)} size={14} color="#DC2626" />
                     <Text style={styles.reportType}>
                       {getReportLabel(report.report_type)}
                     </Text>
@@ -228,7 +229,7 @@ export default function VendorReportsListScreen({ navigation }) {
 
                 {report.admin_notes && (
                   <View style={styles.adminNote}>
-                    <Text style={styles.adminNoteLabel}>📝 Admin Response:</Text>
+                    <Text style={styles.adminNoteLabel}>Admin Response:</Text>
                     <Text style={styles.adminNoteText}>{report.admin_notes}</Text>
                   </View>
                 )}

@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 const isWeb = Platform.OS === 'web';
 
@@ -23,7 +24,7 @@ export const AdminHeader = ({ title, onRefresh, refreshing, onToggleSidebar, isW
       <View style={styles.headerLeft}>
         {!isWeb && (
           <TouchableOpacity onPress={onToggleSidebar} style={styles.menuButton}>
-            <Text style={styles.menuIcon}>☰</Text>
+            <Ionicons name="menu" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         )}
         <Text style={styles.headerTitle}>{title}</Text>
@@ -33,7 +34,7 @@ export const AdminHeader = ({ title, onRefresh, refreshing, onToggleSidebar, isW
           {refreshing ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={styles.refreshIcon}>⟳</Text>
+            <Ionicons name="refresh" size={20} color="#FFFFFF" />
           )}
         </TouchableOpacity>
       </View>

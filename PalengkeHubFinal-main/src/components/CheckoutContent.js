@@ -339,7 +339,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       return updated;
     });
     setGcashScanError(null);
-    setGcashScanStatus('🔍 Scanning receipt…');
+    setGcashScanStatus('Scanning receipt…');
 
     try {
       // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
@@ -404,7 +404,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         return;
       }
 
-      setGcashScanStatus('🔍 Checking for duplicates…');
+      setGcashScanStatus('Checking for duplicates…');
 
       // 3) The same GCash reference cannot be used on another order.
       const { data: duplicateRef } = await supabase
@@ -445,7 +445,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         }
       }
 
-      setGcashScanStatus('📤 Uploading receipt…');
+      setGcashScanStatus('Uploading receipt…');
       const receiptUrl = await uploadGcashReceipt(payment.receiptUri, payment.stallId, index);
       if (!receiptUrl) {
         setGcashScanError('Failed to upload your receipt. Please try again.');
@@ -488,7 +488,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         setTimeout(() => {
           setGcashModalVisible(false);
           Alert.alert(
-            '✅ All Payments Submitted! 🎉',
+            'All Payments Submitted!',
             'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.',
             [
               { text: 'View Orders', onPress: () => navigation.navigate('Orders') },
@@ -504,7 +504,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           // Start timer for next vendor
           startTimerForVendor(nextIndex);
           Alert.alert(
-            '✅ Payment Submitted!',
+            'Payment Submitted!',
             `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`,
             [{ text: 'Continue' }]
           );
@@ -1092,7 +1092,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && currentPayment.isPaid && (
                 <View style={styles.gcashCompletedContainer}>
                   <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
-                  <Text style={styles.gcashCompletedText}>✅ Payment Submitted</Text>
+                  <Text style={styles.gcashCompletedText}>Payment Submitted</Text>
                   <Text style={styles.gcashCompletedSubtext}>
                     {currentPayment.stallName} will verify your payment shortly
                   </Text>
@@ -1140,8 +1140,6 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       </View>
                       <Text style={styles.gcashStatusItemAmount}>
                         ₱{p.total.toFixed(2)}
-                        {p.isPaid && ' ✅'}
-                        {p.isExpired && ' ❌'}
                       </Text>
                     </View>
                   ))}

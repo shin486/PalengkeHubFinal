@@ -7,12 +7,15 @@ import {
   StatusBar,
   Dimensions,
   SafeAreaView,
+  Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from './lib/supabase';
@@ -75,6 +78,7 @@ import BottomNavigation from './src/components/BottomNavigation';
 
 const { width } = Dimensions.get('window');
 const Stack = createNativeStackNavigator();
+const CustomerStack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const colors = {
@@ -199,6 +203,7 @@ function CustomerTabNavigator({ isGuest, onRouteChange }) {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
+        animation: 'fade',
       }}
       tabBar={(props) => (
         <BottomNavigation
@@ -416,8 +421,16 @@ function AppStack({ isGuest }) {
         <Header title={headerProps.title} subtitle={headerProps.subtitle} />
       )}
       
-      <Stack.Navigator
-        screenOptions={{ headerShown: false, animation: 'none' }}
+      <CustomerStack.Navigator
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: true,
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          transitionSpec: {
+            open: { animation: 'timing', config: { duration: 300, easing: Easing.out(Easing.cubic) } },
+            close: { animation: 'timing', config: { duration: 240, easing: Easing.in(Easing.cubic) } },
+          },
+        }}
         onStateChange={(state) => {
           const routeName = getActiveRouteName(state);
           console.log('🔄 StackNavigator - route changed to:', routeName);
@@ -425,7 +438,7 @@ function AppStack({ isGuest }) {
           setActiveRouteName(routeName);
         }}
       >
-        <Stack.Screen name="MainTabs">
+        <CustomerStack.Screen name="MainTabs">
           {props => (
             <CustomerTabNavigator
               {...props}
@@ -436,27 +449,27 @@ function AppStack({ isGuest }) {
               }}
             />
           )}
-        </Stack.Screen>
+        </CustomerStack.Screen>
         
-        <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
-        <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
-        <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
-        <Stack.Screen name="Search" component={SearchScreen} />
-        <Stack.Screen name="Checkout" component={CheckoutScreen} />
-      <Stack.Screen name="PickupPass" component={PickupPassScreen} />
-        <Stack.Screen name="Notifications" component={NotificationScreen} />
-        <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
+        <CustomerStack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+        <CustomerStack.Screen name="StallDetails" component={StallDetailsScreen} />
+        <CustomerStack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
+        <CustomerStack.Screen name="Search" component={SearchScreen} />
+        <CustomerStack.Screen name="Checkout" component={CheckoutScreen} />
+      <CustomerStack.Screen name="PickupPass" component={PickupPassScreen} />
+        <CustomerStack.Screen name="Notifications" component={NotificationScreen} />
+        <CustomerStack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         
-        <Stack.Screen 
+        <CustomerStack.Screen 
           name="ChatDetail" 
           component={ChatDetailScreen} 
           options={{ headerShown: false }}
         />
         
-        <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
-        <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
-        <Stack.Screen name="Favorites" component={FavoritesScreen} />
-      </Stack.Navigator>
+        <CustomerStack.Screen name="ReportIssue" component={ReportIssueScreen} />
+        <CustomerStack.Screen name="CustomerReports" component={CustomerReportsScreen} />
+        <CustomerStack.Screen name="Favorites" component={FavoritesScreen} />
+      </CustomerStack.Navigator>
     </View>
   );
 }
@@ -546,6 +559,7 @@ function RootNavigator() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer 
       ref={(ref) => {
         global.navigationRef = ref;
@@ -591,6 +605,7 @@ function RootNavigator() {
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }
 
