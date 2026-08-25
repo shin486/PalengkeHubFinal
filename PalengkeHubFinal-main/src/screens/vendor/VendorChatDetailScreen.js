@@ -25,7 +25,7 @@ import { useChat } from '../../hooks/useChat';
 import { supabase } from '../../../lib/supabase';
 
 export default function VendorChatDetailScreen({ navigation, route }) {
-  // ✅ Get conversationId from route params
+  //  Get conversationId from route params
   const conversationId = route.params?.conversationId;
   const customer = route.params?.customer || {};
   const stall = route.params?.stall || null;
@@ -76,14 +76,14 @@ export default function VendorChatDetailScreen({ navigation, route }) {
     fetchStallInfo();
   }, [conversationId, stall]);
 
-  // ✅ Hide the default header
+  //  Hide the default header
   useEffect(() => {
     navigation.setOptions({
       headerShown: false,
     });
   }, [navigation]);
 
-  // ✅ Suggested quick reply messages for vendors
+  //  Suggested quick reply messages for vendors
   const suggestedMessages = [
     { id: 1, text: "Confirm Payment" },
     { id: 2, text: "Confirm Pickup Time" },

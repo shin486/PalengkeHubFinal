@@ -69,7 +69,7 @@ function FilterSelect({ value, onChange, options, placeholder = 'All' }) {
 function EmptyState({ message }) {
   return (
     <div className="empty-state">
-      <div className="empty-state-icon">📦</div>
+ <div className="empty-state-icon"></div>
       <div className="empty-state-text">{message}</div>
     </div>
   );
@@ -1503,7 +1503,7 @@ function Chat() {
         <div className="chat-main">
           {!active ? (
             <div className="chat-empty">
-              <div className="chat-empty-icon">💬</div>
+ <div className="chat-empty-icon"></div>
               <div>Select a conversation to start chatting</div>
               <span className="chat-empty-sub">Messages are fetched live from the database</span>
             </div>
@@ -1523,7 +1523,7 @@ function Chat() {
                 {loadingMsgs ? (
                   <div className="chat-list-loading"><Skeleton count={3} height="52px" /></div>
                 ) : msgs.length === 0 ? (
-                  <div className="chat-empty">No messages yet. Say hello! 👋</div>
+ <div className="chat-empty">No messages yet. Say hello! </div>
                 ) : msgs.map((m, idx) => {
                   const prev = msgs[idx - 1];
                   const showDate = !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();

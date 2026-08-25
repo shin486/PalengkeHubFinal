@@ -33,7 +33,6 @@ import { EmptyState } from '../../components/EmptyState';
 import { OrderTimeline } from '../../components/OrderTimeline';
 import { supabase } from '../../../lib/supabase';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../../utils/receiptScanner';
-import { FadeInUp } from '../../utils/animations';
 
 const { width, height } = Dimensions.get('window');
 
@@ -407,7 +406,7 @@ export default function OrdersScreen({ navigation }) {
 
     setPayNowSubmitting(true);
     setPayNowScanError(null);
-    setPayNowScanStatus('Scanning receipt…');
+ setPayNowScanStatus(' Scanning receipt…');
     try {
       // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
       let scan = null;
@@ -474,7 +473,7 @@ export default function OrdersScreen({ navigation }) {
         return;
       }
 
-      setPayNowScanStatus('Checking for duplicates…');
+ setPayNowScanStatus(' Checking for duplicates…');
 
       // 3) The same GCash reference cannot be used on another order.
       const { data: duplicateRef } = await supabase
@@ -515,7 +514,7 @@ export default function OrdersScreen({ navigation }) {
         }
       }
 
-      setPayNowScanStatus('Uploading receipt…');
+ setPayNowScanStatus(' Uploading receipt…');
       const receiptUrl = await uploadPayNowReceipt(payNowReceiptUri);
       if (!receiptUrl) {
         setPayNowScanError('Failed to upload your receipt. Please try again.');
@@ -542,7 +541,7 @@ export default function OrdersScreen({ navigation }) {
       
       setPayNowModalVisible(false);
       Alert.alert(
-        'Payment Submitted!',
+ ' Payment Submitted!',
         'Your payment has been submitted and is now waiting for the vendor to verify it against their own GCash records. You will be notified once it is approved.',
         [
           { text: 'View Orders', onPress: () => refreshOrders() }
@@ -741,7 +740,7 @@ export default function OrdersScreen({ navigation }) {
         await supabase
           .from('conversations')
           .update({
-            last_message: `Customer cancelled order: ${finalMessage}`,
+ last_message: ` Customer cancelled order: ${finalMessage}`,
             last_message_time: new Date(),
             customer_unread_count: (conversation.customer_unread_count || 0) + 1,
           })
@@ -752,7 +751,7 @@ export default function OrdersScreen({ navigation }) {
           .insert({
             customer_id: user.id,
             stall_id: orderToCancel.stall_id,
-            last_message: `Customer cancelled order: ${finalMessage}`,
+ last_message: ` Customer cancelled order: ${finalMessage}`,
             last_message_time: new Date(),
             customer_unread_count: 1,
           })
@@ -762,7 +761,7 @@ export default function OrdersScreen({ navigation }) {
         conversationId = newConv.id;
       }
 
-      const messageText = `Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
+ const messageText = ` Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
       await supabase.from('messages').insert({
         conversation_id: conversationId,
         sender_id: user.id,
@@ -825,14 +824,14 @@ export default function OrdersScreen({ navigation }) {
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
-          message: `I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+ message: ` I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
           is_read: false,
         });
         
         await supabase
           .from('conversations')
           .update({
-            last_message: `Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+ last_message: ` Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
             last_message_time: new Date(),
             vendor_unread_count: 1,
           })
@@ -862,14 +861,14 @@ export default function OrdersScreen({ navigation }) {
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
-          message: `I do not accept the proposal. Please fulfill the original order or cancel.`,
+ message: ` I do not accept the proposal. Please fulfill the original order or cancel.`,
           is_read: false,
         });
         
         await supabase
           .from('conversations')
           .update({
-            last_message: `Customer rejected the proposal. Please fulfill original order.`,
+ last_message: ` Customer rejected the proposal. Please fulfill original order.`,
             last_message_time: new Date(),
             vendor_unread_count: 1,
           })
@@ -904,7 +903,16 @@ export default function OrdersScreen({ navigation }) {
   };
 
   const getStatusText = (status) => {
-    return t(`orders.status.${status}`, status);
+    const icons = {
+      pending: '⏳',
+      confirmed: 'checkmark-circle',
+      preparing: 'restaurant',
+      ready: 'notifications',
+      completed: 'cube-outline',
+      cancelled: 'close-circle',
+    };
+    const text = t(`orders.status.${status}`, status);
+    return `${icons[status] || ''} ${text}`;
   };
 
   const formatDate = (dateString) => {
@@ -934,7 +942,7 @@ export default function OrdersScreen({ navigation }) {
   const displayOrders = activeTab === 'active' ? activeOrders : completedOrders;
 
   // Render order card
-  const renderOrderCard = (order, index = 0) => {
+  const renderOrderCard = (order) => {
     const stall = order.stall || {
       stall_number: 'N/A',
       stall_name: 'Market Stall',
@@ -962,7 +970,7 @@ export default function OrdersScreen({ navigation }) {
     const proposalData = order.proposed_changes;
     
     return (
-      <FadeInUp key={order.id} delay={Math.min(index, 10) * 55} style={styles.orderCard}>
+      <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
           <View>
             <Text style={styles.orderNumber}>
@@ -979,7 +987,7 @@ export default function OrdersScreen({ navigation }) {
                 onPress={() => deleteOrderFromHistory(order.id)}
                 style={styles.cardDeleteIcon}
               >
-                <Text style={styles.cardDeleteIconText}>✕</Text>
+                
               </TouchableOpacity>
             )}
           </View>
@@ -1048,7 +1056,7 @@ export default function OrdersScreen({ navigation }) {
         {hasPendingProposal && proposalData && (
           <View style={styles.proposalContainer}>
             <View style={styles.proposalBanner}>
-              <Text style={styles.proposalTitle}>Vendor Proposed a Change</Text>
+              <Text style={styles.proposalTitle}> Vendor Proposed a Change</Text>
               <Text style={styles.proposalText}>
                 {proposalData.item_name}:
               </Text>
@@ -1068,7 +1076,7 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.rejectProposalBtn}
                 onPress={() => handleRejectProposal(order, proposalData)}
               >
-                <Text style={styles.rejectProposalBtnText}>Reject</Text>
+                <Text style={styles.rejectProposalBtnText}> Reject</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -1079,7 +1087,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#10B981', '#059669']}
                   style={styles.acceptProposalGradient}
                 >
-                  <Text style={styles.acceptProposalBtnText}>Accept</Text>
+                  <Text style={styles.acceptProposalBtnText}> Accept</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1088,7 +1096,7 @@ export default function OrdersScreen({ navigation }) {
 
         <View style={styles.stallInfo}>
           <Text style={styles.stallName}>
-            {stall.stall_name || 'Market Stall'} {stall.stall_number !== 'N/A' ? `(#${stall.stall_number})` : ''}
+ {stall.stall_name || 'Market Stall'} {stall.stall_number !== 'N/A' ? `(#${stall.stall_number})` : ''}
           </Text>
           <Text style={styles.stallSection}>{stall.section || 'Unknown Section'}</Text>
         </View>
@@ -1105,13 +1113,13 @@ export default function OrdersScreen({ navigation }) {
         </View>
 
         <View style={styles.pickupContainer}>
-          <Text style={styles.pickupLabel}>Pickup Time:</Text>
+          <Text style={styles.pickupLabel}>⏰ Pickup Time:</Text>
           <Text style={styles.pickupTime}>{formatPickupTime(order.pickup_time)}</Text>
         </View>
 
         {order.special_instructions && (
           <View style={styles.instructionsContainer}>
-            <Text style={styles.instructionsLabel}>Instructions:</Text>
+            <Text style={styles.instructionsLabel}> Instructions:</Text>
             <Text style={styles.instructionsText}>{order.special_instructions}</Text>
           </View>
         )}
@@ -1121,7 +1129,7 @@ export default function OrdersScreen({ navigation }) {
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
-        {/* ✅ CANCEL ORDER BUTTON - Shows for ALL pending orders */}
+        {/*  CANCEL ORDER BUTTON - Shows for ALL pending orders */}
         {isPending && (
           <TouchableOpacity
             style={styles.cancelOrderButton}
@@ -1149,7 +1157,7 @@ export default function OrdersScreen({ navigation }) {
                 colors={['#10B981', '#059669']}
                 style={styles.actionButtonGradient}
               >
-                <Text style={styles.actionButtonText}>Order Again</Text>
+                <Text style={styles.actionButtonText}> Order Again</Text>
               </LinearGradient>
             </TouchableOpacity>
             
@@ -1161,7 +1169,7 @@ export default function OrdersScreen({ navigation }) {
                 colors={['#F59E0B', '#D97706']}
                 style={styles.actionButtonGradient}
               >
-                <Text style={styles.actionButtonText}>Rate Vendor</Text>
+                <Text style={styles.actionButtonText}> Rate Vendor</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -1178,7 +1186,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#4CAF50', '#45A049']}
                   style={styles.mapGradient}
                 >
-                  <Text style={styles.mapButtonText}>View Map</Text>
+                  <Text style={styles.mapButtonText}> View Map</Text>
                 </LinearGradient>
               </TouchableOpacity>
               
@@ -1190,7 +1198,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#FF6B6B', '#FF8E8E']}
                   style={styles.mapGradient}
                 >
-                  <Text style={styles.mapButtonText}>Get Directions</Text>
+                  <Text style={styles.mapButtonText}> Get Directions</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1223,12 +1231,12 @@ export default function OrdersScreen({ navigation }) {
               style={styles.pickupGradient}
             >
               <Text style={styles.pickupButtonText}>
-                {order.status === 'ready' ? t('orders.ready_for_pickup') : t('orders.pickup_pass')}
+ {order.status === 'ready' ? ` ${t('orders.ready_for_pickup')}` : ` ${t('orders.pickup_pass')}`}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
-      </FadeInUp>
+      </View>
     );
   };
 
@@ -1242,11 +1250,9 @@ export default function OrdersScreen({ navigation }) {
           onPress={() => setSelectedRating(i)}
           style={styles.starButton}
         >
-          <Ionicons
-            name={selectedRating >= i ? 'star' : 'star-outline'}
-            size={30}
-            color={selectedRating >= i ? '#F59E0B' : COLORS.text.lighter}
-          />
+          <Text style={[styles.starIcon, selectedRating >= i && styles.starIconSelected]}>
+ {selectedRating >= i ? '' : ''}
+          </Text>
         </TouchableOpacity>
       );
     }
@@ -1256,7 +1262,7 @@ export default function OrdersScreen({ navigation }) {
   if (isGuest) {
     return (
       <View style={styles.guestContainer}>
-        <Ionicons name="receipt-outline" size={56} color={COLORS.text.lighter} />
+        <Ionicons name="clipboard-outline" size={18} />
         <Text style={styles.guestTitle}>Sign in to view orders</Text>
         <Text style={styles.guestText}>
           Create an account to track your orders and order history
@@ -1288,7 +1294,7 @@ export default function OrdersScreen({ navigation }) {
     <View style={styles.container}>
       {newOrderAlert && activeTab === 'active' && (
         <View style={styles.newOrderAlert}>
-          <Text style={styles.newOrderAlertText}>New order placed! Check your order status below.</Text>
+          <Text style={styles.newOrderAlertText}> New order placed! Check your order status below.</Text>
         </View>
       )}
 
@@ -1343,7 +1349,7 @@ export default function OrdersScreen({ navigation }) {
             }}
           />
         ) : (
-          displayOrders.map((order, index) => renderOrderCard(order, index))
+          displayOrders.map(renderOrderCard)
         )}
       </ScrollView>
 
@@ -1366,7 +1372,7 @@ export default function OrdersScreen({ navigation }) {
               style={styles.modalCloseButton}
               onPress={() => setMapModalVisible(false)}
             >
-              <Text style={styles.modalCloseText}>✕ Close</Text>
+              <Text style={styles.modalCloseText}> Close</Text>
             </TouchableOpacity>
           </View>
           
@@ -1394,7 +1400,7 @@ export default function OrdersScreen({ navigation }) {
                 colors={['#FF6B6B', '#FF8E8E']}
                 style={styles.modalDirectionsGradient}
               >
-                <Text style={styles.modalDirectionsText}>Get Directions</Text>
+                <Text style={styles.modalDirectionsText}> Get Directions</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>

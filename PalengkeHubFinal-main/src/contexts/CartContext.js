@@ -9,12 +9,12 @@ export const CartProvider = ({ children }) => {
 
   // Debug: Log cart changes
   useEffect(() => {
-    console.log('🛒 GLOBAL CART UPDATED:', cart);
-    console.log('🛒 Cart items count:', cart.length);
+    console.log(' GLOBAL CART UPDATED:', cart);
+    console.log(' Cart items count:', cart.length);
   }, [cart]);
 
   const addToCart = (product) => {
-    console.log('➕ GLOBAL addToCart called with:', product?.name);
+    console.log(' GLOBAL addToCart called with:', product?.name);
     
     setCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === product.id);

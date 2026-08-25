@@ -1,6 +1,5 @@
 // src/services/chatService.js
 import { supabase } from '../../lib/supabase';
-import { uploadImageToStorage } from '../utils/imageUpload';
 
 const normalizeRoleForDb = (role) => {
   if (role === 'admin') return 'customer';
@@ -138,16 +137,31 @@ export const chatService = {
 
   async uploadChatImage(uri, file) {
     try {
-      console.log('📸 Uploading image to Supabase Storage:', uri);
-      const { url } = await uploadImageToStorage({
-        uri,
-        folder: 'chat',
-        mimeType: null,
-        fileAsset: file,
+      console.log(' Uploading image to uguu.se:', uri);
+      
+      // Determine file extension from URI
+      const extMatch = uri.match(/\.(\w+)(\?|$)/);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+      const fileName = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      
+      // Upload to uguu.se (free permanent image host — no API key needed)
+      const formData = new FormData();
+      // On web, `file` is a File object; on native, use the uri object
+      formData.append('files[]', file || { uri, name: fileName, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
+      
+      const response = await fetch('https://uguu.se/upload', {
+        method: 'POST',
+        body: formData,
       });
-      if (!url) throw new Error('No public URL returned from upload');
-      console.log('📸 Image uploaded:', url);
-      return url;
+      
+      const result = await response.json();
+      if (!result.success || !result.files?.length) {
+        throw new Error('Image host rejected the upload');
+      }
+      
+      const imageUrl = result.files[0].url;
+      console.log(' Image uploaded:', imageUrl);
+      return imageUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       return null;
@@ -156,7 +170,7 @@ export const chatService = {
 
   async sendImageMessage(conversationId, senderId, senderRole, imageUrl) {
     const dbSenderRole = normalizeRoleForDb(senderRole);
-    console.log('📸 Saving image message with URL:', imageUrl, {
+    console.log(' Saving image message with URL:', imageUrl, {
       senderRole,
       dbSenderRole,
     });
@@ -167,7 +181,7 @@ export const chatService = {
         conversation_id: conversationId,
         sender_id: senderId,
         sender_role: dbSenderRole,
-        message: '📷 Sent an image',
+        message: 'Sent an image',
         image_url: imageUrl,
         is_image: true,
       })
@@ -182,12 +196,12 @@ export const chatService = {
     await supabase
       .from('conversations')
       .update({
-        last_message: '📷 Sent an image',
+        last_message: 'Sent an image',
         last_message_time: new Date().toISOString(),
       })
       .eq('id', conversationId);
 
-    console.log('📸 Image message saved:', data);
+    console.log(' Image message saved:', data);
     return data;
   },
 

@@ -96,7 +96,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
   
-  // ✅ Per-vendor GCash payment states
+  //  Per-vendor GCash payment states
   const [gcashModalVisible, setGcashModalVisible] = useState(false);
   const [gcashPayments, setGcashPayments] = useState([]);
   const [currentVendorIndex, setCurrentVendorIndex] = useState(0);
@@ -106,7 +106,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   const [gcashScanStatus, setGcashScanStatus] = useState(null);
   const [gcashScanError, setGcashScanError] = useState(null);
   
-  // ✅ Each vendor has their own timer (stored in the payment object)
+  //  Each vendor has their own timer (stored in the payment object)
   const gcashTimerRef = useRef(null);
 
   // Clean up timer on unmount
@@ -118,7 +118,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     };
   }, []);
 
-  // ✅ Timer tick function - updates countdown for current vendor
+  //  Timer tick function - updates countdown for current vendor
   const startTimerForVendor = (index) => {
     if (gcashTimerRef.current) {
       clearInterval(gcashTimerRef.current);
@@ -141,7 +141,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     }, 1000);
   };
 
-  // ✅ Handle timeout for a specific vendor
+  //  Handle timeout for a specific vendor
   const handleVendorTimeout = async (index) => {
     const payment = gcashPayments[index];
     if (!payment || payment.isPaid) return;
@@ -164,7 +164,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       });
       
       Alert.alert(
-        '⏰ Payment Time Expired',
+        'Payment Time Expired',
         `Your 10-minute payment window for ${payment.stallName} has expired. This vendor's order has been cancelled.`,
         [{ text: 'OK' }]
       );
@@ -316,7 +316,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     }
   };
 
-  // ✅ Submit payment for current vendor — scans the receipt, cross-checks the
+  //  Submit payment for current vendor — scans the receipt, cross-checks the
   // reference number/amount/timestamp, checks for reuse, then submits the order
   // for VENDOR verification (it is NOT auto-marked as paid).
   const handleSubmitPayment = async (index) => {
@@ -452,7 +452,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         return;
       }
       
-      // ✅ Submit for vendor verification — NOT marked as paid.
+      //  Submit for vendor verification — NOT marked as paid.
       const { error } = await supabase
         .from('orders')
         .update({
@@ -467,7 +467,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       
       if (error) throw error;
       
-      // ✅ Mark this vendor's payment as submitted (awaiting vendor verification)
+      //  Mark this vendor's payment as submitted (awaiting vendor verification)
       setGcashPayments(prev => {
         const updated = [...prev];
         updated[index].isPaid = true;
@@ -477,7 +477,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         return updated;
       });
       
-      // ✅ Check if all vendors are submitted
+      //  Check if all vendors are submitted
       const allPaid = gcashPayments.every(p => p.isPaid || p.isExpired);
       
       if (allPaid) {
@@ -497,7 +497,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           );
         }, 1500);
       } else {
-        // ✅ Move to next unpaid vendor
+        //  Move to next unpaid vendor
         const nextIndex = gcashPayments.findIndex((p, idx) => idx > index && !p.isPaid && !p.isExpired);
         if (nextIndex !== -1) {
           setCurrentVendorIndex(nextIndex);
@@ -525,7 +525,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     }
   };
 
-  // ✅ Skip to next unpaid vendor
+  //  Skip to next unpaid vendor
   const skipToNextVendor = (currentIndex) => {
     const nextIndex = gcashPayments.findIndex((p, idx) => idx > currentIndex && !p.isPaid && !p.isExpired);
     if (nextIndex !== -1) {
@@ -609,7 +609,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     }
   };
 
-  // ✅ FULL GCASH PAYMENT FLOW - Place order then open GCash modal
+  //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
     if (cart.length === 0) {
       Alert.alert('Empty Cart', 'Add items to your cart first');
@@ -655,7 +655,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
         if (error) throw error;
 
-        // ✅ Each vendor gets their own payment object with individual timer
+        //  Each vendor gets their own payment object with individual timer
         payments.push({
           stallId: parseInt(stallId),
           stallName: data.stall.stall_name,
@@ -671,7 +671,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           isSubmitted: false,
           isProcessing: false,
           isExpired: false,
-          timeRemaining: 600, // ✅ 10 minutes per vendor
+ timeRemaining: 600, // 10 minutes per vendor
         });
       }
 
@@ -680,10 +680,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       setCurrentVendorIndex(0);
       setAllPaymentsCompleted(false);
 
-      // ✅ Open GCash modal with first vendor
+      //  Open GCash modal with first vendor
       setGcashModalVisible(true);
       
-      // ✅ Start timer for first vendor
+      //  Start timer for first vendor
       startTimerForVendor(0);
 
     } catch (error) {
@@ -700,7 +700,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   const gcashReady = !!(currentPayment && isValidGcashReference(currentPayment.referenceNumber) && currentPayment.receiptUri);
   const totalVendors = gcashPayments.length;
   
-  // ✅ Count remaining vendors to pay
+  //  Count remaining vendors to pay
   const remainingVendors = gcashPayments.filter(p => !p.isPaid && !p.isExpired).length;
 
   return (
@@ -915,7 +915,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                 )}
               </View>
 
-              {/* ✅ Individual Timer for Current Vendor */}
+              {/*  Individual Timer for Current Vendor */}
               {currentPayment && (
                 <View style={[
                   styles.gcashTimerSection, 
@@ -1106,7 +1106,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                   onPress={() => skipToNextVendor(currentVendorIndex)} 
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.gcashSkipText}>Skip to next vendor →</Text>
+                  <Text style={styles.gcashSkipText}>Skip to next vendor</Text>
                 </TouchableOpacity>
               )}
 
@@ -1140,6 +1140,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       </View>
                       <Text style={styles.gcashStatusItemAmount}>
                         ₱{p.total.toFixed(2)}
+                        {p.isPaid && ' Paid'}
+                        {p.isExpired && ' Expired'}
                       </Text>
                     </View>
                   ))}

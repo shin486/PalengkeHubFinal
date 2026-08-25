@@ -49,7 +49,7 @@ export default function PickupPassScreen({ route, navigation }) {
 
           <View style={styles.divider} />
 
-          <Text style={styles.stallLabel}>{t('orders.stall_number_label', 'Stall')}</Text>
+          <Text style={styles.stallLabel}> {t('orders.stall_number_label', 'Stall')}</Text>
           <Text style={styles.stallName}>{stallName}</Text>
           <Text style={styles.stallNumber}>#{stallNumber}</Text>
 
@@ -60,7 +60,7 @@ export default function PickupPassScreen({ route, navigation }) {
 
         {items.length > 0 && (
           <View style={styles.itemsCard}>
-            <Text style={styles.itemsTitle}>{t('cart.items') || 'Items'}</Text>
+            <Text style={styles.itemsTitle}> {t('cart.items') || 'Items'}</Text>
             {items.map((item, idx) => (
               <View key={idx} style={styles.itemRow}>
                 <Text style={styles.itemName} numberOfLines={1}>

@@ -44,7 +44,7 @@ export function ToastContainer() {
           <span className="toast-icon">
             {t.type === 'success' && '✓'}
             {t.type === 'error' && '✕'}
-            {t.type === 'warning' && '⚠'}
+ {t.type === 'warning' && ''}
             {t.type === 'info' && 'ℹ'}
           </span>
           <span className="toast-message">{t.message}</span>

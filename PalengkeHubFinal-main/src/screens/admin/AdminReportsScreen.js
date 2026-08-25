@@ -371,7 +371,7 @@ export default function AdminReportsScreen({ navigation }) {
 
       {report.admin_notes && (
         <View style={styles.adminNotePreview}>
-          <Text style={styles.adminNotePreviewLabel}>📝 Admin:</Text>
+          <Text style={styles.adminNotePreviewLabel}> Admin:</Text>
           <Text style={styles.adminNotePreviewText} numberOfLines={1}>
             {report.admin_notes}
           </Text>
@@ -437,7 +437,7 @@ export default function AdminReportsScreen({ navigation }) {
 
       {report.admin_notes && (
         <View style={styles.adminNotePreview}>
-          <Text style={styles.adminNotePreviewLabel}>📝 Admin:</Text>
+          <Text style={styles.adminNotePreviewLabel}> Admin:</Text>
           <Text style={styles.adminNotePreviewText} numberOfLines={1}>
             {report.admin_notes}
           </Text>
@@ -604,7 +604,7 @@ export default function AdminReportsScreen({ navigation }) {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Update Report</Text>
             <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Text style={styles.modalCloseText}>✕ Close</Text>
+              <Text style={styles.modalCloseText}> Close</Text>
             </TouchableOpacity>
           </View>
 

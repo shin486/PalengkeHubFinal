@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Image,
   Platform,
-  ScrollView, // ✅ ADD THIS
+ ScrollView, // ADD THIS
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,19 +23,19 @@ export const AdminSidebar = ({
   userName,
   userEmail,
 }) => {
-  // Complete menu items
+  // Complete menu items (Ionicons names)
   const menuItems = [
-    { id: 'overview', label: 'Overview', icon: 'bar-chart-outline', color: '#DC2626' },
-    { id: 'users', label: 'Users', icon: 'people-outline', color: '#3B82F6' },
-    { id: 'vendors', label: 'Vendors', icon: 'storefront-outline', color: '#10B981' },
-    { id: 'compliance', label: 'Compliance', icon: 'checkmark-circle-outline', color: '#8B5CF6' },
-    { id: 'applications', label: 'Applications', icon: 'clipboard-outline', color: '#F59E0B' },
-    { id: 'stalls', label: 'Stalls', icon: 'location-outline', color: '#EC4899' },
-    { id: 'orders', label: 'Orders', icon: 'cube-outline', color: '#14B8A6' },
-    { id: 'announcements', label: 'Announcements', icon: 'megaphone-outline', color: '#8B5CF6' },
-    { id: 'violations', label: 'Violations', icon: 'warning-outline', color: '#EF4444' },
-    { id: 'complaints', label: 'Complaints', icon: 'chatbubbles-outline', color: '#EC4899' },
-    { id: 'reports', label: 'Reports', icon: 'document-text-outline', color: '#6B7280' },
+    { id: 'overview', label: 'Overview', icon: 'stats-chart', color: '#DC2626' },
+    { id: 'users', label: 'Users', icon: 'people', color: '#3B82F6' },
+    { id: 'vendors', label: 'Vendors', icon: 'storefront', color: '#10B981' },
+    { id: 'compliance', label: 'Compliance', icon: 'shield-checkmark', color: '#8B5CF6' },
+    { id: 'applications', label: 'Applications', icon: 'clipboard', color: '#F59E0B' },
+    { id: 'stalls', label: 'Stalls', icon: 'location', color: '#EC4899' },
+    { id: 'orders', label: 'Orders', icon: 'cube', color: '#14B8A6' },
+    { id: 'announcements', label: 'Announcements', icon: 'megaphone', color: '#8B5CF6' },
+    { id: 'violations', label: 'Violations', icon: 'warning', color: '#EF4444' },
+    { id: 'complaints', label: 'Complaints', icon: 'chatbubble', color: '#EC4899' },
+    { id: 'reports', label: 'Reports', icon: 'document-text', color: '#6B7280' },
   ];
 
   return (
@@ -61,11 +61,11 @@ export const AdminSidebar = ({
       {/* Collapse Toggle (Web only) */}
       {isWeb && (
         <TouchableOpacity style={styles.collapseButton} onPress={() => setCollapsed(!collapsed)}>
-          <Text style={styles.collapseIcon}>{collapsed ? '→' : '←'}</Text>
+          <Ionicons name={collapsed ? 'chevron-forward' : 'chevron-back'} size={14} color="white" />
         </TouchableOpacity>
       )}
 
-      {/* ✅ FIXED: Scrollable Navigation Menu */}
+      {/*  FIXED: Scrollable Navigation Menu */}
       <ScrollView 
         style={styles.navScrollView}
         contentContainerStyle={styles.navScrollContent}
@@ -80,7 +80,7 @@ export const AdminSidebar = ({
             ]}
             onPress={() => setActiveSection(item.id)}
           >
-            <Ionicons name={item.icon} size={20} color={activeSection === item.id ? '#FFFFFF' : item.color} />
+            <Ionicons name={item.icon} size={18} color={activeSection === item.id ? item.color : '#6B7280'} style={styles.navIcon} />
             {!collapsed && (
               <View style={styles.navTextContainer}>
                 <Text style={[styles.navLabel, activeSection === item.id && styles.navLabelActive]}>
@@ -98,7 +98,7 @@ export const AdminSidebar = ({
       {/* User Info & Logout - Fixed at bottom */}
       <View style={styles.userSection}>
         <View style={styles.userAvatar}>
-          <Ionicons name="person" size={20} color="#FFFFFF" />
+          <Ionicons name="person" size={16} color="#DC2626" />
         </View>
         {!collapsed && (
           <View style={styles.userInfo}>
@@ -107,7 +107,7 @@ export const AdminSidebar = ({
           </View>
         )}
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="log-out" size={16} color="#DC2626" />
           {!collapsed && <Text style={styles.logoutText}>Logout</Text>}
         </TouchableOpacity>
       </View>
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    // ✅ Make sidebar a flex container
+    //  Make sidebar a flex container
     display: 'flex',
     flexDirection: 'column',
   },
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
-    // ✅ Keep logo at top
+    //  Keep logo at top
     flexShrink: 0,
   },
   logo: {
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-  // ✅ NEW: ScrollView styles
+  //  NEW: ScrollView styles
   navScrollView: {
     flex: 1,
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     marginLeft: 8,
   },
-  // ✅ User section - fixed at bottom
+  //  User section - fixed at bottom
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#E5E7EB',
     gap: 8,
     backgroundColor: 'white',
-    flexShrink: 0, // ✅ Prevents user section from shrinking
+ flexShrink: 0, // Prevents user section from shrinking
   },
   userAvatar: {
     width: 36,

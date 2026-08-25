@@ -15,7 +15,7 @@ export const ProductCard = ({ product, onPress, onAddToCart, priceTrend }) => {
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress(product)}>
       <View style={styles.imagePlaceholder}>
-        <Text style={styles.emoji}>🛒</Text>
+        <Ionicons name="cart-outline" size={32} color="#C4C4C4" />
       </View>
       <View style={styles.nameRow}>
         <Text style={styles.name} numberOfLines={2}>{product.name}</Text>

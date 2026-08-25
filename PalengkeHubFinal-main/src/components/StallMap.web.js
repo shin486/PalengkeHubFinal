@@ -19,10 +19,11 @@ export default function StallMap({
     Linking.openURL(url);
   };
 
-  // ✅ If no valid coordinates, show placeholder
+  //  If no valid coordinates, show placeholder
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
+        <Ionicons name="location-outline" size={28} color="#9CA3AF" />
         <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>
@@ -37,7 +38,7 @@ export default function StallMap({
       activeOpacity={0.7}
     >
       <View style={styles.mapPlaceholder}>
-        <Ionicons name="map-outline" size={48} color="#D1D5DB" />
+        <Ionicons name="map-outline" size={40} color="#DC2626" />
         <Text style={styles.mapTitle}>{stallName || 'Stall Location'}</Text>
         <Text style={styles.mapSubtitle}>
           {stallNumber ? `Stall #${stallNumber}` : ''} {section ? `- ${section}` : ''}

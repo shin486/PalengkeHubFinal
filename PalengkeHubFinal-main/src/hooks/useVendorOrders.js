@@ -14,7 +14,7 @@ export const useVendorOrders = (stallId) => {
 
     try {
       setLoading(true);
-      console.log('📦 Fetching orders for stall:', stallId);
+      console.log(' Fetching orders for stall:', stallId);
       
       const { data, error } = await supabase
         .from('orders')
@@ -30,7 +30,7 @@ export const useVendorOrders = (stallId) => {
 
       if (error) throw error;
       
-      console.log('✅ Orders fetched:', data?.length || 0);
+      console.log(' Orders fetched:', data?.length || 0);
       setOrders(data || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -41,7 +41,7 @@ export const useVendorOrders = (stallId) => {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      console.log('📝 Updating order:', orderId, 'to:', newStatus);
+      console.log(' Updating order:', orderId, 'to:', newStatus);
       
       const { error } = await supabase
         .from('orders')
@@ -53,7 +53,7 @@ export const useVendorOrders = (stallId) => {
 
       if (error) throw error;
       
-      console.log('✅ Order status updated');
+      console.log(' Order status updated');
       await fetchOrders(); // Refresh orders
       return true;
     } catch (error) {
@@ -72,14 +72,14 @@ export const useVendorOrders = (stallId) => {
     active: orders.filter(o => ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status)),
   };
 
-  // 🔥 REAL-TIME SUBSCRIPTION
+  //  REAL-TIME SUBSCRIPTION
   useEffect(() => {
     // Initial fetch
     fetchOrders();
 
     if (!stallId) return;
 
-    console.log('🔌 Setting up real-time subscription for stall:', stallId);
+    console.log(' Setting up real-time subscription for stall:', stallId);
 
     // Subscribe to new orders and status changes
     const subscription = supabase
@@ -93,7 +93,7 @@ export const useVendorOrders = (stallId) => {
           filter: `stall_id=eq.${stallId}`,
         },
         (payload) => {
-          console.log('🆕 New order received in real-time!', payload.new);
+          console.log(' New order received in real-time!', payload.new);
           // Refresh orders when new order arrives
           fetchOrders();
         }
@@ -107,18 +107,18 @@ export const useVendorOrders = (stallId) => {
           filter: `stall_id=eq.${stallId}`,
         },
         (payload) => {
-          console.log('🔄 Order status updated in real-time!', payload.new);
+          console.log(' Order status updated in real-time!', payload.new);
           // Refresh orders when status changes
           fetchOrders();
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
+        console.log(' Subscription status:', status);
       });
 
     // Cleanup on unmount
     return () => {
-      console.log('🔌 Cleaning up subscription for stall:', stallId);
+      console.log(' Cleaning up subscription for stall:', stallId);
       subscription.unsubscribe();
     };
   }, [fetchOrders, stallId]);

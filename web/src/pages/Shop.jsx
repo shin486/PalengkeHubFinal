@@ -32,14 +32,14 @@ export default function Shop() {
             <p className="text-center" style={{ color: 'var(--gray)' }}>Loading stalls...</p>
           ) : stalls.length === 0 ? (
             <div className="text-center">
-              <p style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🏪</p>
+ <p style={{ fontSize: '1.2rem', marginBottom: '8px'}}></p>
               <p style={{ color: 'var(--gray)' }}>No stalls available yet. Check back soon!</p>
             </div>
           ) : (
             <div className="card-grid">
               {stalls.map(stall => (
                 <div className="card" key={stall.id}>
-                  <div className="card-icon">🏪</div>
+ <div className="card-icon"></div>
                   <h3>{stall.stall_name || `Stall #${stall.stall_number}`}</h3>
                   <p><strong>Section:</strong> {stall.section || 'General'}</p>
                   <p style={{ marginTop: '8px', color: 'var(--gray)', fontSize: '0.9rem' }}>
@@ -52,7 +52,7 @@ export default function Shop() {
                       color: stall.is_active ? '#065F46' : '#991B1B',
                       fontSize: '0.8rem', fontWeight: 600
                     }}>
-                      {stall.is_active ? '🟢 Active' : '🔴 Inactive'}
+ {stall.is_active ? ' Active' : ' Inactive'}
                     </span>
                   </div>
                 </div>

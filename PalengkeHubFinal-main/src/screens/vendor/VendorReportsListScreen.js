@@ -85,11 +85,11 @@ export default function VendorReportsListScreen({ navigation }) {
 
   const getReportIcon = (type) => {
     switch (type) {
-      case 'customer_behavior': return 'person-outline';
-      case 'order_issue': return 'clipboard-outline';
-      case 'payment_issue': return 'cash-outline';
-      case 'fraud': return 'warning-outline';
-      default: return 'document-text-outline';
+      case 'customer_behavior': return 'person';
+      case 'order_issue': return 'clipboard';
+      case 'payment_issue': return 'cash';
+      case 'fraud': return 'warning';
+      default: return 'create';
     }
   };
 
@@ -171,7 +171,7 @@ export default function VendorReportsListScreen({ navigation }) {
             end={{ x: 1, y: 0 }}
             style={styles.newButtonGradient}
           >
-            <Ionicons name="flag-outline" size={16} color="#FFFFFF" />
+            <Ionicons name="flag" size={16} color="#FFFFFF" style={styles.newButtonIcon} />
             <Text style={styles.newButtonText}>Report New Issue</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -182,7 +182,7 @@ export default function VendorReportsListScreen({ navigation }) {
           
           {reports.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="mail-open-outline" size={40} color="#D1D5DB" />
+              <Ionicons name="mail-open-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyTitle}>No Reports Yet</Text>
               <Text style={styles.emptyText}>
                 You haven't submitted any customer reports. Tap the button above to report an issue.
@@ -193,7 +193,7 @@ export default function VendorReportsListScreen({ navigation }) {
               <View key={report.id} style={styles.reportCard}>
                 <View style={styles.reportHeader}>
                   <View style={styles.reportTypeContainer}>
-                    <Ionicons name={getReportIcon(report.report_type)} size={14} color="#DC2626" />
+                    <Text style={styles.reportIcon}>{getReportIcon(report.report_type)}</Text>
                     <Text style={styles.reportType}>
                       {getReportLabel(report.report_type)}
                     </Text>
@@ -240,7 +240,7 @@ export default function VendorReportsListScreen({ navigation }) {
 
         {/* Info Section */}
         <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>ℹ️ About Customer Reports</Text>
+          <Text style={styles.infoTitle}>About Customer Reports</Text>
           <Text style={styles.infoText}>
             • Reports are confidential and only visible to admin{'\n'}
             • Our team reviews each report within 24-48 hours{'\n'}

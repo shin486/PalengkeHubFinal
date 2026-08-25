@@ -38,7 +38,7 @@ export const useOrders = () => {
 
       if (error) throw error;
       
-      // ✅ Add fallback stall data if missing
+      //  Add fallback stall data if missing
       const ordersWithStall = (data || []).map(order => ({
         ...order,
         stall: order.stall || {
@@ -57,13 +57,13 @@ export const useOrders = () => {
     }
   }, [user]);
 
-  // 🔥 REAL-TIME SUBSCRIPTION
+  //  REAL-TIME SUBSCRIPTION
   useEffect(() => {
     fetchOrders();
 
     if (!user?.id) return;
 
-    console.log('🔌 Setting up real-time subscription for customer orders:', user.id);
+    console.log(' Setting up real-time subscription for customer orders:', user.id);
 
     const subscription = supabase
       .channel(`customer-orders-${user.id}`)
@@ -76,7 +76,7 @@ export const useOrders = () => {
           filter: `consumer_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('🆕 New order placed!', payload.new);
+          console.log(' New order placed!', payload.new);
           setNewOrderAlert(true);
           fetchOrders();
           setTimeout(() => setNewOrderAlert(false), 3000);
@@ -91,7 +91,7 @@ export const useOrders = () => {
           filter: `consumer_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('🔄 Order status updated!', payload.new);
+          console.log(' Order status updated!', payload.new);
           fetchOrders();
         }
       )

@@ -19,7 +19,6 @@ import { EmptyState } from '../../components/EmptyState';
 import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import CheckoutContent from '../../components/CheckoutContent';
-import { FadeInUp } from '../../utils/animations';
 
 const TABS = {
   CART: 'cart',
@@ -178,7 +177,7 @@ export default function CartScreen({ navigation }) {
         {hasClosedStall && (
           <View style={styles.closedWarningBanner}>
             <View style={styles.closedWarningIconWrap}>
-              <Ionicons name="warning" size={20} color="#EF4444" />
+              <Ionicons name="warning-outline" size={18} />
             </View>
             <View style={styles.closedWarningContent}>
               <Text style={styles.closedWarningTitle}>Some stalls are closed</Text>
@@ -189,12 +188,12 @@ export default function CartScreen({ navigation }) {
           </View>
         )}
 
-        {Object.entries(groupedCart).map(([stallId, data], idx) => (
-          <FadeInUp key={stallId} delay={Math.min(idx, 6) * 70} style={[styles.stallSection, data.isClosed && styles.closedStallSection]}>
+        {Object.entries(groupedCart).map(([stallId, data]) => (
+          <View key={stallId} style={[styles.stallSection, data.isClosed && styles.closedStallSection]}>
             <View style={styles.stallHeader}>
               <View style={styles.stallHeaderLeft}>
                 <View style={styles.stallIconWrap}>
-                  <Ionicons name="storefront-outline" size={22} color={COLORS.primary} />
+                  <Ionicons name="storefront-outline" size={18} />
                 </View>
                 <View style={styles.stallHeaderText}>
                   <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
@@ -260,7 +259,7 @@ export default function CartScreen({ navigation }) {
                 </View>
               </View>
             ))}
-          </FadeInUp>
+          </View>
         ))}
       </>
     );
@@ -351,7 +350,7 @@ export default function CartScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.checkoutGradient}>
-                <Text style={styles.checkoutButtonText}>{t('cart.proceed_checkout')}</Text>
+                <Text style={styles.checkoutButtonText}>{t('cart.proceed_checkout')} →</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}

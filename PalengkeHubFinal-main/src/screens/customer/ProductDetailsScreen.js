@@ -49,7 +49,7 @@ const UNIT_CONFIG = {
   'kg':    { label: 'Per Kilo (kg)',  icon: 'scale-outline', suffix: 'kg',    multiplier: 1.00 },
   '500g':  { label: 'Per 500g',       icon: 'cube-outline', suffix: '500g',  multiplier: 0.50 },
   '250g':  { label: 'Per 250g',       icon: 'cube-outline', suffix: '250g',  multiplier: 0.25 },
-  'piece': { label: 'Per Piece',      icon: 'apps-outline', suffix: 'pc',    multiplier: 0.25 },
+  'piece': { label: 'Per Piece',      icon: 'keypad-outline', suffix: 'pc',    multiplier: 0.25 },
   'bundle':{ label: 'Per Bundle',     icon: 'leaf-outline', suffix: 'bundle',multiplier: 0.35 },
   'dozen': { label: 'Per Dozen (12pcs)', icon: 'egg-outline', suffix: 'dozen', multiplier: 2.40 },
   'pack':  { label: 'Per Pack',       icon: 'cube-outline', suffix: 'pack',  multiplier: 0.80 },
@@ -65,7 +65,7 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   }
 };
 
-// ✅ Generate consistent random rating based on stall ID
+//  Generate consistent random rating based on stall ID
 const getStallRating = (stallId, realRating) => {
   if (realRating && realRating > 0) return realRating;
   
@@ -75,7 +75,7 @@ const getStallRating = (stallId, realRating) => {
   return Math.round(rating * 10) / 10;
 };
 
-// ✅ Generate random review count
+//  Generate random review count
 const getRandomRatingCount = (stallId) => {
   const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
@@ -91,13 +91,13 @@ const StarRating = ({ rating, size = 12 }) => {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {[...Array(fullStars)].map((_, i) => (
-        <Text key={`full-${i}`} style={{ fontSize: size, color: '#F59E0B' }}>★</Text>
+        
       ))}
       {hasHalfStar && (
         <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        <Text key={`empty-${i}`} style={{ fontSize: size, color: '#D1D5DB' }}>★</Text>
+        
       ))}
     </View>
   );
@@ -500,7 +500,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     });
   };
 
-  // ✅ Fetch market data: all vendors selling the same product + price history
+  //  Fetch market data: all vendors selling the same product + price history
   const fetchMarketData = async (productData) => {
     if (!productData) return;
     setMarketLoading(true);
@@ -569,7 +569,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     return history;
   };
 
-  // ✅ Compute market analytics from marketProducts
+  //  Compute market analytics from marketProducts
   const computeMarketAnalytics = () => {
     if (!marketProducts || marketProducts.length === 0) return null;
 
@@ -620,7 +620,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const marketAnalytics = computeMarketAnalytics();
 
-  // ✅ Get display rating (randomized if no real rating)
+  //  Get display rating (randomized if no real rating)
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
 
@@ -668,7 +668,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           />
         ) : (
           <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cart-outline" size={48} color="#D1D5DB" />
+            <Ionicons name="cart-outline" size={18} />
           </View>
         )}
       </View>
@@ -690,10 +690,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
               style={styles.favBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="share-outline" size={22} color={COLORS.text.light} />
+              <Text style={styles.favIcon}>↗</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
-              <Ionicons name={isProductFavorite(product.id) ? 'heart' : 'heart-outline'} size={22} color={isProductFavorite(product.id) ? '#EF4444' : COLORS.text.light} />
+              <Text style={styles.favIcon}>{isProductFavorite(product.id) ? 'heart' : 'heart-outline'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -766,7 +766,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
                   ]}
                   onPress={() => handleUnitChange(unit)}
                 >
-                  <Ionicons name={UNIT_CONFIG[unit]?.icon || 'cube-outline'} size={18} color={COLORS.primary} />
+                  <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || 'cube-outline'}</Text>
                   <Text style={[
                     styles.unitChipText,
                     selectedUnit === unit && styles.unitChipTextActive
@@ -829,7 +829,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         >
           <Text style={styles.sectionTitle}>Sold by</Text>
           <View style={styles.stallCard}>
-            {/* ✅ Stall Header with Random Rating */}
+            {/*  Stall Header with Random Rating */}
             <View style={styles.stallHeader}>
               <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
               <View style={styles.ratingContainer}>
@@ -1110,7 +1110,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           style={styles.reportProductButton}
           onPress={handleReportProduct}
         >
-          <Text style={styles.reportIcon}>🚫</Text>
+          <Ionicons name="ban-outline" size={18} />
           <Text style={styles.reportButtonText}>Report this Product</Text>
         </TouchableOpacity>
         <Text style={styles.reportNote}>

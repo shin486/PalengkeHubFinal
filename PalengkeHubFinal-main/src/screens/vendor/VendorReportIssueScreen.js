@@ -51,11 +51,11 @@ export default function VendorReportIssueScreen({ navigation, route }) {
   }, [route.params]);
 
   const reportTypes = [
-    { id: 'customer_behavior', label: 'Customer Behavior', icon: 'person-outline', color: '#EF4444' },
-    { id: 'order_issue', label: 'Order Issue', icon: 'clipboard-outline', color: '#F59E0B' },
-    { id: 'payment_issue', label: 'Payment Problem', icon: 'cash-outline', color: '#3B82F6' },
-    { id: 'fraud', label: 'Suspicious Activity', icon: 'warning-outline', color: '#8B5CF6' },
-    { id: 'other', label: 'Other', icon: 'document-text-outline', color: '#6B7280' },
+    { id: 'customer_behavior', label: 'Customer Behavior', icon: 'person', color: '#EF4444' },
+    { id: 'order_issue', label: 'Order Issue', icon: 'clipboard', color: '#F59E0B' },
+    { id: 'payment_issue', label: 'Payment Problem', icon: 'cash', color: '#3B82F6' },
+    { id: 'fraud', label: 'Suspicious Activity', icon: 'warning', color: '#8B5CF6' },
+    { id: 'other', label: 'Other', icon: 'create', color: '#6B7280' },
   ];
 
   // Fetch customers who have ordered from this vendor
@@ -207,7 +207,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
       if (error) throw error;
 
       Alert.alert(
-        '✅ Report Submitted',
+        'Report Submitted',
         'Thank you for your report. Our admin team will review it.',
         [
           {
@@ -257,7 +257,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
         <Text style={styles.customerEmail}>{item.email}</Text>
       </View>
       {selectedCustomer?.id === item.id && (
-        <Ionicons name="checkmark-circle" size={20} color="#DC2626" />
+        
       )}
     </TouchableOpacity>
   );
@@ -313,7 +313,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
                 setCustomerModalVisible(true);
               }}
             >
-              <Ionicons name="person-outline" size={20} color="#6B7280" />
+              <Ionicons name="person" size={20} color="#9CA3AF" style={styles.selectCustomerIcon} />
               <Text style={styles.selectCustomerText}>Select a customer to report</Text>
             </TouchableOpacity>
           )}
@@ -343,8 +343,8 @@ export default function VendorReportIssueScreen({ navigation, route }) {
                 ]}
                 onPress={() => setSelectedType(type.id)}
               >
-                <Ionicons name={type.icon} size={22} color={type.color} />
-                <Text style={styles.typeLabel}>{type.label}</Text>
+                <Ionicons name={type.icon} size={24} color={selectedType === type.id ? '#FFFFFF' : '#DC2626'} />
+                <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelActive]}>{type.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -387,7 +387,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
         {/* Info Note */}
         <View style={styles.infoNote}>
-          <Ionicons name="information-circle-outline" size={20} color="#3B82F6" />
+          <Ionicons name="information-circle-outline" size={16} color="#3B82F6" style={styles.infoIcon} />
           <Text style={styles.infoText}>
             False reports may result in account action. Please only report genuine issues.
           </Text>
@@ -414,7 +414,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color="#9CA3AF" />
+            <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search customers..."
@@ -430,7 +430,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
             </View>
           ) : customers.length === 0 ? (
             <View style={styles.modalEmpty}>
-              <Ionicons name="mail-open-outline" size={40} color="#D1D5DB" />
+              <Ionicons name="mail-open-outline" size={48} color="#9CA3AF" />
               <Text style={styles.modalEmptyTitle}>No customers found</Text>
               <Text style={styles.modalEmptyText}>
                 Customers who have ordered from you will appear here

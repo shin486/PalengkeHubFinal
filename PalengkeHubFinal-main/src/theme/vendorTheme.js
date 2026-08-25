@@ -46,7 +46,7 @@ export const vendorColors = {
   gcashLight: '#E8F4FF',
 };
 
-// ✅ Theme-aware vendor colors hook — uses ThemeContext colors with vendor-specific extras
+//  Theme-aware vendor colors hook — uses ThemeContext colors with vendor-specific extras
 export const useVendorColors = () => {
   const COLORS = useColors();
   const { isDark } = useTheme();
@@ -106,7 +106,7 @@ export const vendorBorderRadius = {
   full: 999,
 };
 
-// ✅ Theme-aware vendor typography
+//  Theme-aware vendor typography
 export const useVendorTypography = () => {
   const COLORS = useColors();
   return {
@@ -168,7 +168,7 @@ export const vendorGradients = {
   directions: ['#DC2626', '#EF4444'],
 };
 
-// ✅ Theme-aware status color helpers
+//  Theme-aware status color helpers
 const darkStatusMap = {
   pending: '#FBBF24',
   accepted: '#60A5FA',

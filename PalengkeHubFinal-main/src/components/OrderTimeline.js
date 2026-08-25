@@ -5,11 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 const STEP_ORDER = ['pending', 'confirmed', 'preparing', 'ready', 'completed'];
 
 const STEP_CONFIG = {
-  pending:  { label: 'Ordered',   icon: 'cart-outline',          color: '#3B82F6' },
+  pending:  { label: 'Ordered',   icon: 'cart-outline',          color: '#F59E0B' },
   confirmed:{ label: 'Confirmed', icon: 'checkmark-circle',      color: '#3B82F6' },
-  preparing:{ label: 'Preparing', icon: 'restaurant-outline',    color: '#3B82F6' },
-  ready:    { label: 'Ready',     icon: 'flag',                  color: '#3B82F6' },
-  completed:{ label: 'Complete',  icon: 'checkmark-done-circle', color: '#3B82F6' },
+  preparing:{ label: 'Preparing', icon: 'restaurant-outline',    color: '#8B5CF6' },
+  ready:    { label: 'Ready',     icon: 'flag',                  color: '#10B981' },
+  completed:{ label: 'Complete',  icon: 'checkmark-done-circle', color: '#22C55E' },
 };
 
 const CANCELLED_CONFIG = {
@@ -36,40 +36,33 @@ export const OrderTimeline = ({ status, colors = {} }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.track}>
-        {STEP_ORDER.map((step, idx) => {
-          const cfg = STEP_CONFIG[step];
-          const isPast    = idx < currentIdx;
-          const isCurrent = idx === currentIdx;
-          const isFuture  = idx > currentIdx;
-          const isLast    = idx === STEP_ORDER.length - 1;
+      {STEP_ORDER.map((step, idx) => {
+        const cfg = STEP_CONFIG[step];
+        const isPast   = idx < currentIdx;
+        const isCurrent= idx === currentIdx;
+        const isFuture = idx > currentIdx;
 
-          // Connector leading INTO this step is active once we've reached it
-          const leftActive  = idx <= currentIdx;
-          // Connector leaving this step is active once this step is completed
-          const rightActive = idx < currentIdx;
-
-          return (
-            <View key={step} style={styles.step}>
-              <View style={styles.dotRow}>
-                {idx > 0 && (
-                  <View style={[styles.connector, { backgroundColor: leftActive ? cfg.color : '#E5E7EB' }]} />
-                )}
-                <View style={[
-                  styles.dot,
-                  { backgroundColor: isPast || isCurrent ? cfg.color : '#E5E7EB' },
-                  isCurrent && styles.dotCurrent,
-                ]}>
-                  {isPast ? (
-                    <Ionicons name="checkmark" size={12} color="#fff" />
-                  ) : (
-                    <Ionicons name={cfg.icon} size={isCurrent ? 16 : 12} color={isCurrent ? '#fff' : '#9CA3AF'} />
-                  )}
-                </View>
-                {!isLast && (
-                  <View style={[styles.connector, { backgroundColor: rightActive ? STEP_CONFIG[STEP_ORDER[idx + 1]].color : '#E5E7EB' }]} />
+        return (
+          <View key={step} style={styles.stepRow}>
+            {/* Line + Dot */}
+            <View style={styles.lineSection}>
+              {idx > 0 && (
+                <View style={[styles.line, { backgroundColor: isPast || isCurrent ? cfg.color : '#E5E7EB' }]} />
+              )}
+              <View style={[
+                styles.dot,
+                { backgroundColor: isPast || isCurrent ? cfg.color : '#E5E7EB' },
+                isCurrent && styles.dotCurrent,
+              ]}>
+                {isPast ? (
+                  <Ionicons name="checkmark" size={12} color="#fff" />
+                ) : (
+                  <Ionicons name={cfg.icon} size={isCurrent ? 16 : 12} color={isCurrent ? '#fff' : '#9CA3AF'} />
                 )}
               </View>
+            </View>
+            {/* Label */}
+            <View style={styles.labelSection}>
               <Text style={[
                 styles.label,
                 { color: isPast || isCurrent ? cfg.color : '#9CA3AF' },
@@ -78,9 +71,9 @@ export const OrderTimeline = ({ status, colors = {} }) => {
                 {cfg.label}
               </Text>
             </View>
-          );
-        })}
-      </View>
+          </View>
+        );
+      })}
     </View>
   );
 };
@@ -90,22 +83,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
   },
-  track: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  step: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  dotRow: {
+  stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
+    minHeight: 36,
   },
-  connector: {
-    flex: 1,
-    height: 2,
+  lineSection: {
+    width: 36,
+    alignItems: 'center',
+  },
+  line: {
+    width: 2,
+    height: 14,
+    marginBottom: 2,
   },
   dot: {
     width: 24,
@@ -115,19 +105,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dotCurrent: {
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
+  labelSection: {
+    marginLeft: 12,
+    flex: 1,
+  },
   label: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 6,
-    textAlign: 'center',
   },
   futureLabel: {
     fontWeight: '400',

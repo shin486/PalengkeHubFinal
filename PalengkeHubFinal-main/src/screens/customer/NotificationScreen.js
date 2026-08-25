@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -16,7 +17,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { notificationService } from '../../services/notificationService';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function NotificationScreen({ navigation }) {
   const COLORS = useColors();
@@ -151,11 +151,11 @@ export default function NotificationScreen({ navigation }) {
       case 'order':
         return 'cube-outline';
       case 'price_drop':
-        return 'trending-down';
+        return 'cash-outline';
       case 'announcement':
         return 'megaphone-outline';
       case 'chat':
-        return 'chatbubbles-outline';
+        return 'chatbubble-outline';
       default:
         return 'notifications-outline';
     }
@@ -185,7 +185,7 @@ export default function NotificationScreen({ navigation }) {
         activeOpacity={0.7}
       >
         <View style={[styles.notificationIcon, isCancellation && styles.cancellationIcon]}>
-          <Ionicons name={getIconForType(item.type, item.title, item.message)} size={22} color={COLORS.primary} />
+          <Text style={styles.iconText}>{getIconForType(item.type, item.title, item.message)}</Text>
         </View>
         <View style={styles.notificationContent}>
           <Text style={[styles.notificationTitle, !item.is_read && styles.unreadText]}>
@@ -200,7 +200,7 @@ export default function NotificationScreen({ navigation }) {
           style={styles.deleteButton}
           onPress={() => handleDelete(item.id)}
         >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+          <Ionicons name="trash-outline" size={18} />
         </TouchableOpacity>
         {!item.is_read && <View style={styles.unreadDot} />}
       </TouchableOpacity>
@@ -236,7 +236,7 @@ export default function NotificationScreen({ navigation }) {
             colors={[COLORS.accentSoft, COLORS.surface]}
             style={styles.emptyCard}
           >
-            <Ionicons name="notifications-outline" size={48} color="#D1D5DB" />
+            <Ionicons name="notifications-outline" size={18} />
             <Text style={styles.emptyTitle}>No Notifications</Text>
             <Text style={styles.emptyText}>
               When you receive notifications, they will appear here

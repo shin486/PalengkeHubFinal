@@ -32,7 +32,7 @@ export const useCart = () => {
 
     try {
       setLoading(true);
-      console.log('🔍 Fetching cart for user:', user.id);
+      console.log(' Fetching cart for user:', user.id);
       
       // Get cart data - ensure we get only one row
       let { data, error } = await supabase
@@ -42,12 +42,12 @@ export const useCart = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Error fetching cart:', error);
+        console.error(' Error fetching cart:', error);
         updateSharedCart([]);
         return;
       }
 
-      console.log('📦 Found cart rows:', data?.length || 0);
+      console.log(' Found cart rows:', data?.length || 0);
       
       let cartData = null;
       if (data && data.length > 0) {
@@ -55,7 +55,7 @@ export const useCart = () => {
         
         // Delete any duplicate cart rows (keep only the most recent)
         if (data.length > 1) {
-          console.log('⚠️ Found duplicate carts, cleaning up...');
+          console.log(' Found duplicate carts, cleaning up...');
           const oldCartIds = data.slice(1).map(c => c.id);
           await supabase.from('carts').delete().in('id', oldCartIds);
         }
@@ -63,7 +63,7 @@ export const useCart = () => {
       
       // If no cart exists, create one with empty items
       if (!cartData) {
-        console.log('📝 No cart found, creating new empty cart');
+        console.log(' No cart found, creating new empty cart');
         const { data: newCart, error: insertError } = await supabase
           .from('carts')
           .insert({ 
@@ -76,7 +76,7 @@ export const useCart = () => {
           .single();
         
         if (insertError) {
-          console.error('❌ Error creating cart:', insertError);
+          console.error(' Error creating cart:', insertError);
         } else {
           cartData = newCart;
         }
@@ -92,10 +92,10 @@ export const useCart = () => {
         product_id: item.product_id || item.id
       }));
       
-      console.log('✅ Cart loaded:', formattedItems.length, 'items');
+      console.log(' Cart loaded:', formattedItems.length, 'items');
       updateSharedCart(formattedItems);
     } catch (error) {
-      console.error('❌ Error fetching cart:', error);
+      console.error(' Error fetching cart:', error);
       updateSharedCart([]);
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ export const useCart = () => {
   }, [user, isGuest]);
 
   const addToCart = useCallback(async (item, stallId, stallData, quantity = 1) => {
-    console.log('🛒 Adding to cart:', { itemName: item.name, quantity, stallId });
+    console.log(' Adding to cart:', { itemName: item.name, quantity, stallId });
     
     if (!user) return;
     
@@ -167,14 +167,14 @@ export const useCart = () => {
           });
       }
       
-      console.log('✅ Cart saved to database');
+      console.log(' Cart saved to database');
     } catch (dbError) {
-      console.error('❌ Database error:', dbError);
+      console.error(' Database error:', dbError);
     }
   }, [cart, user]);
 
   const updateQuantity = useCallback(async (productId, newQuantity) => {
-    console.log('🔄 Updating quantity:', { productId, newQuantity });
+    console.log(' Updating quantity:', { productId, newQuantity });
     
     if (!user) return;
     
@@ -202,7 +202,7 @@ export const useCart = () => {
   }, [cart, user]);
 
   const removeItem = useCallback(async (productId) => {
-    console.log('🗑️ Removing item:', productId);
+    console.log(' Removing item:', productId);
     
     if (!user) return;
     
@@ -216,7 +216,7 @@ export const useCart = () => {
   }, [cart, user]);
 
   const clearCart = useCallback(async () => {
-    console.log('🗑️ Clearing cart');
+    console.log(' Clearing cart');
     
     if (!user) return;
     
@@ -234,17 +234,17 @@ export const useCart = () => {
         .eq('user_id', user.id);
       
       if (error) {
-        console.error('❌ Error clearing cart in DB:', error);
+        console.error(' Error clearing cart in DB:', error);
       } else {
-        console.log('✅ Cart cleared successfully in database');
+        console.log(' Cart cleared successfully in database');
       }
     } catch (error) {
-      console.error('❌ Error clearing cart:', error);
+      console.error(' Error clearing cart:', error);
     }
   }, [user]);
 
   const refreshCart = useCallback(async () => {
-    console.log('🔄 Refreshing cart...');
+    console.log(' Refreshing cart...');
     await fetchCart();
   }, [fetchCart]);
 

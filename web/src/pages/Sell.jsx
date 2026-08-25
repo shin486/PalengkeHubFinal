@@ -15,7 +15,7 @@ export default function Sell() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.businessName || !form.category || !form.email) {
-      setStatus({ type: 'error', message: '⚠️ Please fill in all required fields.' });
+ setStatus({ type: 'error', message: ' Please fill in all required fields.'});
       return;
     }
     setLoading(true);
@@ -30,10 +30,10 @@ export default function Sell() {
         status: 'pending'
       }]);
       if (error) throw error;
-      setStatus({ type: 'success', message: '✅ Application submitted! We will review it and get back to you soon.' });
+ setStatus({ type: 'success', message: ' Application submitted! We will review it and get back to you soon.'});
       setForm({ businessName: '', category: '', description: '', email: '', phone: '' });
     } catch (err) {
-      setStatus({ type: 'error', message: '⚠️ Failed to submit application. Please try again.' });
+ setStatus({ type: 'error', message: ' Failed to submit application. Please try again.'});
     } finally {
       setLoading(false);
     }

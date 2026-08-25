@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -9,7 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -76,21 +77,21 @@ export default function CustomerReportsScreen({ navigation }) {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'pending': return 'Pending Review';
-      case 'reviewing': return 'Under Review';
-      case 'resolved': return 'Resolved';
-      case 'dismissed': return 'Dismissed';
+      case 'pending': return '⏳ Pending Review';
+ case 'reviewing': return ' Under Review';
+ case 'resolved': return ' Resolved';
+ case 'dismissed': return ' Dismissed';
       default: return status;
     }
   };
 
   const getReportTypeIcon = (type) => {
     switch (type) {
-      case 'product': return 'cube-outline';
+      case 'product': return 'ban-outline';
       case 'vendor': return 'storefront-outline';
-      case 'order': return 'receipt-outline';
+      case 'order': return 'clipboard-outline';
       case 'payment': return 'card-outline';
-      default: return 'document-text-outline';
+ default: return '';
     }
   };
 
@@ -160,7 +161,7 @@ export default function CustomerReportsScreen({ navigation }) {
           end={{ x: 1, y: 0 }}
           style={styles.newReportGradient}
         >
-          <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="flag" size={18} />
           <Text style={styles.newReportText}>Report New Issue</Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -171,7 +172,7 @@ export default function CustomerReportsScreen({ navigation }) {
         
         {reports.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="mail-open-outline" size={48} color="#D1D5DB" />
+            <Ionicons name="mail-open-outline" size={18} />
             <Text style={styles.emptyTitle}>No Reports Yet</Text>
             <Text style={styles.emptyText}>
               You haven't submitted any reports. If you encounter any issues, tap the button above to report them.
@@ -182,7 +183,9 @@ export default function CustomerReportsScreen({ navigation }) {
             <View key={report.id} style={styles.reportCard}>
               <View style={styles.reportHeader}>
                 <View style={styles.reportType}>
-                  <Ionicons name={getReportTypeIcon(report.report_type)} size={20} color={COLORS.primary} />
+                  <Text style={styles.reportTypeIcon}>
+                    {getReportTypeIcon(report.report_type)}
+                  </Text>
                   <Text style={styles.reportTypeText}>
                     {report.report_type.charAt(0).toUpperCase() + report.report_type.slice(1)} Issue
                   </Text>
@@ -214,7 +217,7 @@ export default function CustomerReportsScreen({ navigation }) {
                 <Text style={styles.reportDate}>Submitted {formatDate(report.created_at)}</Text>
                 {report.status === 'resolved' && (
                   <TouchableOpacity>
-                    <Text style={styles.feedbackLink}>Provide Feedback</Text>
+                    <Text style={styles.feedbackLink}> Provide Feedback</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -225,7 +228,7 @@ export default function CustomerReportsScreen({ navigation }) {
 
       {/* Info Section */}
       <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>How We Handle Reports</Text>
+        <Text style={styles.infoTitle}> How We Handle Reports</Text>
         <Text style={styles.infoText}>
           1. Your report is submitted to our admin team {'\n'}
           2. We review the issue within 24-48 hours {'\n'}

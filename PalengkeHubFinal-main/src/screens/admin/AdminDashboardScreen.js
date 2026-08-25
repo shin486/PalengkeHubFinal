@@ -1450,14 +1450,14 @@ export default function AdminDashboardScreen({ navigation }) {
   // DELETE RECENT ACTIVITY
   // ============================================================
   const deleteActivity = (id) => {
-    console.log('🗑️ Deleting activity with ID:', id);
-    console.log('📊 Current activity IDs:', recentActivity.map(a => a.id));
+    console.log(' Deleting activity with ID:', id);
+    console.log(' Current activity IDs:', recentActivity.map(a => a.id));
     
     const updatedActivity = recentActivity.filter((activity) => {
       return activity.id !== id;
     });
     
-    console.log('📊 Before:', recentActivity.length, 'After:', updatedActivity.length);
+    console.log(' Before:', recentActivity.length, 'After:', updatedActivity.length);
     
     setRecentActivity(updatedActivity);
     Alert.alert('Success', 'Activity removed successfully');
@@ -3738,7 +3738,7 @@ export default function AdminDashboardScreen({ navigation }) {
                             )}
                             {result.score >= 0.9 && result.score < 0.95 && (
                               <View style={styles.searchResultMatchBadge}>
-                                <Text style={styles.searchResultMatchText}>★ Top Match</Text>
+                                <Text style={styles.searchResultMatchText}> Top Match</Text>
                               </View>
                             )}
                             {index === 0 && result.score < 0.9 && (

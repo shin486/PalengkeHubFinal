@@ -46,6 +46,11 @@ export default function BottomNavigation({
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
+  
+  //  For hiding/showing the entire bottom nav
+  const translateY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const isHidden = useRef(false);
 
   // Initialize animated values for each tab
   useEffect(() => {
@@ -54,39 +59,49 @@ export default function BottomNavigation({
         animatedValues.current[index] = {
           scale: new Animated.Value(1),
           translateY: new Animated.Value(0),
-          opacity: new Animated.Value(0),
         };
       }
     });
   }, [state.routes]);
 
-  // ✅ Animate the active tab: pop the icon and fade in its indicator
+  //  Listen for scroll events from the active screen
   useEffect(() => {
-    state.routes.forEach((route, index) => {
-      const anim = animatedValues.current[index];
-      if (!anim) return;
-      const isFocused = state.index === index;
-      Animated.parallel([
-        Animated.spring(anim.translateY, {
-          toValue: isFocused ? -3 : 0,
-          useNativeDriver: true,
-          tension: 220,
-          friction: 12,
-        }),
-        Animated.timing(anim.opacity, {
-          toValue: isFocused ? 1 : 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      if (isFocused) {
-        Animated.sequence([
-          Animated.spring(anim.scale, { toValue: 1.12, useNativeDriver: true, tension: 300, friction: 8 }),
-          Animated.spring(anim.scale, { toValue: 1, useNativeDriver: true, tension: 300, friction: 8 }),
-        ]).start();
+    const unsubscribe = navigation.addListener('state', () => {
+      const currentRoute = state.routes[state.index];
+      const scrollY = currentRoute.params?.scrollY || 0;
+      
+      if (scrollY !== undefined && scrollY !== lastScrollY.current) {
+        const isScrollingDown = scrollY > lastScrollY.current;
+        const isAtTop = scrollY < 20;
+        const isScrollingPastThreshold = scrollY > 30;
+        
+        // Hide when scrolling down past threshold
+        if (isScrollingDown && isScrollingPastThreshold && !isHidden.current) {
+          isHidden.current = true;
+          Animated.spring(translateY, {
+            toValue: 120, // Slide down to hide
+            useNativeDriver: true,
+            tension: 200,
+            friction: 20,
+          }).start();
+        } 
+        // Show when at top or scrolling up to top
+        else if ((!isScrollingDown || isAtTop) && isHidden.current) {
+          isHidden.current = false;
+          Animated.spring(translateY, {
+            toValue: 0, // Slide back up to show
+            useNativeDriver: true,
+            tension: 200,
+            friction: 20,
+          }).start();
+        }
+
+        lastScrollY.current = scrollY;
       }
     });
-  }, [state.index, state.routes]);
+
+    return unsubscribe;
+  }, [navigation, state]);
 
   // Handle tab press with animation
   const handlePress = (route, index) => {
@@ -165,6 +180,7 @@ export default function BottomNavigation({
         styles.container,
         { 
           paddingBottom: insets.bottom || SPACING.sm,
+          transform: [{ translateY: translateY }],
         }
       ]}
     >
@@ -203,7 +219,7 @@ export default function BottomNavigation({
                 <View style={styles.iconWrapper}>
                   <Ionicons
                     name={config.icon}
-                    size={20}
+                    size={24}
                     color={isFocused ? COLORS.primary : COLORS.text.lighter}
                   />
                   {badgeCount > 0 && (
@@ -224,7 +240,7 @@ export default function BottomNavigation({
                   {config.label}
                 </Text>
                 {isFocused && (
-                  <Animated.View style={[styles.activeIndicator, { opacity: anim?.opacity || 0 }]} />
+                  <View style={styles.activeIndicator} />
                 )}
               </Animated.View>
             </TouchableOpacity>
@@ -253,9 +269,9 @@ const createStyles = (COLORS) => StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 3,
-    paddingBottom: 3,
-    height: 56,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    height: 68,
   },
   tabItem: {
     flex: 1,
@@ -272,16 +288,16 @@ const createStyles = (COLORS) => StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 22,
-    marginBottom: 1,
+    height: 28,
+    marginBottom: 2,
     overflow: 'visible',
   },
   tabLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '500',
     letterSpacing: 0.2,
     textAlign: 'center',
-    marginTop: 1,
+    marginTop: 2,
   },
   tabLabelActive: {
     color: COLORS.primary,

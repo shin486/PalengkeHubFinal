@@ -53,32 +53,32 @@ const CATEGORY_CONFIG = {
   'Vegetables': {
     icon: 'leaf',
     description: 'Fresh vegetables from Lipa City Public Market',
-    emoji: '🥬',
+    emoji: 'leaf',
   },
   'Meat': {
     icon: 'restaurant',
     description: 'Premium meat cuts from trusted vendors',
-    emoji: '🥩',
+    emoji: 'restaurant',
   },
   'Rice': {
     icon: 'cafe',
     description: 'Daily rice essentials from local suppliers',
-    emoji: '🍚',
+    emoji: 'restaurant-outline',
   },
   'Fruits': {
     icon: 'basket',
     description: 'Sweet and fresh fruits from the market',
-    emoji: '🍎',
+    emoji: 'nutrition',
   },
   'Poultry': {
     icon: 'egg',
     description: 'Farm fresh poultry products',
-    emoji: '🐔',
+    emoji: 'egg',
   },
   'Other': {
     icon: 'apps',
     description: 'More products from Lipa City Public Market',
-    emoji: '📦',
+    emoji: 'cube-outline',
   },
 };
 
@@ -176,7 +176,7 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPr
               />
             ) : (
               <View style={styles.productImagePlaceholder}>
-                <Image source={require('../../assets/palengkehublogo.jpg')} style={{ width: 44, height: 44, borderRadius: 8, opacity: 0.7 }} resizeMode="contain" />
+                <Ionicons name="image-outline" size={32} color="#D1D5DB" />
               </View>
             )}
             {hasPromotion && discountText && (
@@ -613,7 +613,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
         <View style={styles.headerContent}>
           <View style={styles.headerIconContainer}>
-            <Ionicons name={config.icon} size={28} color={COLORS.primary} />
+            <Text style={styles.headerEmoji}>{config.emoji}</Text>
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -690,7 +690,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
       ============================================================ */}
       {sortedProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name={config.icon} size={48} color="#D1D5DB" />
+          <Text style={styles.emptyEmoji}>{config.emoji}</Text>
           <Text style={styles.emptyTitle}>No {categoryName} Available</Text>
           <Text style={styles.emptyText}>
             Check other categories or visit again later.

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 // src/screens/customer/ChatListScreen.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -14,7 +15,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { chatService } from '../../services/chatService';
 import { Header } from '../../components/Header';
 import { useColors } from '../../contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
 
 export default function ChatListScreen({ navigation }) {
   const { user } = useAuth();
@@ -71,7 +71,7 @@ export default function ChatListScreen({ navigation }) {
       })}
     >
       <View style={styles.avatarContainer}>
-        <Ionicons name="storefront-outline" size={22} color="#DC2626" />
+        <Ionicons name="storefront-outline" size={18} />
       </View>
       <View style={styles.conversationInfo}>
         <Text style={styles.stallName}>
@@ -103,7 +103,7 @@ export default function ChatListScreen({ navigation }) {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={48} color="#D1D5DB" />
+            <Ionicons name="chatbubble-outline" size={18} />
             <Text style={styles.emptyTitle}>No messages yet</Text>
             <Text style={styles.emptyText}>
               Message a stall from their profile page

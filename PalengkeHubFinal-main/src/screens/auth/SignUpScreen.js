@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -18,7 +19,6 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
@@ -96,7 +96,7 @@ const OTPModal = ({
       <View style={styles.modalHeader}>
         <Text style={styles.modalTitle}>{title}</Text>
         <TouchableOpacity onPress={onClose}>
-          <Text style={styles.modalClose}>✕</Text>
+          
         </TouchableOpacity>
       </View>
       <View style={styles.modalContent}>
@@ -171,7 +171,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
   const [stallSection, setStallSection] = useState('');
   const [stallNumber, setStallNumber] = useState('');
   
-  // ✅ Terms and Conditions
+  //  Terms and Conditions
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   
@@ -309,7 +309,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
       const result = await login(loginIdentifier, password);
       if (result.success) {
         // RootNavigator will automatically redirect to the right dashboard
-        // based on profile.role (consumer → App, vendor → VendorDashboard).
+        // based on profile.role (consumer  App, vendor  VendorDashboard).
         if (role === 'vendor') {
           Alert.alert(
             'Application Submitted!',
@@ -411,7 +411,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
       const result = await login(loginIdentifier, password);
       if (result.success) {
         // RootNavigator will automatically redirect to the right dashboard
-        // based on profile.role (consumer → App, vendor → VendorDashboard).
+        // based on profile.role (consumer  App, vendor  VendorDashboard).
         // For vendors, their application is still pending review.
         if (role === 'vendor') {
           Alert.alert(
@@ -698,7 +698,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
   };
 
   const handleSignUp = async () => {
-    // ✅ Check Terms and Conditions
+    //  Check Terms and Conditions
     if (!termsAccepted) {
       shake();
       Alert.alert('Terms & Conditions', 'Please accept the Terms and Conditions to continue');
@@ -829,8 +829,8 @@ export const SignUpScreen = ({ setIsGuest }) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // 2) Authenticate based on the method the user chose:
-        //    - "sms"   → iProg SMS sends a 6-digit code → OTP modal appears
-        //    - "email" → Resend email sends a 6-digit code → OTP modal appears
+        //    - "sms"    iProg SMS sends a 6-digit code  OTP modal appears
+        //    - "email"  Resend email sends a 6-digit code  OTP modal appears
         //                (sent AFTER account creation, code returned by worker)
         if (verificationMethod === 'sms') {
           setSignUpSuccess(true);
@@ -891,7 +891,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
     setResendCooldown(0);
   };
 
-  // ✅ Terms and Conditions Modal
+  //  Terms and Conditions Modal
   const TermsModal = () => (
     <Modal
       visible={showTermsModal}
@@ -903,7 +903,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Terms and Conditions</Text>
           <TouchableOpacity onPress={() => setShowTermsModal(false)}>
-            <Text style={styles.modalClose}>✕</Text>
+            
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.modalContent}>
@@ -1029,7 +1029,11 @@ export const SignUpScreen = ({ setIsGuest }) => {
         style={[styles.uploadButton, file && styles.uploadButtonSuccess]}
         onPress={onUpload}
       >
-        <Text style={styles.uploadIcon}>{file ? '✅' : icon}</Text>
+        {file ? (
+          <Ionicons name="checkmark-circle" size={24} color="#10B981" style={styles.uploadIcon} />
+        ) : (
+          <Ionicons name={icon} size={24} color="#DC2626" style={styles.uploadIcon} />
+        )}
         <Text style={[styles.uploadText, file && styles.uploadTextSuccess]}>
           {file ? fileName : `Upload ${label}`}
         </Text>
@@ -1046,13 +1050,13 @@ export const SignUpScreen = ({ setIsGuest }) => {
     
     return (
       <View style={styles.vendorSection}>
-        <Text style={styles.vendorSectionTitle}>Stall Information</Text>
+        <Text style={styles.vendorSectionTitle}> Stall Information</Text>
         <Text style={styles.vendorSectionSubtitle}>Please provide your stall details for verification</Text>
         
         {/* Stall Name */}
         <View style={styles.inputGroup}>
           <View style={styles.inputWrapper}>
-            <Ionicons name="pricetag-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="pricetag-outline" size={18} />
             <TextInput
               style={styles.input}
               placeholder="Stall Name (e.g., Mang Juan's Meat Shop)"
@@ -1069,7 +1073,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             style={styles.inputWrapper}
             onPress={() => setShowSectionPicker(!showSectionPicker)}
           >
-            <Ionicons name="location-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="location-outline" size={18} />
             <Text style={[styles.input, stallSection ? styles.inputText : styles.placeholderText]}>
               {stallSection || 'Select Stall Section'}
             </Text>
@@ -1106,7 +1110,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         {/* Stall Number */}
         <View style={styles.inputGroup}>
           <View style={styles.inputWrapper}>
-            <Ionicons name="grid-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="keypad-outline" size={18} />
             <TextInput
               style={styles.input}
               placeholder="Stall Number (e.g., 42, B-12)"
@@ -1120,7 +1124,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         {/* Contact Number */}
         <View style={styles.inputGroup}>
           <View style={styles.inputWrapper}>
-            <Ionicons name="call-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="call-outline" size={18} />
             <TextInput
               style={styles.input}
               placeholder="Contact Number"
@@ -1134,7 +1138,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
 
         {/* Document Uploads Section */}
         <View style={styles.documentsSection}>
-          <Text style={styles.documentsSectionTitle}>📄 Required Documents</Text>
+          <Text style={styles.documentsSectionTitle}> Required Documents</Text>
           <Text style={styles.documentsSectionSubtitle}>
             Please upload clear photos or PDFs of the following documents
           </Text>
@@ -1142,7 +1146,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Valid ID Upload */}
           <DocumentUpload
             label="Government Issued ID"
-            icon="🆔"
+            icon="document-text-outline"
             required={true}
             fileName={validIdName}
             file={validId}
@@ -1152,7 +1156,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Business Permit Upload */}
           <DocumentUpload
             label="Business Permit / Mayor's Permit"
-            icon="📜"
+            icon="document-text-outline"
             required={true}
             fileName={businessPermitName}
             file={businessPermit}
@@ -1174,7 +1178,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         </View>
         
         <View style={styles.privacyNote}>
-          <Text style={styles.privacyNoteIcon}>🔒</Text>
+          <Ionicons name="lock-closed" size={18} />
           <Text style={styles.privacyNoteText}>
             Your documents are securely stored and will only be used for verification purposes.
           </Text>
@@ -1245,7 +1249,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Full Name Input */}
           <View style={styles.inputGroup}>
             <View style={styles.inputWrapper}>
-              <Ionicons name="person-outline" size={18} color="#9CA3AF" />
+              <Ionicons name="person" size={18} />
               <TextInput
                 style={styles.input}
                 placeholder="Full Name"
@@ -1262,7 +1266,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Email Input */}
           <View style={styles.inputGroup}>
             <Animated.View style={[styles.inputWrapper, emailValid && email.length > 0 && styles.inputValid]}>
-              <Ionicons name="mail-outline" size={18} color={emailValid && email.length > 0 ? '#10B981' : '#9CA3AF'} />
+              <Text style={[styles.inputIcon, emailValid && email.length > 0 && styles.inputIconValid]}></Text>
               <TextInput
                 style={styles.input}
                 placeholder="Email Address"
@@ -1273,7 +1277,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 autoCapitalize="none"
               />
               {emailValid && email.length > 0 && (
-                <Text style={styles.checkIcon}>✓</Text>
+                
               )}
             </Animated.View>
             {verificationMethod === 'email' && email.length > 0 && !emailValid && (
@@ -1293,7 +1297,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Phone Input */}
           <View style={styles.inputGroup}>
             <View style={styles.inputWrapper}>
-              <Ionicons name="call-outline" size={18} color="#9CA3AF" />
+              <Ionicons name="call-outline" size={18} />
               <TextInput
                 style={styles.input}
                 placeholder="Contact Number"
@@ -1317,14 +1321,14 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 onPress={() => setVerificationMethod('email')}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.verificationText, verificationMethod === 'email' && styles.verificationTextActive]}>📧 Email</Text>
+                <Text style={[styles.verificationText, verificationMethod === 'email' && styles.verificationTextActive]}> Email</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.verificationButton, verificationMethod === 'sms' && styles.verificationButtonActive]}
                 onPress={() => setVerificationMethod('sms')}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.verificationText, verificationMethod === 'sms' && styles.verificationTextActive]}>Text Message</Text>
+                <Text style={[styles.verificationText, verificationMethod === 'sms' && styles.verificationTextActive]}> Text Message</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.verificationHint}>{getVerificationHint()}</Text>
@@ -1333,7 +1337,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Password Input */}
           <View style={styles.inputGroup}>
             <Animated.View style={[styles.inputWrapper, { transform: [{ translateX: shakeAnim }] }]}>
-              <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" />
+              <Ionicons name="lock-closed" size={18} />
               <TextInput
                 style={styles.input}
                 placeholder="Password"
@@ -1346,7 +1350,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
-                <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#9CA3AF" />
+                <Text style={styles.eyeIcon}>
+ {showPassword ? 'eye-outline' : ''}
+                </Text>
               </TouchableOpacity>
             </Animated.View>
             
@@ -1378,7 +1384,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Confirm Password Input */}
           <View style={styles.inputGroup}>
             <Animated.View style={[styles.inputWrapper, passwordsMatch && styles.inputValid]}>
-              <Ionicons name="checkmark-outline" size={18} color="#9CA3AF" />
+              
               <TextInput
                 style={styles.input}
                 placeholder="Confirm Password"
@@ -1391,14 +1397,16 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 style={styles.eyeButton}
               >
-                <Ionicons name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#9CA3AF" />
+                <Text style={styles.eyeIcon}>
+ {showConfirmPassword ? 'eye-outline' : ''}
+                </Text>
               </TouchableOpacity>
             </Animated.View>
             {confirmPassword.length > 0 && !passwordsMatch && (
               <Text style={styles.errorText}>Passwords do not match</Text>
             )}
             {passwordsMatch && confirmPassword.length > 0 && (
-              <Text style={styles.successText}>✓ Passwords match</Text>
+              <Text style={styles.successText}> Passwords match</Text>
             )}
           </View>
 
@@ -1414,7 +1422,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 }}
               >
                 <Text style={[styles.roleText, role === 'consumer' && styles.roleTextActive]}>
-                  Shop as Customer
+ Shop as Customer
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1425,7 +1433,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 }}
               >
                 <Text style={[styles.roleText, role === 'vendor' && styles.roleTextActive]}>
-                  Sell as Vendor
+ Sell as Vendor
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1434,14 +1442,14 @@ export const SignUpScreen = ({ setIsGuest }) => {
           {/* Vendor-specific fields */}
           {renderVendorFields()}
 
-          {/* ✅ Terms and Conditions Checkbox */}
+          {/*  Terms and Conditions Checkbox */}
           <View style={styles.termsContainer}>
             <TouchableOpacity
               style={styles.checkboxContainer}
               onPress={() => setTermsAccepted(!termsAccepted)}
             >
               <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-                {termsAccepted && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                {termsAccepted && }
               </View>
               <Text style={styles.termsTextSmall}>
                 I agree to the{' '}
@@ -1469,7 +1477,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 {isLoading || uploading ? (
                   <ActivityIndicator color="white" />
                 ) : signUpSuccess ? (
-                  <Text style={styles.signUpButtonText}>{role === 'vendor' ? 'Application Sent!' : 'Account Created!'}</Text>
+                  <Text style={styles.signUpButtonText}> {role === 'vendor' ? 'Application Sent!' : 'Account Created!'}</Text>
                 ) : (
                   <Text style={styles.signUpButtonText}>{role === 'vendor' ? 'Submit Application' : 'Create Account'}</Text>
                 )}
@@ -1490,7 +1498,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             onPress={handleGuestMode}
             activeOpacity={0.7}
           >
-            <Ionicons name="person-outline" size={24} color="#6B7280" />
+            <Ionicons name="hand-left-outline" size={18} />
             <View>
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
               <Text style={styles.guestButtonSubtext}>Browse without an account</Text>
@@ -1519,8 +1527,8 @@ export const SignUpScreen = ({ setIsGuest }) => {
         recipient={otpMode === 'email' ? email : phone}
         recipientLabel={otpMode === 'email' ? 'your email address' : 'your phone number'}
         hintText={otpMode === 'email'
-          ? 'Check your inbox (and spam folder). The email may take a few seconds to arrive.'
-          : 'The SMS may take 30–60 seconds to arrive, depending on your network.'}
+ ? ' Check your inbox (and spam folder). The email may take a few seconds to arrive.'
+          : '⏳ The SMS may take 30–60 seconds to arrive, depending on your network.'}
         digits={otpDigits}
         otpInputs={otpInputs}
         onDigitChange={handleOtpDigitChange}
@@ -1998,7 +2006,7 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '600',
   },
-  // ✅ Terms and Conditions Styles
+  //  Terms and Conditions Styles
   termsContainer: {
     marginBottom: 24,
     marginTop: 8,

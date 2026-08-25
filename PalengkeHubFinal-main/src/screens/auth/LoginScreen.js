@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -101,7 +102,7 @@ const AlertBanner = ({ message, type = 'error', onDismiss }) => {
       ]}
     >
       <View style={[styles.bannerBadge, isSuccess && styles.bannerBadgeSuccess]}>
-        <Text style={styles.bannerBadgeText}>{isSuccess ? '✓' : '!'}</Text>
+        <Text style={styles.bannerBadgeText}>{isSuccess ? '' : '!'}</Text>
       </View>
       <Text style={[styles.bannerText, isSuccess && styles.bannerTextSuccess]} numberOfLines={2}>
         {message}
@@ -110,7 +111,7 @@ const AlertBanner = ({ message, type = 'error', onDismiss }) => {
         onPress={onDismiss}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Text style={[styles.bannerCloseText, isSuccess && styles.bannerTextSuccess]}>✕</Text>
+        
       </TouchableOpacity>
     </Animated.View>
   );
@@ -276,7 +277,7 @@ export const LoginScreen = ({ setIsGuest }) => {
         const raw = result.error?.toLowerCase() || '';
         let msg = 'Login failed. Please try again.';
         if (result.adminWebOnly) {
-          msg = '⛔ Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.';
+ msg = ' Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.';
         } else if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found'))
           msg = 'Wrong email or password. Double-check and try again.';
         else if (raw.includes('email not confirmed'))
@@ -420,7 +421,7 @@ export const LoginScreen = ({ setIsGuest }) => {
             { opacity: formOpacity, transform: [{ translateY: formSlide }] },
           ]}
         >
-          <Text style={styles.greeting}>Mabuhay! 👋</Text>
+          <Text style={styles.greeting}>Mabuhay! </Text>
           <HandUnderline />
           <Text style={styles.sub}>Sign in to your account</Text>
 
@@ -428,7 +429,7 @@ export const LoginScreen = ({ setIsGuest }) => {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email or Phone</Text>
             <View style={emailInputStyle}>
-              <Text style={styles.fieldIcon}>✉</Text>
+              <Ionicons name="mail-outline" size={18} />
               <TextInput
                 style={styles.textInput}
                 placeholder="you@example.com"
@@ -442,7 +443,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 onBlur={() => setEmailFocused(false)}
               />
               {emailValid && email.length > 0 && (
-                <Text style={styles.validIcon}>✓</Text>
+                
               )}
             </View>
             {email.length > 0 && !emailValid && (
@@ -454,7 +455,7 @@ export const LoginScreen = ({ setIsGuest }) => {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Password</Text>
             <Animated.View style={passwordInputStyle}>
-              <Text style={styles.fieldIcon}>🔑</Text>
+              <Ionicons name="key-outline" size={18} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Your password"
@@ -488,7 +489,7 @@ export const LoginScreen = ({ setIsGuest }) => {
               activeOpacity={0.7}
             >
               <View style={[styles.checkbox, rememberMe && styles.checkboxOn]}>
-                {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+                {rememberMe && }
               </View>
               <Text style={styles.rememberLabel}>Remember me</Text>
             </TouchableOpacity>
@@ -514,7 +515,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 {isLoading
                   ? <ActivityIndicator color="#fff" />
                   : loginSuccess
-                    ? <Text style={styles.signInText}>✓  Signed In</Text>
+                    ? <Text style={styles.signInText}>  Signed In</Text>
                     : <Text style={styles.signInText}>Sign In</Text>
                 }
               </LinearGradient>
@@ -531,7 +532,7 @@ export const LoginScreen = ({ setIsGuest }) => {
           {/* Guest Button */}
           <SoftPressable onPress={handleGuestMode} style={styles.guestBtn}>
             <View>
-              <Text style={styles.guestTitle}>👀 Browse as Guest</Text>
+              <Text style={styles.guestTitle}> Browse as Guest</Text>
               <Text style={styles.guestSub}>No account needed</Text>
             </View>
           </SoftPressable>
@@ -565,7 +566,7 @@ export const LoginScreen = ({ setIsGuest }) => {
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>Choose an account</Text>
             <TouchableOpacity onPress={handleClosePicker}>
-              <Text style={styles.pickerClose}>✕</Text>
+              
             </TouchableOpacity>
           </View>
 
@@ -590,7 +591,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 <View style={styles.pickerAccountInfo}>
                   <Text style={styles.pickerAccountName}>{account.full_name || 'Unnamed account'}</Text>
                   <Text style={styles.pickerAccountMeta}>
-                    {account.role === 'vendor' ? 'Vendor' : account.role === 'admin' ? 'Admin' : 'Customer'}
+ {account.role === 'vendor' ? ' Vendor' : account.role === 'admin' ? ' Admin' : ' Customer'}
                   </Text>
                 </View>
                 <Text style={styles.pickerArrow}>›</Text>
@@ -632,13 +633,13 @@ export const LoginScreen = ({ setIsGuest }) => {
 
             {resetSent ? (
               <View style={styles.sentBox}>
-                <Text style={styles.sentIcon}>📬</Text>
+                <Ionicons name="mail-outline" size={18} />
                 <Text style={styles.sentText}>Email sent! Check your inbox.</Text>
               </View>
             ) : (
               <>
                 <View style={[styles.inputRow, { marginBottom: 22 }]}>
-                  <Text style={styles.fieldIcon}>✉</Text>
+                  <Ionicons name="mail-outline" size={18} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="your@email.com"

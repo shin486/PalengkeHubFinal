@@ -23,7 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../hooks/useChat';
-// ✅ REMOVED: import { Header } from '../../components/Header';
+//  REMOVED: import { Header } from '../../components/Header';
 
 export default function ChatDetailScreen({ navigation, route }) {
   const COLORS = useColors();
@@ -56,15 +56,15 @@ export default function ChatDetailScreen({ navigation, route }) {
     ? `${stall?.stall_number ? `Stall #${stall.stall_number}` : ''}${stall?.section ? ` • ${stall.section}` : ''}`.trim()
     : stall?.section || 'Conversation';
 
-  // ✅ Hide the default header and manage route name
+  //  Hide the default header and manage route name
   useEffect(() => {
     navigation.setOptions({
       headerShown: false,
     });
 
-    // ✅ Set route to ChatDetail when focused
+    //  Set route to ChatDetail when focused
     const updateRoute = () => {
-      console.log('💬 ChatDetailScreen - setting route to ChatDetail');
+      console.log(' ChatDetailScreen - setting route to ChatDetail');
       if (global.updateRouteName) {
         global.updateRouteName('ChatDetail');
       }
@@ -73,9 +73,9 @@ export default function ChatDetailScreen({ navigation, route }) {
       }
     };
 
-    // ✅ Reset route when leaving
+    //  Reset route when leaving
     const resetRoute = () => {
-      console.log('💬 ChatDetailScreen - resetting route to Home');
+      console.log(' ChatDetailScreen - resetting route to Home');
       if (global.updateRouteName) {
         global.updateRouteName('Home');
       }
@@ -87,13 +87,13 @@ export default function ChatDetailScreen({ navigation, route }) {
     // Update immediately when mounted
     updateRoute();
 
-    // ✅ Listen for focus and blur events
+    //  Listen for focus and blur events
     const unsubscribeFocus = navigation.addListener('focus', updateRoute);
     const unsubscribeBlur = navigation.addListener('blur', resetRoute);
 
-    // ✅ Also listen for beforeRemove to handle back button
+    //  Also listen for beforeRemove to handle back button
     const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
-      console.log('💬 ChatDetailScreen - beforeRemove, resetting route');
+      console.log(' ChatDetailScreen - beforeRemove, resetting route');
       resetRoute();
     });
 
@@ -106,7 +106,7 @@ export default function ChatDetailScreen({ navigation, route }) {
     };
   }, [navigation]);
 
-  // ✅ Suggested quick reply messages
+  //  Suggested quick reply messages
   const suggestedMessages = [
     { id: 1, text: "Ask about Order" },
     { id: 2, text: "Send QR Code" },
@@ -213,7 +213,7 @@ export default function ChatDetailScreen({ navigation, route }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       
-      {/* ✅ CUSTOM HEADER - Replaces the global Header */}
+      {/*  CUSTOM HEADER - Replaces the global Header */}
       <View style={styles.customHeader}>
         <TouchableOpacity 
           style={styles.backButton}

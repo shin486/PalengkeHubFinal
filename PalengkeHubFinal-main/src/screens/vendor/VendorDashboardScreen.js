@@ -1,6 +1,6 @@
 // src/screens/vendor/VendorDashboardScreen.js
 
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -101,7 +101,7 @@ export default function VendorDashboardScreen({ navigation }) {
     
     // Skip if already fetched and not refreshing
     if (dataFetchedRef.current && !refreshing) {
-      console.log('⏭️ Suki buyers already loaded, skipping...');
+      console.log('⏭ Suki buyers already loaded, skipping...');
       return;
     }
     
@@ -109,7 +109,7 @@ export default function VendorDashboardScreen({ navigation }) {
 
     try {
       setSukiLoading(true);
-      console.log('🔄 Fetching suki buyers...');
+      console.log(' Fetching suki buyers...');
 
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')

@@ -8,7 +8,7 @@ if (isNative) {
   try {
     Notifications = require('expo-notifications');
   } catch (e) {
-    console.log('🔕 expo-notifications could not be loaded');
+    console.log(' expo-notifications could not be loaded');
   }
 }
 
@@ -82,7 +82,7 @@ export const registerPushToken = async (userId) => {
       .upsert({ id: userId, expo_push_token: token }, { onConflict: 'id' });
 
     if (error) console.warn('Error saving push token:', error);
-    else console.log('🔔 Push token registered for user:', userId);
+ else console.log(' Push token registered for user:', userId);
 
     return token;
   } catch (e) {
@@ -138,29 +138,29 @@ export const sendPushNotification = async (userId, title, body, data = {}) => {
 export const notifyOrderUpdate = async (customerId, orderNumber, newStatus) => {
   const statusMessages = {
     confirmed: {
-      title: '✅ Order Confirmed!',
+      title: 'Order Confirmed!',
       body: `Your order #${orderNumber} has been confirmed. The vendor is preparing your items.`,
     },
     preparing: {
-      title: '👨‍🍳 Order Being Prepared',
+      title: 'Order Being Prepared',
       body: `Your order #${orderNumber} is now being prepared by the vendor.`,
     },
     ready: {
-      title: '🛎️ Order Ready for Pickup!',
+      title: 'Order Ready for Pickup!',
       body: `Your order #${orderNumber} is ready! Come pick it up at the stall.`,
     },
     completed: {
-      title: '📦 Order Completed',
+      title: 'Order Completed',
       body: `Your order #${orderNumber} has been marked as completed. Thank you!`,
     },
     cancelled: {
-      title: '❌ Order Cancelled',
+      title: 'Order Cancelled',
       body: `Your order #${orderNumber} has been cancelled.`,
     },
   };
 
   const msg = statusMessages[newStatus] || {
-    title: '📋 Order Update',
+    title: 'Order Update',
     body: `Order #${orderNumber} status updated to: ${newStatus}`,
   };
 
@@ -181,7 +181,7 @@ export const notifyNewPromotion = async (stallId, productName, discount) => {
 
     if (!profiles?.length) return;
 
-    const title = '🏷️ New Deal!';
+    const title = 'New Deal!';
     const body = `${productName} is now ${discount} OFF at your favorite stall!`;
 
     for (const profile of profiles) {

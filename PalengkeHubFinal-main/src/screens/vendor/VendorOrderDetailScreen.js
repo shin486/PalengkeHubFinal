@@ -459,8 +459,8 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               <View style={[styles.scanVerdict, order.payment_scan_matched ? styles.scanVerdictOk : styles.scanVerdictWarn]}>
                 <Text style={[styles.scanVerdictText, { color: order.payment_scan_matched ? vendorColors.success : vendorColors.warning }]}>
                   {order.payment_scan_matched
-                    ? '✅ Receipt scan: reference number and amount matched'
-                    : '⚠️ Receipt scan: could not confirm a match — verify manually'}
+                    ? 'Receipt scan: reference number and amount matched'
+                    : 'Receipt scan: could not confirm a match — verify manually'}
                 </Text>
               </View>
             )}
@@ -470,7 +470,6 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 style={styles.receiptButton}
                 onPress={() => setShowReceipt(true)}
               >
-                <Ionicons name="image-outline" size={16} color={vendorColors.primary} />
                 <Text style={styles.receiptButtonText}>View Payment Receipt</Text>
               </TouchableOpacity>
             )}
@@ -647,7 +646,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       <Modal visible={showReceipt} transparent animationType="fade" onRequestClose={() => setShowReceipt(false)}>
         <View style={styles.receiptOverlay}>
           <TouchableOpacity style={styles.receiptCloseBtn} onPress={() => setShowReceipt(false)}>
-            <Text style={styles.receiptCloseText}>✕</Text>
+            <Ionicons name="close" size={20} color="#FFFFFF" style={styles.receiptCloseText} />
           </TouchableOpacity>
           {order.payment_receipt_url && (
             <Image

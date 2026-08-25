@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+
 export default function StallMap({ 
   latitude, 
   longitude, 
@@ -10,10 +12,11 @@ export default function StallMap({
   height = 200,
   interactive = true 
 }) {
-  // ✅ If no valid coordinates, show placeholder
+  //  If no valid coordinates, show placeholder
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
+        <Ionicons name="location-outline" size={28} color="#9CA3AF" />
         <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>

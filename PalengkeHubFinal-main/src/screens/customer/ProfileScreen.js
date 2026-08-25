@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,7 +25,6 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadImageToStorage } from '../../utils/imageUpload';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 export default function ProfileScreen({ navigation }) {
@@ -43,7 +41,6 @@ export default function ProfileScreen({ navigation }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
 
   // ── PIN Login state ──
   const [showPinModal, setShowPinModal] = useState(false);
@@ -79,7 +76,7 @@ export default function ProfileScreen({ navigation }) {
     setShowPinModal(true);
   };
 
-  // Step 0 → verify the password against Supabase (so the PIN can sign in later)
+  // Step 0  verify the password against Supabase (so the PIN can sign in later)
   const handlePinVerifyCredentials = async () => {
     if (!pinIdentifier.trim() || !pinPassword) {
       setPinError('Ilagay ang email/phone at password mo.');
@@ -139,13 +136,6 @@ export default function ProfileScreen({ navigation }) {
     setShowPinModal(false);
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await checkUser();
-    await fetchUserStats();
-    setRefreshing(false);
-  };
-
   const fetchUserStats = async () => {
     try {
       const { count: orderCount } = await supabase
@@ -183,26 +173,40 @@ export default function ProfileScreen({ navigation }) {
       try {
         const asset = result.assets[0];
         const uri = asset.uri;
-        console.log('✅ Uploading avatar:', uri);
-
-        const { url: avatarUrl } = await uploadImageToStorage({
-          uri,
-          folder: 'avatars',
-          mimeType: asset.mimeType,
-          fileAsset: asset.file, // Web only: real File/Blob
+        
+        // Determine file extension
+        const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
+        const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
+        
+        // Upload to uguu.se (free permanent image host — no API key needed)
+        const formData = new FormData();
+        // On web, asset.file is a File; on native, use the uri object
+        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
+        
+        const uploadResponse = await fetch('https://uguu.se/upload', {
+          method: 'POST',
+          body: formData,
         });
-        console.log('✅ Avatar uploaded:', avatarUrl);
-
+        
+        const uploadResult = await uploadResponse.json();
+        if (!uploadResult.success || !uploadResult.files?.length) {
+          throw new Error('Image host rejected the upload');
+        }
+        
+        const avatarUrl = uploadResult.files[0].url;
+        console.log(' Avatar uploaded:', avatarUrl);
+        
         const { error } = await supabase
           .from('profiles')
           .update({ avatar_url: avatarUrl })
           .eq('id', user.id);
-
+        
         if (error) throw error;
-
+        
         await checkUser();
         setAvatarError(false);
         Alert.alert('Success', 'Profile picture updated!');
+        
       } catch (error) {
         console.error('Upload error:', error);
         Alert.alert('Error', 'Failed to upload image. Please try again.');
@@ -212,7 +216,7 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  // ✅ NEW: Remove Profile Photo Function
+  //  NEW: Remove Profile Photo Function
   const removeProfilePhoto = async () => {
     Alert.alert(
       'Remove Profile Photo',
@@ -254,7 +258,7 @@ export default function ProfileScreen({ navigation }) {
     if (Platform.OS === 'web') {
       const confirmLogout = window.confirm('Are you sure you want to logout?');
       if (confirmLogout) {
-        console.log('🔴 Logging out...');
+        console.log(' Logging out...');
         await supabase.auth.signOut();
         window.location.href = '/';
       }
@@ -349,7 +353,7 @@ export default function ProfileScreen({ navigation }) {
               colors={['#DC2626', '#EF4444', '#F87171']}
               style={styles.avatarGradient}
             >
-              <Text style={styles.avatarEmoji}>👤</Text>
+              <Ionicons name="person" size={44} color="#FFFFFF" />
             </LinearGradient>
             <Text style={styles.guestName}>Guest User</Text>
             <Text style={styles.guestEmail}>browsing without account</Text>
@@ -364,7 +368,7 @@ export default function ProfileScreen({ navigation }) {
             
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Ionicons name="cart-outline" size={22} color={COLORS.primary} />
+                <Ionicons name="cart" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Save your cart items</Text>
@@ -374,7 +378,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Ionicons name="cube-outline" size={22} color={COLORS.primary} />
+                <Ionicons name="cube" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Place orders</Text>
@@ -384,7 +388,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Ionicons name="receipt-outline" size={22} color={COLORS.primary} />
+                <Ionicons name="clipboard" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>View order history</Text>
@@ -394,7 +398,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Ionicons name="star-outline" size={22} color={COLORS.primary} />
+                <Ionicons name="star" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Rate stalls</Text>
@@ -404,7 +408,7 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
-                <Ionicons name="heart-outline" size={22} color={COLORS.primary} />
+                <Ionicons name="heart" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
                 <Text style={styles.benefitText}>Save favorite stalls</Text>
@@ -443,16 +447,15 @@ export default function ProfileScreen({ navigation }) {
     );
   }
 
-      // ========== LOGGED IN USER ==========
+  // ========== LOGGED IN USER ==========
   const hasProfilePhoto = profile?.avatar_url && !avatarError;
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
+      <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* User Avatar Section with Upload */}
         <View style={styles.avatarSection}>
@@ -472,13 +475,9 @@ export default function ProfileScreen({ navigation }) {
                 colors={['#DC2626', '#EF4444', '#F87171']}
                 style={styles.avatarGradient}
               >
-                {profile?.full_name ? (
-                  <Text style={styles.avatarEmoji}>
-                    {profile.full_name.charAt(0).toUpperCase()}
-                  </Text>
-                ) : (
-                  <Ionicons name="person" size={28} color="#FFFFFF" />
-                )}
+                <Text style={styles.avatarEmoji}>
+                  {profile?.full_name?.charAt(0)?.toUpperCase() || '?'}
+                </Text>
               </LinearGradient>
             )}
             <View style={styles.editAvatarBadge}>
@@ -494,8 +493,8 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </View>
 
-          {/* ✅ REMOVED: The duplicate "Change Profile Photo" text button */}
-          {/* ✅ ADDED: "Remove Photo" button - only shows when user has a profile photo */}
+          {/*  REMOVED: The duplicate "Change Profile Photo" text button */}
+          {/*  ADDED: "Remove Photo" button - only shows when user has a profile photo */}
           {hasProfilePhoto && (
             <TouchableOpacity 
               style={styles.removePhotoBtn}
@@ -561,20 +560,20 @@ export default function ProfileScreen({ navigation }) {
         {/* Menu Items */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
-            <Ionicons name="heart-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="heart" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('favorites.title')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
-            <Ionicons name="receipt-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="clipboard" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('orders.title')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           {/* Theme Selector */}
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemePicker(true)}>
-            <Ionicons name={themeMode === 'dark' ? 'moon-outline' : 'sunny-outline'} size={22} color={COLORS.primary} />
+            <Ionicons name={themeMode === 'dark' ? 'moon' : 'sunny'} size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Theme</Text>
             <Text style={styles.languageValue}>
               {themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'System'}
@@ -584,7 +583,7 @@ export default function ProfileScreen({ navigation }) {
 
           {/* Language Selector */}
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguagePicker(true)}>
-            <Ionicons name="globe-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="globe" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('profile.language')}</Text>
             <Text style={styles.languageValue}>{locale === 'en' ? 'English' : 'Filipino'}</Text>
             <Text style={styles.chevron}>›</Text>
@@ -592,26 +591,26 @@ export default function ProfileScreen({ navigation }) {
 
           {/* PIN Login */}
           <TouchableOpacity style={styles.menuItem} onPress={openPinModal}>
-            <Ionicons name="keypad-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="keypad" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>PIN Login</Text>
             <Text style={styles.languageValue}>{hasPin ? 'Naka-on' : 'Naka-off'}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="location-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="location" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Saved Addresses</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="help-circle-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="help-circle" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Help & Support</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="lock-closed-outline" size={22} color={COLORS.primary} />
+            <Ionicons name="lock-closed" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Privacy Policy</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
@@ -641,14 +640,14 @@ export default function ProfileScreen({ navigation }) {
         {Platform.OS === 'web' ? (
           <button
             onClick={async () => {
-              console.log('🔴 Logout button clicked on web');
+              console.log(' Logout button clicked on web');
               const confirmLogout = window.confirm('Are you sure you want to logout?');
               if (confirmLogout) {
-                console.log('🔴 User confirmed, signing out...');
+                console.log(' User confirmed, signing out...');
                 try {
                   const { error } = await supabase.auth.signOut();
                   if (error) console.error('SignOut error:', error);
-                  console.log('🔴 SignOut complete, redirecting to login...');
+                  console.log(' SignOut complete, redirecting to login...');
                   window.location.href = '/';
                 } catch (err) {
                   console.error('Error during logout:', err);
@@ -685,7 +684,7 @@ export default function ProfileScreen({ navigation }) {
         )}
         {/* VERSION LABEL */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>PalengkeHub v1.0.8 (build 9)</Text>
+          <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
         </View>
       </ScrollView>
 
@@ -699,21 +698,21 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => { setTheme('light'); setShowThemePicker(false); }}
             >
               <Text style={styles.langOptionText}>Light</Text>
-              {themeMode === 'light' && <Text style={styles.langCheck}>✓</Text>}
+              {themeMode === 'light' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, themeMode === 'dark' && styles.langOptionActive]}
               onPress={() => { setTheme('dark'); setShowThemePicker(false); }}
             >
               <Text style={styles.langOptionText}>Dark</Text>
-              {themeMode === 'dark' && <Text style={styles.langCheck}>✓</Text>}
+              {themeMode === 'dark' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, themeMode === 'system' && styles.langOptionActive]}
               onPress={() => { setTheme('system'); setShowThemePicker(false); }}
             >
               <Text style={styles.langOptionText}>System Default</Text>
-              {themeMode === 'system' && <Text style={styles.langCheck}>✓</Text>}
+              {themeMode === 'system' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.langCancelBtn}
@@ -735,14 +734,14 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
             >
               <Text style={styles.langOptionText}>English</Text>
-              {locale === 'en' && <Text style={styles.langCheck}>✓</Text>}
+              {locale === 'en' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, locale === 'fil' && styles.langOptionActive]}
               onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
             >
               <Text style={styles.langOptionText}>Filipino</Text>
-              {locale === 'fil' && <Text style={styles.langCheck}>✓</Text>}
+              {locale === 'fil' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.langCancelBtn}
@@ -762,7 +761,7 @@ export default function ProfileScreen({ navigation }) {
             {pinSaved ? (
               <>
                 <Text style={styles.pinHint}>
-                  ✓ Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.
+ Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.
                 </Text>
               </>
             ) : pinStep === 0 ? (
@@ -849,7 +848,7 @@ export default function ProfileScreen({ navigation }) {
                   onPress={handlePinSave}
                   disabled={pinBusy}
                 >
-                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN'}</Text>
+                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN '}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(1)}>
                   <Text style={styles.langCancelText}>Bumalik</Text>
@@ -905,7 +904,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   editAvatarBadgeText: {
     fontSize: 16,
   },
-  // ✅ NEW STYLES: Remove Photo Button
+  //  NEW STYLES: Remove Photo Button
   removePhotoBtn: {
     flexDirection: 'row',
     alignItems: 'center',

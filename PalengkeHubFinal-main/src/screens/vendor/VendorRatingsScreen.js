@@ -12,8 +12,8 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -184,7 +184,7 @@ export default function VendorRatingsScreen({ navigation }) {
     for (let i = 1; i <= 5; i++) {
       stars.push(
         <Text key={i} style={[styles.starIcon, i <= rating ? styles.starFilled : styles.starEmpty]}>
-          {i <= rating ? '★' : '☆'}
+ {i <= rating ? '' : ''}
         </Text>
       );
     }
@@ -228,7 +228,7 @@ export default function VendorRatingsScreen({ navigation }) {
               styles.filterChipText,
               activeFilter === filter && styles.filterChipTextActive
             ]}>
-              {filter === 'all' ? 'All' : `★ ${filter}`}
+ {filter === 'all' ? 'All' : ` ${filter}`}
               {filter !== 'all' && distribution[parseInt(filter)] > 0 && (
                 <Text style={styles.filterCount}> ({distribution[parseInt(filter)]})</Text>
               )}
@@ -244,11 +244,9 @@ export default function VendorRatingsScreen({ navigation }) {
       <View style={styles.ratingHeader}>
         <View style={styles.customerInfo}>
           <View style={styles.customerAvatar}>
-            {item.consumer?.full_name ? (
-              <Text style={styles.customerAvatarText}>{item.consumer.full_name.charAt(0).toUpperCase()}</Text>
-            ) : (
-              <Ionicons name="person" size={18} color="#6B7280" />
-            )}
+            <Text style={styles.customerAvatarText}>
+              {item.consumer?.full_name?.charAt(0)?.toUpperCase() || 'person'}
+            </Text>
           </View>
           <View>
             <Text style={styles.customerName}>{item.consumer?.full_name || 'Customer'}</Text>
@@ -295,7 +293,6 @@ export default function VendorRatingsScreen({ navigation }) {
           }}
         >
           <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.replyGradient}>
-            <Ionicons name="create-outline" size={14} color="#FFFFFF" />
             <Text style={styles.replyButtonText}>Reply to Review</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -305,7 +302,6 @@ export default function VendorRatingsScreen({ navigation }) {
         style={styles.deleteButton}
         onPress={() => handleDeleteRating(item)}
       >
-        <Ionicons name="trash-outline" size={14} color="#EF4444" />
         <Text style={styles.deleteButtonText}>Remove</Text>
       </TouchableOpacity>
     </View>
@@ -354,7 +350,7 @@ export default function VendorRatingsScreen({ navigation }) {
             const percentage = totalRatings > 0 ? (count / totalRatings) * 100 : 0;
             return (
               <View key={star} style={styles.distributionRow}>
-                <Text style={styles.distributionStar}>{star} ★</Text>
+                <Text style={styles.distributionStar}>{star} </Text>
                 <View style={styles.distributionBarContainer}>
                   <View style={[styles.distributionBar, { width: `${percentage}%`, backgroundColor: star >= 4 ? '#10B981' : star === 3 ? '#F59E0B' : '#EF4444' }]} />
                 </View>
@@ -392,7 +388,7 @@ export default function VendorRatingsScreen({ navigation }) {
           
           {filteredRatings().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="star-outline" size={40} color="#D1D5DB" />
+              <Ionicons name="star" size={40} color="#F59E0B" />
               <Text style={styles.emptyTitle}>No reviews yet</Text>
               <Text style={styles.emptyText}>When customers leave reviews, they'll appear here</Text>
             </View>

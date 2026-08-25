@@ -13,7 +13,7 @@ export default function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) {
-      setStatus({ type: 'error', message: '⚠️ Please fill in all required fields.' });
+ setStatus({ type: 'error', message: ' Please fill in all required fields.'});
       return;
     }
     setLoading(true);
@@ -23,10 +23,10 @@ export default function Contact() {
         name: form.name, email: form.email, subject: form.subject, message: form.message,
       }]);
       if (error) throw error;
-      setStatus({ type: 'success', message: "✅ Message sent! We'll get back to you soon." });
+ setStatus({ type: 'success', message: " Message sent! We'll get back to you soon."});
       setForm({ name: '', email: '', subject: '', message: '' });
     } catch (err) {
-      setStatus({ type: 'error', message: '⚠️ Failed to send message. Please try again.' });
+ setStatus({ type: 'error', message: ' Failed to send message. Please try again.'});
     } finally {
       setLoading(false);
     }

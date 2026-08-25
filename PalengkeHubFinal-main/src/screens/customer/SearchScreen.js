@@ -78,7 +78,7 @@ const levenshtein = (a, b) => {
 // Cache of all product names for suggestions (avoids repeated DB hits)
 let productNamesCache = null;
 
-// ── Tagalog → English product synonyms (for elderly users searching in Tagalog) ──
+// ── Tagalog  English product synonyms (for elderly users searching in Tagalog) ──
 const TAGALOG_SYNONYMS = {
   // Karne (meat)
   baboy: ['pork'], 'karneng baboy': ['pork'], liempo: ['pork belly', 'liempo'],

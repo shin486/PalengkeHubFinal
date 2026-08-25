@@ -7,15 +7,12 @@ import {
   StatusBar,
   Dimensions,
   SafeAreaView,
-  Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from './lib/supabase';
@@ -79,7 +76,6 @@ import BottomNavigation from './src/components/BottomNavigation';
 
 const { width } = Dimensions.get('window');
 const Stack = createNativeStackNavigator();
-const CustomerStack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const colors = {
@@ -111,8 +107,8 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.log('❌ ERROR CAUGHT:', error);
-    console.log('❌ ERROR INFO:', errorInfo);
+    console.log(' ERROR CAUGHT:', error);
+    console.log(' ERROR INFO:', errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -121,7 +117,7 @@ class ErrorBoundary extends React.Component {
       return (
         <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={{ fontSize: 20, fontWeight: 'bold', color: 'red', marginBottom: 20 }}>
-            🐛 Error Detected
+ Error Detected
           </Text>
           <Text style={{ fontSize: 16, marginBottom: 10 }}>{this.state.error?.toString()}</Text>
           <Text style={{ fontSize: 14, color: '#666', marginTop: 20 }}>
@@ -204,7 +200,6 @@ function CustomerTabNavigator({ isGuest, onRouteChange }) {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
-        animation: 'fade',
       }}
       tabBar={(props) => (
         <BottomNavigation
@@ -330,7 +325,7 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // ✅ Expose setActiveRouteName globally so screens can update the header visibility
+  //  Expose setActiveRouteName globally so screens can update the header visibility
   useEffect(() => {
     global.setActiveRouteName = setActiveRouteName;
     global.updateRouteName = setActiveRouteName;
@@ -374,7 +369,7 @@ function AppStack({ isGuest }) {
     return cleanup;
   }, []);
 
-  // ✅ Updated: All screens that should hide the header
+  //  Updated: All screens that should hide the header
   const getHeaderProps = () => {
     const routeName = activeRouteName;
     
@@ -392,97 +387,89 @@ function AppStack({ isGuest }) {
     const isHeaderHidden = hiddenScreens.includes(routeName);
     
     if (isHeaderHidden) {
-      console.log('🚫 Hiding header on:', routeName);
+      console.log(' Hiding header on:', routeName);
       return null;
     }
     
-    console.log('✅ Showing header on:', routeName);
+    console.log(' Showing header on:', routeName);
     
     switch (routeName) {
       case 'Cart':
-        return { title: '🛒 My PalengKart', subtitle: '' };
+        return { title: 'My PalengKart', subtitle: '' };
       case 'Orders':
-        return { title: '📦 My Orders', subtitle: 'Track your orders here' };
+        return { title: 'My Orders', subtitle: 'Track your orders here' };
       case 'Chats':
-        return { title: '💬 Messages', subtitle: 'Your conversations' };
+        return { title: 'Messages', subtitle: 'Your conversations' };
       case 'Profile':
-        return { title: '👤 My Profile', subtitle: 'Manage your account' };
+        return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
-        return { title: '🏪 Stalls Directory', subtitle: 'Browse all market stalls' };
+        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'Favorites':
-        return { title: '❤️ Favorites', subtitle: 'Your saved products and stalls' };
+        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
       case 'Notifications':
-        return { title: '🔔 Notifications', subtitle: 'Your alerts' };
+        return { title: 'Notifications', subtitle: 'Your alerts' };
       case 'ReportIssue':
-        return { title: '🚨 Report Issue', subtitle: 'Help us improve' };
+        return { title: 'Report Issue', subtitle: 'Help us improve' };
       case 'CustomerReports':
-        return { title: '📊 My Reports', subtitle: 'Track your reports' };
+        return { title: 'My Reports', subtitle: 'Track your reports' };
       default:
-        return { title: '🏬 PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
     }
   };
 
   const headerProps = getHeaderProps();
 
-  console.log('🔍 AppStack - activeRouteName:', activeRouteName);
-  console.log('🔍 AppStack - headerProps:', headerProps);
+  console.log(' AppStack - activeRouteName:', activeRouteName);
+  console.log(' AppStack - headerProps:', headerProps);
 
   return (
     <View style={styles.container}>
-      {/* ✅ Only show global Header if NOT on hidden screens */}
+      {/*  Only show global Header if NOT on hidden screens */}
       {headerProps && (
         <Header title={headerProps.title} subtitle={headerProps.subtitle} />
       )}
       
-      <CustomerStack.Navigator
-        screenOptions={{
-          headerShown: false,
-          gestureEnabled: true,
-          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-          transitionSpec: {
-            open: { animation: 'timing', config: { duration: 300, easing: Easing.out(Easing.cubic) } },
-            close: { animation: 'timing', config: { duration: 240, easing: Easing.in(Easing.cubic) } },
-          },
-        }}
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, animation: 'none' }}
         onStateChange={(state) => {
           const routeName = getActiveRouteName(state);
-          console.log('🔄 StackNavigator - route changed to:', routeName);
-          // ✅ Update activeRouteName for ALL routes, including MainTabs
+          console.log(' StackNavigator - route changed to:', routeName);
+          //  Update activeRouteName for ALL routes, including MainTabs
           setActiveRouteName(routeName);
         }}
       >
-        <CustomerStack.Screen name="MainTabs">
+        <Stack.Screen name="MainTabs">
           {props => (
             <CustomerTabNavigator
               {...props}
               isGuest={isGuest}
               onRouteChange={(tabName) => {
-                console.log('🔄 Tab changed to:', tabName);
+                console.log(' Tab changed to:', tabName);
                 setActiveRouteName(tabName);
               }}
             />
           )}
-        </CustomerStack.Screen>
+        </Stack.Screen>
         
-        <CustomerStack.Screen name="ProductDetails" component={ProductDetailsScreen} />
-        <CustomerStack.Screen name="StallDetails" component={StallDetailsScreen} />
-        <CustomerStack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
-        <CustomerStack.Screen name="Search" component={SearchScreen} />
-        <CustomerStack.Screen name="Checkout" component={CheckoutScreen} />
-      <CustomerStack.Screen name="PickupPass" component={PickupPassScreen} />
-        <CustomerStack.Screen name="Notifications" component={NotificationScreen} />
-        <CustomerStack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
+        <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+        <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
+        <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
+        <Stack.Screen name="Search" component={SearchScreen} />
+        <Stack.Screen name="Checkout" component={CheckoutScreen} />
+      <Stack.Screen name="PickupPass" component={PickupPassScreen} />
+        <Stack.Screen name="Notifications" component={NotificationScreen} />
+        <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         
-        <CustomerStack.Screen 
+        <Stack.Screen 
           name="ChatDetail" 
           component={ChatDetailScreen} 
           options={{ headerShown: false }}
         />
         
-        <CustomerStack.Screen name="ReportIssue" component={ReportIssueScreen} />
-        <CustomerStack.Screen name="CustomerReports" component={CustomerReportsScreen} />
-        <CustomerStack.Screen name="Favorites" component={FavoritesScreen} />
-      </CustomerStack.Navigator>
+        <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
+        <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
+      </Stack.Navigator>
     </View>
   );
 }
@@ -527,11 +514,11 @@ function RootNavigator() {
     };
   }, []);
 
-  console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
+  console.log(' RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
 
   useEffect(() => {
     if (isGuest && global.navigationRef) {
-      console.log('🎯 Guest mode activated - navigating to App');
+      console.log(' Guest mode activated - navigating to App');
       global.navigationRef.reset({
         index: 0,
         routes: [{ name: 'App' }],
@@ -547,7 +534,7 @@ function RootNavigator() {
       : profile?.role === 'vendor' ? 'VendorDashboard'
       : 'App';
 
-    console.log('🔀 Redirecting authenticated user to:', target);
+    console.log(' Redirecting authenticated user to:', target);
 
     global.navigationRef.reset({
       index: 0,
@@ -572,12 +559,11 @@ function RootNavigator() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer 
       ref={(ref) => {
         global.navigationRef = ref;
         navigationContainerRef = ref;
-        console.log('✅ NavigationContainer ref set');
+        console.log(' NavigationContainer ref set');
       }}
     >
       <Stack.Navigator 
@@ -619,22 +605,21 @@ function RootNavigator() {
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
-    </GestureHandlerRootView>
   );
 }
 
 // Helper function to reset to login screen
 export const resetToLogin = () => {
-  console.log('🔄 resetToLogin called, ref exists:', !!navigationContainerRef);
+  console.log(' resetToLogin called, ref exists:', !!navigationContainerRef);
   
   if (navigationContainerRef) {
     navigationContainerRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
-    console.log('✅ Reset to Login executed');
+    console.log(' Reset to Login executed');
   } else {
-    console.log('❌ navigationContainerRef is null!');
+    console.log(' navigationContainerRef is null!');
   }
 };
 

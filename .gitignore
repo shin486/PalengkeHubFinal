@@ -38,3 +38,17 @@ feature-test.js
 # ── OS junk ──
 Thumbs.db
 .DS_Store
+
+# ── Secrets ──
+.env
+.env.*
+
+# ── IDE ──
+.idea/
+
+# ── Archives / stray artifacts ──
+*.zip
+c
+
+# ── Launcher logs ──
+run-logs/

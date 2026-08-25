@@ -10,18 +10,22 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadImageToStorage as shareImageUpload } from '../../utils/imageUpload';
+import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+
+//  USE THE SAME IMGBB API KEY as chatService
+const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
 
 // Available unit options with labels
 const UNIT_OPTIONS = [
   { id: 'kg', label: 'Per Kilo (kg)', icon: 'scale-outline', defaultPrice: 0 },
   { id: '500g', label: 'Per 500g', icon: 'cube-outline', defaultPrice: 0 },
   { id: '250g', label: 'Per 250g', icon: 'cube-outline', defaultPrice: 0 },
-  { id: 'piece', label: 'Per Piece', icon: 'grid-outline', defaultPrice: 0 },
+  { id: 'piece', label: 'Per Piece', icon: 'apps-outline', defaultPrice: 0 },
   { id: 'bundle', label: 'Per Bundle', icon: 'leaf-outline', defaultPrice: 0 },
   { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: 'egg-outline', defaultPrice: 0 },
   { id: 'pack', label: 'Per Pack', icon: 'cube-outline', defaultPrice: 0 },
@@ -29,12 +33,12 @@ const UNIT_OPTIONS = [
 
 // Predefined categories
 const CATEGORY_OPTIONS = [
-  { id: 'vegetables', label: 'Vegetables', icon: 'leaf-outline' },
-  { id: 'meat', label: 'Meat', icon: 'restaurant-outline' },
-  { id: 'rice', label: 'Rice & Grains', icon: 'basket-outline' },
-  { id: 'fruits', label: 'Fruits', icon: 'nutrition-outline' },
-  { id: 'poultry', label: 'Poultry', icon: 'egg-outline' },
-  { id: 'other', label: 'Other', icon: 'construct-outline' },
+  { id: 'vegetables', label: 'Vegetables', icon: 'leaf' },
+  { id: 'meat', label: 'Meat', icon: 'restaurant' },
+  { id: 'rice', label: 'Rice & Grains', icon: 'grain' },
+  { id: 'fruits', label: 'Fruits', icon: 'nutrition' },
+  { id: 'poultry', label: 'Poultry', icon: 'egg' },
+  { id: 'other', label: 'Other', icon: 'construct' },
 ];
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
@@ -59,8 +63,8 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
 
   useEffect(() => {
     if (editingProduct) {
-      console.log('🔵 MODAL - Editing product:', editingProduct.name);
-      console.log('🔵 MODAL - Image URL:', editingProduct.image_url);
+      console.log(' MODAL - Editing product:', editingProduct.name);
+      console.log(' MODAL - Image URL:', editingProduct.image_url);
       
       setFormData({
         name: editingProduct.name || '',
@@ -112,30 +116,49 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     });
 
     if (!result.canceled) {
-      await uploadImageToStorage(result.assets[0]);
+      await uploadImageToImgBB(result.assets[0].uri);
     }
   };
 
-  // Upload product image to Supabase Storage (reliable, no third-party limits)
-  const uploadImageToStorage = async (asset) => {
+  //  EXACT SAME FUNCTION as chatService.uploadChatImage
+  const uploadImageToImgBB = async (uri) => {
     setUploadingImage(true);
     try {
-      const assetUri = asset?.uri || '';
-      console.log('📸 Uploading product image to Supabase Storage:', assetUri);
+      console.log(' Uploading product image to ImgBB:', uri);
       
-      const { url } = await shareImageUpload({
-        uri: assetUri,
-        folder: 'products',
-        mimeType: asset?.mimeType,
-        fileAsset: asset?.file, // Web only: real File/Blob
+      // Fetch the image
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      // Convert to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
       
-      if (!url) {
-        throw new Error('Upload succeeded but no public URL was returned.');
-      }
+      // Upload to ImgBB
+      const formData = new FormData();
+      formData.append('image', base64);
+      
+      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
+        params: {
+          key: IMGBB_API_KEY
+        },
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      const imageUrl = uploadResponse.data.data.url;
+      console.log(' Product image uploaded to ImgBB:', imageUrl);
       
       // Update form data with the image URL
-      setFormData(prev => ({ ...prev, image_url: url }));
+      setFormData(prev => ({ ...prev, image_url: imageUrl }));
       
       Alert.alert('Success', 'Product image uploaded successfully!');
     } catch (error) {
@@ -177,7 +200,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       return;
     }
 
-    console.log('🔵 SUBMITTING - Image URL:', formData.image_url);
+    console.log(' SUBMITTING - Image URL:', formData.image_url);
 
     setLoading(true);
     
@@ -202,7 +225,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       is_available: editingProduct ? editingProduct.is_available : true,
     };
 
-    console.log('🔵 Product Data being sent:', productData);
+    console.log(' Product Data being sent:', productData);
     
     await onSubmit(productData);
     setLoading(false);
@@ -225,12 +248,12 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                 <Image 
                   source={{ uri: formData.image_url }} 
                   style={styles.productImage}
-                  onError={() => console.log('❌ Image failed to load')}
-                  onLoad={() => console.log('✅ Image loaded')}
+ onError={() => console.log(' Image failed to load')}
+ onLoad={() => console.log(' Image loaded')}
                 />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Ionicons name="image-outline" size={28} color="#9CA3AF" />
+                  <Ionicons name="image-outline" size={44} color="#9CA3AF" />
                   <Text style={styles.imagePlaceholderText}>Tap to add image</Text>
                 </View>
               )}
@@ -319,7 +342,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('kg') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="scale-outline" size={16} color="#6B7280" />
+                  <Ionicons name="scale-outline" size={18} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per Kilo (kg) *</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -339,7 +362,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('500g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={16} color="#6B7280" />
+                  <Ionicons name="cube-outline" size={18} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per 500g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -359,7 +382,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('250g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={16} color="#6B7280" />
+                  <Ionicons name="cube-outline" size={18} color="#6B7280" />
                   <Text style={styles.unitPriceText}>Per 250g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>

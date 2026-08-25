@@ -26,7 +26,7 @@ export default function VendorChatListScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [stall, setStall] = useState(null);
 
-  // ✅ Fetch stall info
+  //  Fetch stall info
   const fetchStall = useCallback(async () => {
     if (!user?.id) return null;
     try {
@@ -44,7 +44,7 @@ export default function VendorChatListScreen({ navigation }) {
     }
   }, [user]);
 
-  // ✅ Fetch chats
+  //  Fetch chats
   const fetchChats = useCallback(async () => {
     if (!user?.id) return;
     
@@ -135,7 +135,7 @@ export default function VendorChatListScreen({ navigation }) {
     }
   };
 
-  // ✅ Navigate to chat detail
+  //  Navigate to chat detail
   const handleChatPress = (chat) => {
     navigation.navigate('VendorChatDetail', {
       conversationId: chat.id,

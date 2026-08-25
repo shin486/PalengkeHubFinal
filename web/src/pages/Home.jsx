@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 
 const features = [
-  { icon: '🛒', title: 'Shop Online', desc: 'Browse stalls and products from Lipa City Public Market vendors. Order your fresh tinda in just a few taps.' },
-  { icon: '🏪', title: 'For Vendors', desc: 'List your stall, manage products, and grow your business with PalengkeHub\'s digital platform.' },
-  { icon: '📦', title: 'Market Pickup', desc: 'Order online and pick up at the market — no delivery fees, just fresh goods waiting for you.' },
-  { icon: '📊', title: 'Market Analytics', desc: 'Real-time data and insights for market administrators to monitor activity and trends.' },
-  { icon: '💬', title: 'Chat Support', desc: 'Message your vendor directly for special requests or to confirm your order before pickup.' },
-  { icon: '🔒', title: 'Secure & Reliable', desc: 'All transactions and data are protected. Built for the Lipa City Public Market community.' },
+ { icon: ', title: 'Shop Online', desc: 'Browse stalls and products from Lipa City Public Market vendors. Order your fresh tinda in just a few taps.'},
+ { icon: ', title: 'For Vendors', desc: 'List your stall, manage products, and grow your business with PalengkeHub\'s digital platform.'},
+ { icon: ', title: 'Market Pickup', desc: 'Order online and pick up at the market — no delivery fees, just fresh goods waiting for you.'},
+ { icon: ', title: 'Market Analytics', desc: 'Real-time data and insights for market administrators to monitor activity and trends.'},
+ { icon: ', title: 'Chat Support', desc: 'Message your vendor directly for special requests or to confirm your order before pickup.'},
+ { icon: ', title: 'Secure & Reliable', desc: 'All transactions and data are protected. Built for the Lipa City Public Market community.'},
 ];
 
 export default function Home() {
@@ -22,8 +22,8 @@ export default function Home() {
             PalengkeHub brings the Lipa City Public Market online. Browse stalls, order fresh produce and goods, and pick them up at the market — no delivery fees, just the palengke experience made digital.
           </p>
           <div className="hero-actions">
-            <Link to="/shop" className="btn-primary">🛍️ Start Shopping</Link>
-            <Link to="/sell" className="btn-secondary">🏪 Become a Vendor</Link>
+ <Link to="/shop" className="btn-primary"> Start Shopping</Link>
+ <Link to="/sell" className="btn-secondary"> Become a Vendor</Link>
           </div>
         </div>
       </section>
@@ -86,8 +86,8 @@ export default function Home() {
             Download the PalengkeHub app or start shopping online today.
           </p>
           <div className="hero-actions">
-            <Link to="/shop" className="btn-primary">🛍️ Browse Products</Link>
-            <Link to="/sell" className="btn-secondary">🏪 Sell with Us</Link>
+ <Link to="/shop" className="btn-primary"> Browse Products</Link>
+ <Link to="/sell" className="btn-secondary"> Sell with Us</Link>
           </div>
         </div>
       </section>

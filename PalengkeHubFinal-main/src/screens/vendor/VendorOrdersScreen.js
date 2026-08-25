@@ -48,7 +48,7 @@ const RADIUS = {
   xxl: 24,
 };
 
-// ✅ Status Tabs - No Emojis
+//  Status Tabs - No Emojis
 const STATUS_TABS = [
   { key: 'pending', label: 'Pending', icon: 'time-outline' },
   { key: 'confirmed', label: 'Confirmed', icon: 'checkmark-circle-outline' },
@@ -294,7 +294,7 @@ export default function VendorOrdersScreen({ navigation }) {
     />
   );
 
-  // ✅ Get icon color for tab
+  //  Get icon color for tab
   const getTabIconColor = (key, isActive) => {
     if (isActive) return '#FFFFFF';
     const colors = {

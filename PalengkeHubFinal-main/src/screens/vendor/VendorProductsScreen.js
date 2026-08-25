@@ -137,7 +137,7 @@ export default function VendorProductsScreen({ navigation }) {
     if (success) setEditingProduct(null);
   };
 
-  // ✅ Get icon and color for stat cards
+  //  Get icon and color for stat cards
   const getStatConfig = (key) => {
     const configs = {
       total: { icon: 'cube-outline', color: COLORS.primary, bg: COLORS.primarySurface },
@@ -148,7 +148,7 @@ export default function VendorProductsScreen({ navigation }) {
     return configs[key] || configs.total;
   };
 
-  // ✅ Get icon for filter
+  //  Get icon for filter
   const getFilterIcon = (key) => {
     const icons = {
       'all': 'grid-outline',
@@ -160,7 +160,7 @@ export default function VendorProductsScreen({ navigation }) {
     return icons[key] || 'grid-outline';
   };
 
-  // ✅ Get filter icon color
+  //  Get filter icon color
   const getFilterIconColor = (key, isActive) => {
     if (isActive) return '#FFFFFF';
     const colors = {

@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 
@@ -104,7 +105,7 @@ export const AdminApplicationsList = ({ navigation }) => {
   if (applications.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Ionicons name="checkmark-circle-outline" size={48} color="#D1D5DB" />
+        <Ionicons name="checkmark-done" size={60} color="#10B981" style={{ marginBottom: 16 }} />
         <Text style={styles.emptyTitle}>No Pending Applications</Text>
         <Text style={styles.emptyText}>All vendor applications have been reviewed</Text>
       </View>

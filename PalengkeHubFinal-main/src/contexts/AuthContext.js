@@ -18,7 +18,7 @@ const normalizeEmail = (e) => (e || '').trim().toLowerCase();
 
 // Generates a deterministic auth email for the nth account using a real email.
 // Account #1 uses the real email; accounts #2–#5 use RFC 5233 "+" aliases that
-// still deliver to the same inbox (e.g. juan@gmail.com → juan+ph2@gmail.com).
+// still deliver to the same inbox (e.g. juan@gmail.com  juan+ph2@gmail.com).
 const generateAuthEmail = (realEmail, index) => {
   const normalized = normalizeEmail(realEmail);
   if (index <= 1) return normalized;
@@ -37,13 +37,13 @@ export const AuthProvider = ({ children }) => {
 
   // Wrapper for setIsGuest with logging
   const setIsGuest = useCallback((value) => {
-    console.log('🔵 setIsGuest called with:', value, 'previous:', isGuest);
+    console.log(' setIsGuest called with:', value, 'previous:', isGuest);
     setIsGuestState(value);
   }, [isGuest]);
 
   // ========== RESET GUEST MODE ON APP START ==========
   useEffect(() => {
-    console.log('🔄 App started - resetting isGuest to false');
+    console.log(' App started - resetting isGuest to false');
     setIsGuestState(false);
   }, []);
 
@@ -75,14 +75,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const handleDeepLink = async (event) => {
       const { url } = event;
-      console.log('🔗 Deep link received:', url);
+      console.log(' Deep link received:', url);
       
       if (url.includes('auth/callback') || url.includes('access_token')) {
         const { data, error } = await supabase.auth.getSession();
         
         if (data?.session) {
           Alert.alert(
-            '✅ Email Verified!',
+            'Email Verified!',
             'Your email has been verified. You can now login.',
             [{ text: 'OK' }]
           );
@@ -111,7 +111,7 @@ export const AuthProvider = ({ children }) => {
     || 'https://supabase-proxy.jhayvy.workers.dev';
 
   const sendAuthenticatorSms = useCallback(async (phone) => {
-    console.log('📤 sendAuthenticatorSms called. authProxyUrl:', authProxyUrl ? '(configured)' : '(MISSING)');
+    console.log(' sendAuthenticatorSms called. authProxyUrl:', authProxyUrl ? '(configured)' : '(MISSING)');
     if (!authProxyUrl) {
       throw new Error('Auth proxy URL is not configured.');
     }
@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }) => {
       normalizedPhone = `63${normalizedPhone.slice(1)}`;
     }
 
-    console.log('📱 Requesting iProg SMS for:', normalizedPhone);
+    console.log(' Requesting iProg SMS for:', normalizedPhone);
     const response = await fetch(`${authProxyUrl}/iprog/send-authenticator-sms`, {
       method: 'POST',
       headers: {
@@ -137,7 +137,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     const data = await response.json();
-    console.log('📨 iProg response status:', response.status, '| has code:', !!data?.verification_code);
+    console.log(' iProg response status:', response.status, '| has code:', !!data?.verification_code);
     if (!response.ok) {
       throw new Error(data?.error || 'Failed to send authenticator SMS.');
     }
@@ -153,7 +153,7 @@ export const AuthProvider = ({ children }) => {
   }, [authProxyUrl]);
 
   const sendEmailVerificationCode = useCallback(async (email) => {
-    console.log('📤 sendEmailVerificationCode called. authProxyUrl:', authProxyUrl ? '(configured)' : '(MISSING)');
+    console.log(' sendEmailVerificationCode called. authProxyUrl:', authProxyUrl ? '(configured)' : '(MISSING)');
     if (!authProxyUrl) {
       throw new Error('Auth proxy URL is not configured.');
     }
@@ -171,7 +171,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     const data = await response.json();
-    console.log('📨 Resend response status:', response.status, '| has code:', !!data?.verification_code);
+    console.log(' Resend response status:', response.status, '| has code:', !!data?.verification_code);
     if (!response.ok) {
       throw new Error(data?.error || 'Failed to send verification email.');
     }
@@ -200,7 +200,7 @@ export const AuthProvider = ({ children }) => {
           .eq('id', user.id)
           .single();
         setProfile(profile);
-        console.log('👤 User loaded:', user.email);
+        console.log(' User loaded:', user.email);
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -213,7 +213,7 @@ export const AuthProvider = ({ children }) => {
   const login = useCallback(async (identifier, password) => {
     try {
       setLoading(true);
-      console.log('🔐 Attempting login for:', identifier);
+      console.log(' Attempting login for:', identifier);
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const phoneRegex = /^\+?\d{8,15}$/;
@@ -269,19 +269,19 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (matched.length === 1) {
-          console.log('✅ Login successful (single account):', matched[0].authEmail);
+          console.log(' Login successful (single account):', matched[0].authEmail);
           await checkUser();
           return { success: true, account: matched[0] };
         }
 
         if (matched.length > 1) {
-          console.log('👥 Multiple accounts found — returning picker:', matched.length);
+          console.log(' Multiple accounts found — returning picker:', matched.length);
           try {
             await supabase.auth.signOut();
             setUser(null);
             setProfile(null);
           } catch (signOutErr) {
-            console.warn('⚠️ Could not sign out before showing account picker:', signOutErr);
+            console.warn(' Could not sign out before showing account picker:', signOutErr);
           }
           return {
             success: false,
@@ -292,7 +292,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (firstError) {
-          console.log('❌ Login error:', firstError);
+          console.log(' Login error:', firstError);
           return { success: false, error: firstError.message };
         }
       }
@@ -300,11 +300,11 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithPassword(credentials);
       
       if (error) {
-        console.log('❌ Login error:', error);
+        console.log(' Login error:', error);
         throw error;
       }
       
-      console.log('✅ Login successful:', data.user?.email);
+      console.log(' Login successful:', data.user?.email);
       await checkUser();
       return { success: true };
     } catch (error) {
@@ -324,11 +324,11 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
-        console.error('❌ loginAsAccount error:', error);
+        console.error(' loginAsAccount error:', error);
         return { success: false, error: error.message };
       }
 
-      console.log('✅ loginAsAccount success:', authEmail);
+      console.log(' loginAsAccount success:', authEmail);
       await checkUser();
       return { success: true, account: { authEmail, userId: data.user?.id } };
     } catch (error) {
@@ -342,7 +342,7 @@ export const AuthProvider = ({ children }) => {
   // ========== SIGN UP WITH DOCUMENT SUPPORT ==========
   const signUp = useCallback(async (email, password, fullName, role, metadata = {}) => {
     try {
-      console.log('📝 Starting sign up for:', email, 'role:', role, 'verification:', metadata.verificationMethod);
+      console.log(' Starting sign up for:', email, 'role:', role, 'verification:', metadata.verificationMethod);
 
       const realEmail = normalizeEmail(email);
       const { count: accountCount, error: countError } = await supabase
@@ -351,7 +351,7 @@ export const AuthProvider = ({ children }) => {
         .eq('email', realEmail);
 
       if (countError) {
-        console.error('⚠️ Could not count existing accounts for email:', countError);
+        console.error(' Could not count existing accounts for email:', countError);
       } else {
         if (accountCount >= MAX_ACCOUNTS_PER_EMAIL) {
           return {
@@ -367,7 +367,7 @@ export const AuthProvider = ({ children }) => {
           .ilike('full_name', fullName.trim());
 
         if (dupError) {
-          console.error('⚠️ Could not check duplicate name:', dupError);
+          console.error(' Could not check duplicate name:', dupError);
         } else if (dupNames && dupNames.length > 0) {
           return {
             success: false,
@@ -401,7 +401,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signUp(signUpPayload);
 
       if (error) {
-        console.error('❌ Auth signup error:', error);
+        console.error(' Auth signup error:', error);
         throw error;
       }
 
@@ -409,8 +409,8 @@ export const AuthProvider = ({ children }) => {
         throw new Error('User creation failed');
       }
 
-      console.log('✅ Auth user created:', data.user.id, '| authEmail:', authEmail);
-      console.log('🔐 Verification method:', metadata.verificationMethod || 'email');
+      console.log(' Auth user created:', data.user.id, '| authEmail:', authEmail);
+      console.log(' Verification method:', metadata.verificationMethod || 'email');
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -420,7 +420,7 @@ export const AuthProvider = ({ children }) => {
           .update({ email: realEmail })
           .eq('id', data.user.id);
       } catch (profileEmailErr) {
-        console.warn('⚠️ Could not normalize profile email:', profileEmailErr);
+        console.warn(' Could not normalize profile email:', profileEmailErr);
       }
 
       if (role === 'vendor') {
@@ -435,7 +435,7 @@ export const AuthProvider = ({ children }) => {
           });
         
         if (stallError) {
-          console.error('⚠️ Stall creation error:', stallError);
+          console.error(' Stall creation error:', stallError);
         }
         
         const documents = [];
@@ -462,19 +462,19 @@ export const AuthProvider = ({ children }) => {
           });
         
         if (appError) {
-          console.error('⚠️ Application error:', appError);
+          console.error(' Application error:', appError);
         } else {
-          console.log('✅ Vendor application created');
+          console.log(' Vendor application created');
         }
       }
 
-      console.log('🎉 Sign up completed successfully');
+      console.log(' Sign up completed successfully');
 
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
-        console.error('⚠️ Sign out after signup error:', signOutError);
+        console.error(' Sign out after signup error:', signOutError);
       } else {
-        console.log('🚪 Signed out after signup — user must verify before login.');
+        console.log(' Signed out after signup — user must verify before login.');
       }
       setUser(null);
       setProfile(null);
@@ -490,7 +490,7 @@ export const AuthProvider = ({ children }) => {
       };
       
     } catch (error) {
-      console.error('❌ Sign up error:', error);
+      console.error(' Sign up error:', error);
       return { success: false, error: error.message };
     }
   }, []);
@@ -511,7 +511,7 @@ export const AuthProvider = ({ children }) => {
 
   // ========== RESET TO LOGIN ==========
   const resetToLogin = useCallback(() => {
-    console.log('🔄 resetToLogin called from AuthContext');
+    console.log(' resetToLogin called from AuthContext');
     if (global.navigationRef) {
       global.navigationRef.dispatch(
         CommonActions.reset({
@@ -519,14 +519,14 @@ export const AuthProvider = ({ children }) => {
           routes: [{ name: 'Login' }],
         })
       );
-      console.log('✅ Reset to Login executed');
+      console.log(' Reset to Login executed');
     } else {
-      console.log('❌ navigationRef not found');
+      console.log(' navigationRef not found');
     }
   }, []);
 
   // ============================================================
-  // ✅ FIXED: Memoize the context value to prevent re-renders
+  //  FIXED: Memoize the context value to prevent re-renders
   // ============================================================
   const value = useMemo(() => ({
     user,

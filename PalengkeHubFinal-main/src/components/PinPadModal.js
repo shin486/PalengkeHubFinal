@@ -131,7 +131,7 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Animated.View style={[styles.card, { transform: [{ translateX: shakeAnim }] }]}>
-          <Ionicons name="lock-closed-outline" size={28} color="#DC2626" />
+          <Ionicons name="lock-closed" size={40} color="#DC2626" style={styles.lockIcon} />
           <Text style={styles.title}>Ipasok ang iyong PIN</Text>
           <Text style={styles.subtitle}>4-digit na PIN para makapasok agad</Text>
 

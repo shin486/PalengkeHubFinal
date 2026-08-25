@@ -16,13 +16,10 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { supabase } from '../../../lib/supabase';
-import { uploadImageToStorage } from '../../utils/imageUpload';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
@@ -243,11 +240,10 @@ export default function VendorProfileScreen({ navigation }) {
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploadingStallImage, setUploadingStallImage] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
-
+  
   // Editable fields
   const [stallName, setStallName] = useState('');
   const [section, setSection] = useState('');
@@ -255,7 +251,7 @@ export default function VendorProfileScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
-
+  
   // UI states
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingField, setEditingField] = useState(null);
@@ -300,57 +296,12 @@ export default function VendorProfileScreen({ navigation }) {
     await fetchStall();
   };
 
-  const uploadStallImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant gallery permissions to add a stall photo');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-
-    if (result.canceled || !stall?.id) return;
-
-    setUploadingStallImage(true);
-    try {
-      const asset = result.assets[0];
-      const uri = asset.uri;
-
-      const { url: imageUrl } = await uploadImageToStorage({
-        uri,
-        folder: 'stalls',
-        mimeType: asset.mimeType,
-        fileAsset: asset.file, // Web only: real File/Blob
-      });
-
-      const { error } = await supabase
-        .from('stalls')
-        .update({ image_url: imageUrl })
-        .eq('id', stall.id);
-
-      if (error) throw error;
-
-      await fetchStall();
-      Alert.alert('Success', 'Stall photo updated!');
-    } catch (error) {
-      console.error('Error uploading stall image:', error);
-      Alert.alert('Error', 'Failed to upload stall photo. Please try again.');
-    } finally {
-      setUploadingStallImage(false);
-    }
-  };
-
   const handleLogout = async () => {
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
       const confirmLogout = window.confirm('Are you sure you want to logout?');
       if (!confirmLogout) return;
-      console.log('🔴 Vendor logging out (web)...');
+      console.log(' Vendor logging out (web)...');
       try {
         await supabase.auth.signOut();
       } catch (err) {
@@ -793,36 +744,6 @@ export default function VendorProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Stall Photo */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionHeaderLeft}>
-              <Ionicons name="image-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Stall Photo</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.stallPhotoContainer}
-            onPress={uploadStallImage}
-            disabled={uploadingStallImage}
-          >
-            {stall?.image_url ? (
-              <Image source={{ uri: stall.image_url }} style={styles.stallPhoto} resizeMode="cover" />
-            ) : (
-              <View style={styles.stallPhotoPlaceholder}>
-                <Ionicons name="storefront-outline" size={40} color={COLORS.primary} />
-                <Text style={styles.stallPhotoHint}>Tap to add a photo of your stall</Text>
-              </View>
-            )}
-            {uploadingStallImage && (
-              <View style={styles.stallPhotoOverlay}>
-                <ActivityIndicator size="large" color="#FFF" />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
         {/* ============================================================
             ACCOUNT MENU
         ============================================================ */}
@@ -1097,37 +1018,6 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  // ── Stall Photo ──
-  stallPhotoContainer: {
-    marginTop: SPACING.md,
-    borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-    height: 160,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-  },
-  stallPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  stallPhotoPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  stallPhotoHint: {
-    fontSize: 13,
-    color: COLORS.text.light,
-  },
-  stallPhotoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ── Spacer ──
 
   // ── Spacer ──
   bottomSpacer: {
@@ -1360,6 +1250,5 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.light,
     marginTop: 8,
     textAlign: 'center',
-    },
+  },
 });
-

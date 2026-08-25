@@ -24,7 +24,7 @@ export const AdminHeader = ({ title, onRefresh, refreshing, onToggleSidebar, isW
       <View style={styles.headerLeft}>
         {!isWeb && (
           <TouchableOpacity onPress={onToggleSidebar} style={styles.menuButton}>
-            <Ionicons name="menu" size={24} color="#FFFFFF" />
+            <Ionicons name="menu" size={22} color="white" />
           </TouchableOpacity>
         )}
         <Text style={styles.headerTitle}>{title}</Text>
@@ -34,7 +34,7 @@ export const AdminHeader = ({ title, onRefresh, refreshing, onToggleSidebar, isW
           {refreshing ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
+            <Ionicons name="refresh" size={20} color="white" />
           )}
         </TouchableOpacity>
       </View>

@@ -50,7 +50,7 @@ export default function Footer() {
         </div>
         <div className="footer-bottom">
           <span>© 2026 PalengkeHub. All rights reserved.</span>
-          <span>Made in the Philippines 🇵🇭</span>
+ <span>Made in the Philippines </span>
         </div>
       </div>
     </footer>

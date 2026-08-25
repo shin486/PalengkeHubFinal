@@ -28,12 +28,12 @@ export default function About() {
           </div>
           <div className="card-grid">
             <div className="card">
-              <div className="card-icon">🎯</div>
+ <div className="card-icon"></div>
               <h3>Our Vision</h3>
               <p>A fully digital public market ecosystem where every vendor thrives and every customer finds what they need.</p>
             </div>
             <div className="card">
-              <div className="card-icon">🤝</div>
+ <div className="card-icon"></div>
               <h3>Community First</h3>
               <p>We prioritize local vendors and the market community, ensuring that technology serves the people, not the other way around.</p>
             </div>

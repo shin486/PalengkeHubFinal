@@ -133,9 +133,9 @@ export default function StallDetailsScreen({ navigation, route }) {
   const [vendorAvatarError, setVendorAvatarError] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // ✅ HIDE THE GLOBAL HEADER
+  //  HIDE THE GLOBAL HEADER
   useEffect(() => {
-    console.log('📱 StallDetailsScreen mounted - hiding header');
+    console.log(' StallDetailsScreen mounted - hiding header');
     if (global.setShowHeader) {
       global.setShowHeader(false);
     }
@@ -143,7 +143,7 @@ export default function StallDetailsScreen({ navigation, route }) {
       headerShown: false,
     });
     return () => {
-      console.log('📱 StallDetailsScreen unmounted - showing header');
+      console.log(' StallDetailsScreen unmounted - showing header');
       if (global.setShowHeader) {
         global.setShowHeader(true);
       }
@@ -408,7 +408,7 @@ export default function StallDetailsScreen({ navigation, route }) {
               </View>
             </View>
             
-            {/* ✅ Rating on the Right Side - Clickable */}
+            {/*  Rating on the Right Side - Clickable */}
             <TouchableOpacity 
               style={styles.infoStripRight}
               onPress={goToReviews}
@@ -419,7 +419,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                   <StarRating rating={displayRating} size={14} />
                   <Text style={styles.infoStripRatingText}>{displayRating.toFixed(1)}</Text>
                 </View>
-                {/* ✅ Underline BELOW the number (3.4) - aligned to the right */}
+                {/*  Underline BELOW the number (3.4) - aligned to the right */}
                 <View style={styles.infoStripRatingUnderline} />
                 <Text style={styles.infoStripReviewCount}>{ratingCount} reviews</Text>
               </View>

@@ -28,7 +28,6 @@ import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
-import { FadeInUp } from '../../utils/animations';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.44;
@@ -236,7 +235,7 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
             />
           ) : (
             <View style={styles.stallImagePlaceholder}>
-              <Image source={require('../../assets/palengkehublogo.jpg')} style={{ width: 44, height: 44, borderRadius: 8, opacity: 0.7 }} resizeMode="contain" />
+              <Ionicons name="storefront-outline" size={30} color="#D1D5DB" />
             </View>
           )}
           {isClosed && (
@@ -614,7 +613,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
   }, [user]);
 
-  // ✅ Fixed: Only fetch once using ref to prevent infinite loop
+  //  Fixed: Only fetch once using ref to prevent infinite loop
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
@@ -721,8 +720,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={true} />
       
-      {/* ✅ Search Header with Notification Bell */}
-      <FadeInUp duration={320}>
+      {/*  Search Header with Notification Bell */}
       <LinearGradient
         colors={[colors.primary, colors.primaryLight]}
         start={{ x: 0, y: 0 }}
@@ -746,7 +744,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
 
-            {/* ✅ Notification Bell */}
+            {/*  Notification Bell */}
             <TouchableOpacity 
               style={styles.notificationButton}
               onPress={() => navigation.navigate('Notifications')}
@@ -764,9 +762,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           </View>
         </View>
       </LinearGradient>
-      </FadeInUp>
 
-      <FadeInUp delay={80} duration={360} style={{ flex: 1 }}>
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -837,7 +833,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Recently Viewed</Text>
+                <Text style={styles.sectionTitle}> Recently Viewed</Text>
                 <Text style={styles.sectionSubtitle}>Pick up where you left off</Text>
               </View>
             </View>
@@ -945,7 +941,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>{t('home.top_rated_stalls')}</Text>
+                <Text style={styles.sectionTitle}> {t('home.top_rated_stalls')}</Text>
                 <Text style={styles.sectionSubtitle}>{t('home.top_rated_subtitle')}</Text>
               </View>
             </View>
@@ -1023,7 +1019,6 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-      </FadeInUp>
 
       {/* Add-to-Cart Toast */}
       {toastVisible && (
