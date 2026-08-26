@@ -87,8 +87,10 @@ export default function VendorNotificationsScreen({ navigation }) {
         supabase
           .from('announcements')
           .select('*')
-          .in('audience', ['vendors', 'both'])
-          .gte('expires_at', new Date().toISOString())
+          // Live schema: target_audience is text[]; match rows tagged for vendors
+          .contains('target_audience', ['vendors'])
+          // Null expiry = still active (older rows were created without one)
+          .or(`expires_at.is.null,expires_at.gte.${new Date().toISOString()}`)
           .order('created_at', { ascending: false })
           .limit(50),
       ]);

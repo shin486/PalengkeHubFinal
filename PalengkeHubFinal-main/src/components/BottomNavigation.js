@@ -10,8 +10,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors } from '../contexts/ThemeContext';
+import { useColors, useTheme } from '../contexts/ThemeContext';
+import { hapticSelection } from '../theme/motion';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +46,7 @@ export default function BottomNavigation({
 }) {
   const insets = useSafeAreaInsets();
   const COLORS = useColors();
+  const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
   
@@ -105,6 +108,8 @@ export default function BottomNavigation({
 
   // Handle tab press with animation
   const handlePress = (route, index) => {
+    hapticSelection();
+
     const event = navigation.emit({
       type: 'tabPress',
       target: route.key,
@@ -181,9 +186,21 @@ export default function BottomNavigation({
         { 
           paddingBottom: insets.bottom || SPACING.sm,
           transform: [{ translateY: translateY }],
+          backgroundColor: isDark
+            ? 'rgba(26, 26, 46, 0.82)'
+            : 'rgba(255, 255, 255, 0.85)',
+          borderTopColor: isDark
+            ? 'rgba(255, 255, 255, 0.12)'
+            : 'rgba(255, 255, 255, 0.65)',
         }
       ]}
     >
+      <BlurView
+        intensity={isDark ? 50 : 40}
+        tint={isDark ? 'dark' : 'light'}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View style={styles.navBar}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;

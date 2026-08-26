@@ -1200,6 +1200,24 @@
   transition: all var(--transition-smooth);
 }
 
+.chat-attach-btn {
+  flex: 0 0 auto !important;
+  min-width: 46px;
+  padding: 8px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  border-radius: var(--admin-radius);
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+}
+
+.chat-attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .chat-input-bar input:focus {
   outline: none;
   border-color: var(--admin-primary);

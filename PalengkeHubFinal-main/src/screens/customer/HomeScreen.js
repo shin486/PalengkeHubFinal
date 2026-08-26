@@ -20,12 +20,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
+import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useI18n } from '../../contexts/i18nContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
+import { hapticLight, hapticMedium } from '../../theme/motion';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
 
@@ -138,7 +140,7 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 // PRODUCT CARD COMPONENT
 // ============================================================
-const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false, priceTrend }) => {
+const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false, priceTrend, isFavorite = false, onToggleFavorite }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
@@ -166,6 +168,20 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPro
           <View style={styles.discountBadge}>
             <Text style={styles.discountBadgeText}>{discountText}</Text>
           </View>
+        )}
+        {onToggleFavorite && (
+          <TouchableOpacity
+            style={styles.favHeartBtn}
+            onPress={onToggleFavorite}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={16}
+              color={isFavorite ? colors.primary : '#FFFFFF'}
+            />
+          </TouchableOpacity>
         )}
       </View>
 
@@ -329,6 +345,10 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [priceDropItems, setPriceDropItems] = useState([]);
   const [priceTrends, setPriceTrends] = useState(new Map());
   const [topRatedStalls, setTopRatedStalls] = useState([]);
+  const { isProductFavorite, toggleProductFavorite } = useFavorites();
+  const [homeAnnouncement, setHomeAnnouncement] = useState(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showAllBuyAgain, setShowAllBuyAgain] = useState(false);
 
   const loadPriceTrends = async (products) => {
     const ids = (products || []).map(p => p.id).filter(Boolean);
@@ -613,11 +633,29 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
   }, [user]);
 
+  // ── Latest customer-facing announcement for the home banner ──
+  const fetchHomeAnnouncement = useCallback(async () => {
+    try {
+      const nowIso = new Date().toISOString();
+      const { data } = await supabase
+        .from('announcements')
+        .select('id, title, content, created_at')
+        .contains('target_audience', ['customers'])
+        .or(`expires_at.is.null,expires_at.gte.${nowIso}`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      setHomeAnnouncement(data?.[0] || null);
+    } catch (e) {
+      console.warn('Error loading home announcement:', e?.message);
+    }
+  }, []);
+
   //  Fixed: Only fetch once using ref to prevent infinite loop
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
       fetchData();
+      fetchHomeAnnouncement();
       if (user && !isGuest) {
         fetchRecentOrders();
         fetchPriceDrops();
@@ -646,7 +684,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     if (product && stall) {
       addToCart(product, stall.id, stall, 1);
       // Haptic feedback + animated toast
-      Vibration.vibrate(50);
+      hapticMedium();
       showToast(`${product.name} added to cart`);
     }
   };
@@ -680,7 +718,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     if (product && stall) {
       addToCart(product, stall.id, stall, item.quantity);
       // Haptic feedback + animated toast
-      Vibration.vibrate(50);
+      hapticMedium();
       showToast(`${item.quantity}× ${item.name} added to cart`);
     }
   };
@@ -688,6 +726,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+    fetchHomeAnnouncement();
     if (user && !isGuest) {
       fetchRecentOrders();
       fetchPriceDrops();
@@ -776,6 +815,33 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         }
       >
         {/* ============================================================
+            ANNOUNCEMENT BANNER — latest customer announcement
+        ============================================================ */}
+        {homeAnnouncement && !bannerDismissed && (
+          <View style={styles.announcementBanner}>
+            <View style={styles.announcementBannerIcon}>
+              <Ionicons name="megaphone" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.announcementBannerBody}>
+              <Text style={styles.announcementBannerTitle} numberOfLines={1}>
+                {homeAnnouncement.title}
+              </Text>
+              <Text style={styles.announcementBannerText} numberOfLines={2}>
+                {homeAnnouncement.content}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.announcementBannerClose}
+              onPress={() => { hapticLight(); setBannerDismissed(true); }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={16} color={colors.text.lighter} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ============================================================
             TODAY'S DEALS
         ============================================================ */}
         <View style={styles.section}>
@@ -819,6 +885,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     priceTrend={priceTrends.get(product.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                     onAddToCart={() => handleAddToCart({ ...product, price: promo.discounted_price }, stall)}
+                    isFavorite={product?.id ? isProductFavorite(product.id) : false}
+                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(product); }}
                   />
                 );
               })}
@@ -874,32 +942,56 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 <Text style={styles.sectionTitle}>{t('home.buy_again')}</Text>
                 <Text style={styles.sectionSubtitle}>{t('home.recent_favorites')}</Text>
               </View>
-              <TouchableOpacity onPress={() => navigation.navigate('Orders')}>
+              <TouchableOpacity onPress={() => setShowAllBuyAgain(v => !v)}>
                 <Text style={styles.sectionLink}>{t('home.see_all')}</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={styles.horizontalListWithMargin}
-            >
-              {recentOrderItems.map(item => (
-                <ProductCard
-                  key={item.id}
-                  product={item}
-                  stall={item.stall}
-                  discountText={item.hasPromotion ? 
-                    (item.promotion?.discount_type === 'percentage' 
-                      ? `${item.promotion.discount_value}% OFF` 
-                      : `₱${item.promotion.discount_value} OFF`) 
-                    : null}
-                  priceTrend={priceTrends.get(item.id)}
-                  onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
-                  onAddToCart={() => handleOrderAgain(item)}
-                />
-              ))}
-            </ScrollView>
+            {showAllBuyAgain ? (
+              <View style={styles.buyAgainGrid}>
+                {recentOrderItems.map(item => (
+                  <ProductCard
+                    key={item.id}
+                    product={item}
+                    stall={item.stall}
+                    discountText={item.hasPromotion ? 
+                      (item.promotion?.discount_type === 'percentage' 
+                        ? `${item.promotion.discount_value}% OFF` 
+                        : `₱${item.promotion.discount_value} OFF`) 
+                      : null}
+                    priceTrend={priceTrends.get(item.id)}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+                    onAddToCart={() => handleOrderAgain(item)}
+                    isFavorite={isProductFavorite(item.id)}
+                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(item); }}
+                  />
+                ))}
+              </View>
+            ) : (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={styles.horizontalListWithMargin}
+              >
+                {recentOrderItems.map(item => (
+                  <ProductCard
+                    key={item.id}
+                    product={item}
+                    stall={item.stall}
+                    discountText={item.hasPromotion ? 
+                      (item.promotion?.discount_type === 'percentage' 
+                        ? `${item.promotion.discount_value}% OFF` 
+                        : `₱${item.promotion.discount_value} OFF`) 
+                      : null}
+                    priceTrend={priceTrends.get(item.id)}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+                    onAddToCart={() => handleOrderAgain(item)}
+                    isFavorite={isProductFavorite(item.id)}
+                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(item); }}
+                  />
+                ))}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -1189,6 +1281,50 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl,
   },
+  announcementBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  announcementBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  announcementBannerBody: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  announcementBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  announcementBannerText: {
+    fontSize: 12.5,
+    color: colors.text.secondary,
+    lineHeight: 17,
+  },
+  announcementBannerClose: {
+    padding: SPACING.xs,
+  },
+  buyAgainGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+  },
   lastSection: {
     paddingBottom: 80,
   },
@@ -1247,11 +1383,24 @@ const createStyles = (colors) => StyleSheet.create({
     padding: SPACING.md,
     height: 100,
   },
+  favHeartBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   productImage: {
     width: '100%',
     height: 80,
     borderRadius: RADIUS.sm,
     backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   productImagePlaceholder: {
     height: 80,

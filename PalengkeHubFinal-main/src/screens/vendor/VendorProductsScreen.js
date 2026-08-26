@@ -16,6 +16,7 @@ import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { useVendorProducts } from '../../hooks/useVendorProducts';
 import { ModernProductCard } from '../../components/vendor/ModernProductCard';
 import { AddProductModal } from '../../components/vendor/AddProductModal';
@@ -61,6 +62,7 @@ const checkStock = (product) => {
 
 export default function VendorProductsScreen({ navigation }) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
@@ -175,14 +177,14 @@ export default function VendorProductsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Header title="Products" subtitle={stall?.stall_name || 'Manage your inventory'} />
+      <Header title={t('vendor.products_title')} subtitle={stall?.stall_name || t('vendor.manage_inventory')} />
 
       {/* Stats Overview - No Emojis */}
       <View style={styles.statsRow}>
         {['total', 'available', 'lowStock', 'outOfStock'].map((key) => {
           const config = getStatConfig(key);
           const value = stats[key] || 0;
-          const label = key === 'total' ? 'Total' : key === 'available' ? 'Available' : key === 'lowStock' ? 'Low Stock' : 'Out of Stock';
+          const label = key === 'total' ? t('vendor.stat_total') : key === 'available' ? t('vendor.filter_available') : key === 'lowStock' ? t('vendor.filter_low_stock') : t('vendor.filter_out_of_stock');
           
           return (
             <View key={key} style={styles.statCard}>
@@ -212,7 +214,7 @@ export default function VendorProductsScreen({ navigation }) {
               >
                 <Ionicons name={filter.icon} size={14} color={iconColor} />
                 <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                  {filter.label}
+                  {t(`vendor.filter_${filter.key}`)}
                 </Text>
               </TouchableOpacity>
             );
@@ -228,7 +230,7 @@ export default function VendorProductsScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Add New Product</Text>
+          <Text style={styles.addButtonText}>{t('vendor.add_new_product')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -237,7 +239,7 @@ export default function VendorProductsScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <Ionicons name="pricetag-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.promotionsButtonText}>Special Prices</Text>
+          <Text style={styles.promotionsButtonText}>{t('vendor.special_prices')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -249,10 +251,10 @@ export default function VendorProductsScreen({ navigation }) {
           <View style={styles.emptyIconContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.emptyTitle}>Failed to load products</Text>
+          <Text style={styles.emptyTitle}>{t('vendor.failed_to_load')}</Text>
           <Text style={styles.emptyText}>{productsError}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={refreshProducts}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('common.try_again')}</Text>
           </TouchableOpacity>
         </View>
       ) : filteredProducts.length === 0 ? (
@@ -261,16 +263,16 @@ export default function VendorProductsScreen({ navigation }) {
             <Ionicons name="cube-outline" size={48} color={COLORS.text.lighter} />
           </View>
           <Text style={styles.emptyTitle}>
-            {products.length === 0 ? 'No products yet' : `No ${activeFilter.replace('_', ' ')} products`}
+            {products.length === 0 ? t('vendor.no_products') : t(`vendor.filter_${activeFilter}`)}
           </Text>
           <Text style={styles.emptyText}>
             {products.length === 0
-              ? 'Tap "Add New Product" to start selling'
-              : 'No products match this filter'}
+              ? t('vendor.start_selling')
+              : t('vendor.no_match_filter')}
           </Text>
           {products.length === 0 && (
             <TouchableOpacity style={styles.emptyAddButton} onPress={() => setShowAddModal(true)}>
-              <Text style={styles.emptyAddButtonText}>Add Product</Text>
+              <Text style={styles.emptyAddButtonText}>{t('vendor.add_product')}</Text>
             </TouchableOpacity>
           )}
         </View>

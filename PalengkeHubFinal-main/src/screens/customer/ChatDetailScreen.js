@@ -225,9 +225,13 @@ export default function ChatDetailScreen({ navigation, route }) {
         
         <View style={styles.headerInfo}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {chatPartnerName?.charAt(0)?.toUpperCase() || 'S'}
-            </Text>
+            {stall?.image_url ? (
+              <Image source={{ uri: stall.image_url }} style={styles.avatarImage} resizeMode="cover" />
+            ) : (
+              <Text style={styles.avatarText}>
+                {chatPartnerName?.charAt(0)?.toUpperCase() || 'S'}
+              </Text>
+            )}
           </View>
           <View style={styles.headerText}>
             <Text style={styles.vendorName} numberOfLines={1}>
@@ -410,6 +414,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: COLORS.text.inverse,
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   headerText: {
     marginLeft: 12,

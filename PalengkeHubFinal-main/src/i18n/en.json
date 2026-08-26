@@ -354,5 +354,23 @@
     "promotion": "Promotion",
     "chat": "Chat Message",
     "report_update": "Report Update"
+  },
+  "vendor": {
+    "products_title": "Products",
+    "manage_inventory": "Manage your inventory",
+    "filter_available": "Available",
+    "filter_hidden": "Hidden",
+    "filter_low_stock": "Low Stock",
+    "filter_out_of_stock": "Out of Stock",
+    "add_new_product": "Add New Product",
+    "special_prices": "Special Prices",
+    "failed_to_load": "Failed to load products",
+    "add_product": "Add Product",
+    "no_products": "No products yet",
+    "no_match_filter": "No products match this filter",
+    "stat_total": "Total",
+    "filter_all": "All",
+    "filter_unavailable": "Hidden",
+    "start_selling": "Tap \"Add New Product\" to start selling"
   }
 }

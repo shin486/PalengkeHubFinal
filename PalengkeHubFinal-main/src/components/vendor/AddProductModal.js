@@ -15,10 +15,18 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { getPriceSuggestion, classifyPrice } from '../../services/priceSuggestion';
 import axios from 'axios';
 
 //  USE THE SAME IMGBB API KEY as chatService
 const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
+
+// Price-suggestion hint colors by level
+const HINT_COLORS = {
+  high: '#DC2626',   // overpriced
+  low: '#D97706',    // underpriced (amber — could be intentional)
+  fair: '#10B981',   // competitive
+};
 
 // Available unit options with labels
 const UNIT_OPTIONS = [
@@ -57,6 +65,25 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   
   // Unit prices for different options
   const [unitPrices, setUnitPrices] = useState({});
+  
+  // Price suggestion (market-rate guidance)
+  const [priceSuggestion, setPriceSuggestion] = useState(null);
+
+  // Debounced market lookup when the product name changes
+  useEffect(() => {
+    const name = formData.name;
+    if (!name || name.trim().length < 3) {
+      setPriceSuggestion(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const s = await getPriceSuggestion(name);
+      setPriceSuggestion(s);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [formData.name]);
+
+  const priceHint = classifyPrice(formData.price, priceSuggestion);
   
   // Selected units to offer
   const [selectedUnits, setSelectedUnits] = useState(['kg', '500g', '250g']);
@@ -359,6 +386,33 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               </View>
             )}
 
+            {/* Market price suggestion */}
+            {selectedUnits.includes('kg') && priceSuggestion && (
+              <View
+                style={[
+                  styles.priceHint,
+                  priceHint?.level === 'high' && styles.priceHintHigh,
+                  priceHint?.level === 'low' && styles.priceHintLow,
+                  priceHint?.level === 'fair' && styles.priceHintFair,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    priceHint?.level === 'high' ? 'trending-up'
+                      : priceHint?.level === 'low' ? 'trending-down'
+                        : 'checkmark-circle-outline'
+                  }
+                  size={15}
+                  color={priceHint ? HINT_COLORS[priceHint.level] : '#6B7280'}
+                />
+                <Text style={styles.priceHintText}>
+                  {priceSuggestion.count} stall{priceSuggestion.count !== 1 ? 's' : ''} sell{' '}
+                  {formData.name.trim()} — range ₱{priceSuggestion.min.toFixed(0)}–₱{priceSuggestion.max.toFixed(2)}, avg ₱{priceSuggestion.avg.toFixed(2)}
+                  {priceHint ? ` · Yours: ${priceHint.label}` : ''}
+                </Text>
+              </View>
+            )}
+
             {selectedUnits.includes('500g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
@@ -454,6 +508,31 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
     marginTop: 4,
+  },
+  priceHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -2,
+    marginBottom: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  priceHintHigh: {
+    backgroundColor: '#FEF2F2',
+  },
+  priceHintLow: {
+    backgroundColor: '#FFFBEB',
+  },
+  priceHintFair: {
+    backgroundColor: '#ECFDF5',
+  },
+  priceHintText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: '#4B5563',
+    lineHeight: 15,
   },
   subLabel: {
     fontSize: 12,

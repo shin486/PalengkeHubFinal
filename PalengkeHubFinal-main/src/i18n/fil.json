@@ -354,5 +354,23 @@
     "promotion": "Promosyon",
     "chat": "Mensahe sa Chat",
     "report_update": "Update sa Report"
+  },
+  "vendor": {
+    "products_title": "Mga Produkto",
+    "manage_inventory": "Pamahalaan ang imbentaryo",
+    "filter_available": "Magagamit",
+    "filter_hidden": "Nakatago",
+    "filter_low_stock": "Mababang Stock",
+    "filter_out_of_stock": "Wala sa Stock",
+    "add_new_product": "Magdagdag ng Bagong Produkto",
+    "special_prices": "Espesyal na Presyo",
+    "failed_to_load": "Hindi ma-load ang mga produkto",
+    "add_product": "Magdagdag ng Produkto",
+    "no_products": "Wala pang produkto",
+    "no_match_filter": "Walang produktong tugma sa filter",
+    "stat_total": "Kabuuan",
+    "filter_all": "Lahat",
+    "filter_unavailable": "Nakatago",
+    "start_selling": "I-tap ang \"Magdagdag ng Bagong Produkto\" para magsimulang magbenta"
   }
 }

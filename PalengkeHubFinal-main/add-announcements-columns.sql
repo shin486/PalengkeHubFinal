@@ -1,0 +1,23 @@
+-- ============================================================
+-- announcements table — CURRENT LIVE SCHEMA REFERENCE
+-- ============================================================
+-- Verified live via API on 2026-08-26:
+--   id              (int/serial PK)
+--   title           text
+--   content         text
+--   target_audience text[]          e.g. {all}, {vendors}, {customers}
+--   priority        text            default 'normal'
+--   created_by      uuid -> auth.users
+--   expires_at      timestamptz     NULL = no expiry
+--   created_at      timestamptz
+--
+-- All three apps (web admin / mobile admin / vendor notifications)
+-- have been aligned to this schema in code — NO migration is needed.
+--
+-- This file is kept ONLY if you later want promotion support:
+-- ============================================================
+
+-- Optional future upgrade: promotion fields
+-- ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS is_promotion   boolean NOT NULL DEFAULT false;
+-- ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS promotion_type text;
+-- NOTIFY pgrst, 'reload schema';

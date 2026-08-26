@@ -33,7 +33,36 @@ export default function NotificationScreen({ navigation }) {
     try {
       setLoading(true);
       const data = await notificationService.getNotifications(user.id);
-      setNotifications(data || []);
+      
+      // Announcements targeted at customers.
+      // Live schema: target_audience is text[]; null expires_at = still active.
+      let announcementItems = [];
+      try {
+        const nowIso = new Date().toISOString();
+        const { data: anns } = await supabase
+          .from('announcements')
+          .select('*')
+          .contains('target_audience', ['customers'])
+          .or(`expires_at.is.null,expires_at.gte.${nowIso}`)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        announcementItems = (anns || []).map(ann => ({
+          id: `ann-${ann.id}`,
+          title: ann.title,
+          message: ann.content,
+          type: 'announcement',
+          is_read: false,
+          created_at: ann.created_at,
+          is_announcement: true,
+        }));
+      } catch (annError) {
+        console.warn('Error loading announcements:', annError?.message);
+      }
+
+      const all = [...announcementItems, ...(data || [])].sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
+      setNotifications(all);
       
       const count = await notificationService.getUnreadCount(user.id);
       setUnreadCount(count);
@@ -76,13 +105,18 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handleMarkAsRead = async (notificationId) => {
-    await notificationService.markAsRead(notificationId);
+    // Announcements aren't per-user rows — mark locally only
+    if (!String(notificationId).startsWith('ann-')) {
+      await notificationService.markAsRead(notificationId);
+    }
     setNotifications(prev =>
       prev.map(notif =>
         notif.id === notificationId ? { ...notif, is_read: true } : notif
       )
     );
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    if (!String(notificationId).startsWith('ann-')) {
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    }
   };
 
   const handleMarkAllAsRead = async () => {
@@ -107,7 +141,12 @@ export default function NotificationScreen({ navigation }) {
     );
   };
 
-  const handleDelete = async (notificationId) => {
+  const handleDelete = async (notification) => {
+    // Announcements are global — just remove locally for this user
+    if (notification.is_announcement) {
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      return;
+    }
     Alert.alert(
       'Delete Notification',
       'Are you sure you want to delete this notification?',
@@ -117,8 +156,8 @@ export default function NotificationScreen({ navigation }) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await notificationService.deleteNotification(notificationId);
-            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+            await notificationService.deleteNotification(notification.id);
+            setNotifications(prev => prev.filter(n => n.id !== notification.id));
           },
         },
       ]
@@ -126,6 +165,11 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handleNotificationPress = (notification) => {
+    // Announcements are read-only broadcasts — no deep navigation
+    if (notification.is_announcement) {
+      handleMarkAsRead(notification.id);
+      return;
+    }
     if (!notification.is_read) {
       handleMarkAsRead(notification.id);
     }
@@ -185,7 +229,11 @@ export default function NotificationScreen({ navigation }) {
         activeOpacity={0.7}
       >
         <View style={[styles.notificationIcon, isCancellation && styles.cancellationIcon]}>
-          <Text style={styles.iconText}>{getIconForType(item.type, item.title, item.message)}</Text>
+          <Ionicons
+            name={getIconForType(item.type, item.title, item.message)}
+            size={24}
+            color={isCancellation ? COLORS.error : COLORS.primary}
+          />
         </View>
         <View style={styles.notificationContent}>
           <Text style={[styles.notificationTitle, !item.is_read && styles.unreadText]}>
@@ -196,12 +244,14 @@ export default function NotificationScreen({ navigation }) {
           </Text>
           <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDelete(item.id)}
-        >
-          <Ionicons name="trash-outline" size={18} />
-        </TouchableOpacity>
+        {!item.is_announcement && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDelete(item)}
+          >
+            <Ionicons name="trash-outline" size={18} color={COLORS.text.lighter} />
+          </TouchableOpacity>
+        )}
         {!item.is_read && <View style={styles.unreadDot} />}
       </TouchableOpacity>
     );

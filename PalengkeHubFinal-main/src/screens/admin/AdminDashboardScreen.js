@@ -2313,8 +2313,12 @@ export default function AdminDashboardScreen({ navigation }) {
       title: announcementTitle,
       content: announcementContent,
       created_by: user.id,
-      audience: announcementAudience,
-      duration_hours: parseInt(announcementDuration),
+      // Live schema: target_audience is a text[] array.
+      // Normalize mobile label 'consumers' → 'customers' to match web tags.
+      target_audience: announcementAudience === 'both'
+        ? ['vendors', 'customers']
+        : [announcementAudience === 'consumers' ? 'customers' : announcementAudience],
+      priority: 'normal',
       expires_at: expiryDate.toISOString(),
     });
     setAnnouncementModal(false);

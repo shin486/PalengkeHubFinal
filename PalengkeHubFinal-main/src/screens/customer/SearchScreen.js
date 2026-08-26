@@ -24,6 +24,9 @@ import { startListening, stopListening, isVoiceInputSupported } from '../../serv
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
 import { useI18n } from '../../contexts/i18nContext';
+import { useCart } from '../../hooks/useCart';
+import { useAuth } from '../../contexts/AuthContext';
+import { MOTION, hapticSelection, hapticMedium } from '../../theme/motion';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
@@ -194,6 +197,94 @@ const StarRating = ({ rating, size = 12 }) => {
   );
 };
 
+// ── Animated quantity stepper (C1) ──────────────────────────────────────────
+// Spring-pulses the count on every change; haptics handled by parent.
+function QuantityStepper({ value, onChange }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const C = useColors();
+  const styles = useMemo(() => createQtyStyles(C), [C]);
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.2, ...MOTION.spring.bouncy }),
+      Animated.spring(scale, { toValue: 1, ...MOTION.spring.snappy }),
+    ]).start();
+  }, [value]);
+
+  const press = (delta) => {
+    if (value + delta < 1) return;
+    onChange(delta);
+  };
+
+  return (
+    <View style={styles.wrap}>
+      <TouchableOpacity
+        style={[styles.btn, value <= 1 && styles.btnDisabled]}
+        onPress={() => press(-1)}
+        activeOpacity={0.7}
+        disabled={value <= 1}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
+        <Ionicons name="remove" size={14} color={value <= 1 ? COLORS_FALLBACK.disabled : C.text.secondary} />
+      </TouchableOpacity>
+      <Animated.Text style={[styles.count, { transform: [{ scale }] }]}>
+        {value}
+      </Animated.Text>
+      <TouchableOpacity
+        style={styles.btnInc}
+        onPress={() => press(+1)}
+        activeOpacity={0.7}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
+        <Ionicons name="add" size={14} color="#FFFFFF" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Neutral tokens for the stepper (theme-independent micro control)
+const COLORS_FALLBACK = {
+  disabled: '#D1D5DB',
+};
+
+const createQtyStyles = (C) => StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  btn: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  btnInc: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  count: {
+    minWidth: 24,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.text.primary,
+    marginHorizontal: 4,
+  },
+});
+
 export default function SearchScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
@@ -201,6 +292,18 @@ export default function SearchScreen({ navigation }) {
   const [isListening, setIsListening] = useState(false);
   const [priceTrends, setPriceTrends] = useState(new Map());
   const { t } = useI18n();
+  const { addToCart } = useCart();
+  const { user } = useAuth();
+  const [quantities, setQuantities] = useState({});
+  const [addedProductId, setAddedProductId] = useState(null);
+
+  const changeQty = (productId, delta) => {
+    hapticSelection();
+    setQuantities(prev => ({
+      ...prev,
+      [productId]: Math.max(1, (prev[productId] || 1) + delta),
+    }));
+  };
 
   // Stop any active voice session when leaving the screen
   useEffect(() => () => { stopListening(); }, []);
@@ -601,18 +704,20 @@ export default function SearchScreen({ navigation }) {
     setTimeout(() => performSearch(), 100);
   };
 
-  const addToCartFromComparison = async (product, stall) => {
-    Alert.alert(
-      'Add to Cart',
-      `Add ${product.name} to cart from ${stall?.stall_name}?`,
-      [
+  const addToCartFromComparison = (product, stall, qty) => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to add items to cart', [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'View Product',
-          onPress: () => navigation.navigate('ProductDetails', { productId: product.id })
-        }
-      ]
-    );
+        { text: 'Login', onPress: () => navigation.navigate('Login') },
+      ]);
+      return;
+    }
+    addToCart(product, stall.id, stall, qty || 1);
+    hapticMedium();
+    setAddedProductId(product.id);
+    setTimeout(() => {
+      setAddedProductId(prev => (prev === product.id ? null : prev));
+    }, 1400);
   };
 
   const renderProductComparisonItem = ({ item }) => {
@@ -688,11 +793,23 @@ export default function SearchScreen({ navigation }) {
               </View>
             )}
           </View>
+          <QuantityStepper
+            value={quantities[product.id] || 1}
+            onChange={(delta) => changeQty(product.id, delta)}
+          />
           <TouchableOpacity
-            style={styles.addToCartButton}
-            onPress={() => addToCartFromComparison(product, stall)}
+            style={[
+              styles.addToCartButton,
+              addedProductId === product.id && styles.addToCartButtonAdded,
+            ]}
+            onPress={() => addToCartFromComparison(product, stall, quantities[product.id] || 1)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Ionicons
+              name={addedProductId === product.id ? 'checkmark' : 'add'}
+              size={16}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -1411,5 +1528,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 2,
+  },
+  addToCartButtonAdded: {
+    backgroundColor: COLORS.success,
   },
 });

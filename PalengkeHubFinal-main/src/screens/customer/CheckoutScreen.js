@@ -1,4 +1,6 @@
-import { useColors } from '../../contexts/ThemeContext';
+import { useColors, useTheme } from '../../contexts/ThemeContext';
+import { BlurView } from 'expo-blur';
+import { hapticMedium, hapticSuccess } from '../../theme/motion';
 // src/screens/customer/CheckoutScreen.js
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -92,6 +94,7 @@ const RADIUS = {
 
 export default function CheckoutScreen({ navigation, route }) {
   const COLORS = useColors();
+  const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { cart: hookCart, cartTotal: hookTotal, clearCart } = useCart();
@@ -267,6 +270,7 @@ const handleGcashModalClose = () => {
   };
 
   const placeOrder = async () => {
+    hapticMedium();
     setLoading(true);
     try {
       const groupedOrders = groupByStall();
@@ -497,66 +501,73 @@ const handleGcashModalClose = () => {
   setGcashScanError(null);
  setGcashScanStatus(' Scanning receipt…');
   try {
-    // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
+    // 1) Scan the receipt with OCR — best effort. A failed or imperfect scan
+    //    no longer blocks payment: vendors verify submissions manually anyway.
     let scan = null;
+    let scanFailed = false;
     try {
       scan = await scanReceipt(payment.receiptUri);
     } catch (scanError) {
       console.error('Receipt scan failed:', scanError);
-      setGcashScanError('We could not scan your receipt. Please check your internet connection and try again, or retake a clearer photo.');
-      Alert.alert(
-        'Receipt Scan Unavailable',
-        'We could not scan your receipt. Please check your internet connection and try again.\n\nIf the problem continues, retake a clearer photo of the receipt.'
-      );
-      return;
+      scanFailed = true;
     }
 
-    // 2) Reference / amount / timestamp cross-checks
-    const oldestAllowed = new Date(Date.now() - 20 * 60 * 1000);
-    const validation = validateReceiptScan({
-      typedReference: referenceDigits,
-      scan,
-      expectedAmount: payment.total || 0,
-      oldestAllowedTime: oldestAllowed,
-    });
+    // 2) Reference / amount / timestamp cross-checks (when we have a scan)
+    let softIssue = null;
+    if (!scanFailed) {
+      const oldestAllowed = new Date(Date.now() - 20 * 60 * 1000);
+      const validation = validateReceiptScan({
+        typedReference: referenceDigits,
+        scan,
+        expectedAmount: payment.total || 0,
+        oldestAllowedTime: oldestAllowed,
+      });
 
-    if (!validation.refMatched) {
-      const found = validation.clueReferences.length
-        ? validation.clueReferences.join(', ')
-        : validation.digitCandidates.length
-          ? validation.digitCandidates.join(', ')
-          : 'no number sequence found';
-      setGcashScanError(`We scanned your receipt and could not find the reference number you typed.\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`);
-      Alert.alert(
-        'Reference Number Not Found on Receipt',
-        `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}\n\nPlease fix your reference number or upload a clearer photo of the correct receipt.`
-      );
-      return;
-    }
-    if (!validation.amountMatched) {
-      const amountReason = validation.amounts.length === 0
-        ? `We could not find the total amount on your receipt. Please upload a clearer photo that shows the amount sent (should be ₱${(payment.total || 0).toFixed(2)}).`
-        : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match this vendor's total (₱${(payment.total || 0).toFixed(2)}).`;
-      setGcashScanError(amountReason);
-      Alert.alert(
-        'Receipt Amount Problem',
-        `${amountReason}\n\nPlease upload the receipt for THIS payment.`
-      );
-      return;
-    }
-    if (!validation.timeOk) {
-      setGcashScanError(
-        validation.timeProblem === 'future'
+      if (!validation.refMatched) {
+        const found = validation.clueReferences.length
+          ? validation.clueReferences.join(', ')
+          : validation.digitCandidates.length
+            ? validation.digitCandidates.join(', ')
+            : 'no number sequence found';
+        const body = `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`;
+        setGcashScanError(`Reference number not found on receipt. You typed: ${referenceDigits}. Found: ${found}`);
+        softIssue = { title: 'Reference Number Not Found on Receipt', body };
+      } else if (!validation.amountMatched) {
+        const body = validation.amounts.length === 0
+          ? `We could not find the total amount on your receipt (should be ₱${(payment.total || 0).toFixed(2)}).`
+          : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match this vendor's total (₱${(payment.total || 0).toFixed(2)}).`;
+        setGcashScanError(body);
+        softIssue = { title: 'Receipt Amount Problem', body };
+      } else if (!validation.timeOk) {
+        const body = validation.timeProblem === 'future'
           ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-          : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
-      );
-      Alert.alert(
-        validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
-        validation.timeProblem === 'future'
-          ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-          : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
-      );
-      return;
+          : 'The date/time on this receipt is older than 20 minutes. Please upload the receipt for THIS payment.';
+        setGcashScanError(body);
+        softIssue = {
+          title: validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
+          body,
+        };
+      }
+    }
+
+    // 3) Soft failures get a manual-verification escape hatch instead of a dead end
+    if (scanFailed || softIssue) {
+      const title = scanFailed ? 'Receipt Scan Unavailable' : softIssue.title;
+      const body = scanFailed
+        ? 'We could not read your receipt automatically. Please check your internet connection or retake a clearer photo.'
+        : softIssue.body;
+
+      const proceed = await new Promise((resolve) => {
+        Alert.alert(
+          title,
+          `${body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`,
+          [
+            { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Submit Anyway', onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!proceed) return;
     }
 
  setGcashScanStatus(' Checking for duplicates…');
@@ -628,6 +639,7 @@ const handleGcashModalClose = () => {
     const allPaid = updatedPayments.every(p => p.isPaid);
     if (allPaid) {
       setAllPaymentsCompleted(true);
+      hapticSuccess();
       if (gcashTimerRef.current) clearInterval(gcashTimerRef.current);
       setTimeout(() => {
         setGcashModalVisible(false);
@@ -674,13 +686,45 @@ const handleGcashModalClose = () => {
     }
   };
 
+  // ── Pickup time validation: must be at least 15 min from now ──
+  const validateAndSetPickup = (candidate) => {
+    const minimum = new Date(Date.now() + 15 * 60 * 1000);
+    if (candidate.getTime() < minimum.getTime()) {
+      const bumped = new Date(Date.now() + 30 * 60 * 1000);
+      setPickupTime(bumped);
+      Alert.alert(
+        'Pickup Time Adjusted',
+        'Pickup must be at least 15 minutes from now. We set it to 30 minutes from now — feel free to change it.'
+      );
+      return;
+    }
+    setPickupTime(candidate);
+  };
+
+  // Web fallbacks — @react-native-community/datetimepicker has no web support
+  const handleWebDateChange = (dateStr) => {
+    if (!dateStr) return;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const next = new Date(pickupTime);
+    next.setFullYear(y, m - 1, d);
+    validateAndSetPickup(next);
+  };
+
+  const handleWebTimeChange = (timeStr) => {
+    if (!timeStr) return;
+    const [h, min] = timeStr.split(':').map(Number);
+    const next = new Date(pickupTime);
+    next.setHours(h, min, 0, 0);
+    validateAndSetPickup(next);
+  };
+
   const onDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
       const newDate = new Date(selectedDate);
       newDate.setHours(pickupTime.getHours());
       newDate.setMinutes(pickupTime.getMinutes());
-      setPickupTime(newDate);
+      validateAndSetPickup(newDate);
     }
   };
 
@@ -690,7 +734,7 @@ const handleGcashModalClose = () => {
       const newTime = new Date(pickupTime);
       newTime.setHours(selectedTime.getHours());
       newTime.setMinutes(selectedTime.getMinutes());
-      setPickupTime(newTime);
+      validateAndSetPickup(newTime);
     }
   };
 
@@ -717,6 +761,40 @@ const handleGcashModalClose = () => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Checkout</Text>
           <Text style={styles.headerSubtitle}>{cart.length} items • {Object.keys(groupedOrders).length} stall(s)</Text>
+        </View>
+
+        {/* Checkout Progress: Review → Payment → Pickup */}
+        <View style={styles.progressRow}>
+          {['Review', 'Payment', 'Pickup'].map((label, idx) => {
+            const done = idx === 0
+              ? cart.length > 0
+              : idx === 1 && allPaymentsCompleted;
+            const active = idx === 0
+              ? false
+              : idx === 1 ? !allPaymentsCompleted : false;
+            return (
+              <React.Fragment key={label}>
+                {idx > 0 && (
+                  <View style={[styles.progressConnector, done && styles.progressConnectorDone]} />
+                )}
+                <View style={styles.progressStep}>
+                  <View style={[
+                    styles.progressDot,
+                    done && styles.progressDotDone,
+                    active && styles.progressDotActive,
+                  ]}>
+                    {done && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                  </View>
+                  <Text style={[
+                    styles.progressLabel,
+                    (done || active) && styles.progressLabelActive,
+                  ]}>
+                    {label}
+                  </Text>
+                </View>
+              </React.Fragment>
+            );
+          })}
         </View>
 
         {/* Order Summary */}
@@ -806,7 +884,27 @@ const handleGcashModalClose = () => {
               </View>
               <View style={styles.pickupInfo}>
                 <Text style={styles.pickupLabel}>Date</Text>
-                <Text style={styles.pickupDateTime}>{formatDate(pickupTime)}</Text>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={pickupTime.toISOString().slice(0, 10)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => handleWebDateChange(e.target.value)}
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent',
+                      color: COLORS.text.dark,
+                      padding: 0,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <Text style={styles.pickupDateTime}>{formatDate(pickupTime)}</Text>
+                )}
               </View>
             </TouchableOpacity>
             
@@ -820,7 +918,26 @@ const handleGcashModalClose = () => {
               </View>
               <View style={styles.pickupInfo}>
                 <Text style={styles.pickupLabel}>Time</Text>
-                <Text style={styles.pickupDateTime}>{formatTime(pickupTime)}</Text>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="time"
+                    value={`${String(pickupTime.getHours()).padStart(2, '0')}:${String(pickupTime.getMinutes()).padStart(2, '0')}`}
+                    onChange={(e) => handleWebTimeChange(e.target.value)}
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent',
+                      color: COLORS.text.dark,
+                      padding: 0,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <Text style={styles.pickupDateTime}>{formatTime(pickupTime)}</Text>
+                )}
               </View>
             </TouchableOpacity>
           </View>
@@ -969,7 +1086,14 @@ const handleGcashModalClose = () => {
           transparent={true} 
           onRequestClose={handleGcashModalClose}
         >
-          <View style={styles.gcashModalOverlay}>
+          <View style={[styles.gcashModalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(15,23,42,0.35)' }]}>
+            {/* Liquid Glass backdrop — real blur with translucent fallback */}
+            <BlurView
+              intensity={isDark ? 60 : 35}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
             {/* Close Button - X at top right */}
             <TouchableOpacity 
               style={styles.gcashModalCloseButton} 
@@ -984,7 +1108,25 @@ const handleGcashModalClose = () => {
               contentContainerStyle={styles.gcashModalScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.gcashModalContent}>
+              <View
+                style={[
+                  styles.gcashModalContent,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(26, 26, 46, 0.88)'
+                      : 'rgba(255, 255, 255, 0.9)',
+                    borderWidth: 1,
+                    borderColor: isDark
+                      ? 'rgba(255, 255, 255, 0.14)'
+                      : 'rgba(255, 255, 255, 0.7)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 12 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 24,
+                    elevation: 16,
+                  },
+                ]}
+              >
                 {totalVendors > 1 && (
                   <View style={styles.gcashProgressContainer}>
                     <Text style={styles.gcashProgressText}>Vendor {currentStallIndex + 1} of {totalVendors}</Text>
@@ -1201,6 +1343,55 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 14,
     color: COLORS.text.light,
     marginTop: 2,
+  },
+
+  // Checkout progress indicator
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.md,
+    marginHorizontal: SPACING.lg,
+  },
+  progressStep: {
+    alignItems: 'center',
+  },
+  progressDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotDone: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  progressDotActive: {
+    borderColor: COLORS.primary,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: COLORS.text.lighter,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  progressLabelActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  progressConnector: {
+    width: 44,
+    height: 2,
+    backgroundColor: COLORS.border,
+    marginHorizontal: SPACING.sm,
+    marginBottom: 16,
+  },
+  progressConnectorDone: {
+    backgroundColor: COLORS.primary,
   },
 
   // Sections

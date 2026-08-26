@@ -12,6 +12,8 @@ import {
   Platform,
   Dimensions,
   Animated,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
@@ -24,6 +26,8 @@ import { shareProduct } from '../../services/shareService';
 import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useLastViewed } from '../../hooks/useLastViewed';
+import { chatService } from '../../services/chatService';
+import { MOTION, hapticLight, hapticMedium, hapticSuccess } from '../../theme/motion';
 
 // Conditionally load Recharts only on web (it is a web-only library)
 let RechartsLineChart, RechartsResponsiveContainer, RechartsXAxis, RechartsYAxis,
@@ -192,6 +196,13 @@ const PriceHistoryChart = ({ data, darkMode, styles }) => {
 export default function ProductDetailsScreen({ route, navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+  // Micro-interaction: spring pulse on the wishlist heart
+  const heartScale = useRef(new Animated.Value(1)).current;
+  // Haggle offer sheet
+  const [offerVisible, setOfferVisible] = useState(false);
+  const [offerPrice, setOfferPrice] = useState('');
+  const [offerNote, setOfferNote] = useState('');
+  const [sendingOffer, setSendingOffer] = useState(false);
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
@@ -396,6 +407,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   };
 
   const handleAddToCart = () => {
+    hapticMedium();
     if (!user) {
       Alert.alert(
         'Login Required',
@@ -436,6 +448,60 @@ export default function ProductDetailsScreen({ route, navigation }) {
       // Haptic feedback + animated toast
       Vibration.vibrate(50);
       showToast(`${product.name} ${t('cart.added_suffix')}`);
+    }
+  };
+
+  // ── Haggle: send a price offer to the stall via chat ──
+  const submitOffer = async () => {
+    const offerNum = parseFloat(offerPrice);
+    if (isNaN(offerNum) || offerNum <= 0) {
+      Alert.alert('Invalid Offer', 'Please enter a valid offer amount.');
+      return;
+    }
+    if (offerNum >= currentPrice) {
+      Alert.alert(
+        'Offer Too High',
+        `Your offer (₱${offerNum.toFixed(2)}) is not lower than the listed price (₱${currentPrice.toFixed(2)}). Just add to cart instead! 😊`
+      );
+      return;
+    }
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to make an offer.');
+      return;
+    }
+    if (!stall?.id) {
+      Alert.alert('Error', 'Stall information unavailable.');
+      return;
+    }
+
+    setSendingOffer(true);
+    try {
+      const conversation = await chatService.getOrCreateConversation(user.id, stall.id);
+      const message = [
+        '🤝 HAGGLE OFFER',
+        `Product: ${product.name}`,
+        `Listed price: ₱${currentPrice.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`,
+        `Quantity: ${quantity}`,
+        `My offer: ₱${offerNum.toFixed(2)} each`,
+        offerNote.trim() ? `Note: ${offerNote.trim()}` : null,
+        '',
+        'Reply here to accept or counter my offer. 🙏',
+      ].filter(Boolean).join('\n');
+
+      await chatService.sendMessage(conversation.id, user.id, 'customer', message);
+      hapticSuccess();
+      setOfferVisible(false);
+      setOfferPrice('');
+      setOfferNote('');
+      Alert.alert('Offer Sent! 🤝', 'Your offer was sent to the vendor. Track their reply in Chats.', [
+        { text: 'View Chats', onPress: () => navigation.navigate('ChatDetail', { conversationId: conversation.id, stall, vendor: stall?.profiles || null }) },
+        { text: 'OK' },
+      ]);
+    } catch (err) {
+      console.error('Failed to send offer:', err);
+      Alert.alert('Error', 'Could not send your offer. Please try again.');
+    } finally {
+      setSendingOffer(false);
     }
   };
 
@@ -690,10 +756,27 @@ export default function ProductDetailsScreen({ route, navigation }) {
               style={styles.favBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.favIcon}>↗</Text>
+              <Ionicons name="share-outline" size={20} color={COLORS.text.light} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => toggleProductFavorite(product)} style={styles.favBtn}>
-              <Text style={styles.favIcon}>{isProductFavorite(product.id) ? 'heart' : 'heart-outline'}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                hapticLight();
+                Animated.sequence([
+                  Animated.spring(heartScale, { toValue: 1.35, ...MOTION.spring.bouncy }),
+                  Animated.spring(heartScale, { toValue: 1, ...MOTION.spring.snappy }),
+                ]).start();
+                toggleProductFavorite(product);
+              }}
+              style={styles.favBtn}
+              activeOpacity={0.7}
+            >
+              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                <Ionicons
+                  name={isProductFavorite(product.id) ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color={isProductFavorite(product.id) ? COLORS.primary : COLORS.text.light}
+                />
+              </Animated.View>
             </TouchableOpacity>
           </View>
         </View>
@@ -1122,6 +1205,19 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       {/* Fixed Action Buttons - always visible while scrolling */}
       <View style={styles.fixedFooter}>
+        <TouchableOpacity
+          style={styles.offerButton}
+          onPress={() => {
+            hapticLight();
+            setOfferPrice((currentPrice * 0.9).toFixed(2));
+            setOfferVisible(true);
+          }}
+          disabled={!product?.is_available}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
+          <Text style={styles.offerButtonText}>Make an Offer</Text>
+        </TouchableOpacity>
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.button, styles.addToCartButton]}
@@ -1154,6 +1250,59 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Haggle Offer Modal */}
+      <Modal
+        visible={offerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOfferVisible(false)}
+      >
+        <View style={styles.offerOverlay}>
+          <View style={[styles.offerSheet, { backgroundColor: COLORS.surface }]}>
+            <View style={styles.offerHandle} />
+            <Text style={styles.offerTitle}>Make an Offer 🤝</Text>
+            <Text style={styles.offerSubtitle}>
+              {product?.name} · Listed at ₱{currentPrice.toFixed(2)} / {getUnitDisplayText(selectedUnit)}
+            </Text>
+
+            <Text style={styles.offerLabel}>Your offer per unit</Text>
+            <View style={styles.offerInputRow}>
+              <Text style={styles.offerCurrency}>₱</Text>
+              <TextInput
+                style={styles.offerInput}
+                placeholder="0.00"
+                placeholderTextColor={COLORS.text.quaternary}
+                keyboardType="decimal-pad"
+                value={offerPrice}
+                onChangeText={setOfferPrice}
+              />
+            </View>
+            <Text style={styles.offerHint}>
+              Offers are sent to the vendor via chat — they can accept or counter.
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.offerSubmitButton,
+                (sendingOffer || !offerPrice) && styles.offerSubmitDisabled,
+              ]}
+              onPress={submitOffer}
+              disabled={sendingOffer || !offerPrice}
+              activeOpacity={0.85}
+            >
+              {sendingOffer ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={16} color="#FFFFFF" />
+                  <Text style={styles.offerSubmitText}>Send Offer</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Add-to-Cart Toast - floats above the buttons, always on screen */}
       {toastVisible && (
@@ -1299,14 +1448,19 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '600',
   },
   imageContainer: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.inputBg,
     padding: 20,
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
   productImage: {
     width: 200,
     height: 200,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   productImagePlaceholder: {
     width: 200,
@@ -1616,6 +1770,109 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 6,
+  },
+  offerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.accentSoft,
+    marginBottom: 10,
+  },
+  offerButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // ── Haggle offer sheet styles ──
+  offerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  offerSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 32,
+  },
+  offerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  offerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
+  offerSubtitle: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 22,
+  },
+  offerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
+    marginBottom: 8,
+  },
+  offerInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    backgroundColor: COLORS.surface,
+  },
+  offerCurrency: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginRight: 8,
+  },
+  offerInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+  },
+  offerHint: {
+    fontSize: 12,
+    color: COLORS.text.light,
+    marginTop: 10,
+    marginBottom: 18,
+    lineHeight: 16,
+  },
+  offerSubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+  },
+  offerSubmitDisabled: {
+    opacity: 0.5,
+  },
+  offerSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
   button: {
     flex: 1,

@@ -24,6 +24,8 @@ import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useColors, useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
+import * as ImagePicker from 'expo-image-picker';
+import { hapticLight, hapticSuccess } from '../../theme/motion';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 // ============================================================
@@ -236,7 +238,7 @@ const GoogleMapsWeb = ({ latitude, longitude, onLocationSelect, onClose }) => {
 // MAIN COMPONENT
 // ============================================================
 export default function VendorProfileScreen({ navigation }) {
-  const { user, profile, logout, resetToLogin } = useAuth();
+  const { user, profile, logout, resetToLogin, checkUser } = useAuth();
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
@@ -245,6 +247,7 @@ export default function VendorProfileScreen({ navigation }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
   // Editable fields
   const [stallName, setStallName] = useState('');
@@ -277,6 +280,70 @@ export default function VendorProfileScreen({ navigation }) {
   useEffect(() => {
     (async () => setHasPin(await hasSavedPin()))();
   }, []);
+
+  // ── Change Profile Photo ──
+  // Mirrors the customer ProfileScreen flow: pick → uguu.se upload →
+  // profiles.avatar_url update → AuthContext refresh.
+  const uploadAvatar = async () => {
+    hapticLight();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant gallery permissions to upload profile picture');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setUploadingAvatar(true);
+      try {
+        const asset = result.assets[0];
+        const uri = asset.uri;
+
+        // Determine file extension
+        const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
+        const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
+
+        // Upload to uguu.se (free permanent image host — no API key needed)
+        const formData = new FormData();
+        // On web, asset.file is a File; on native, use the uri object
+        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
+
+        const uploadResponse = await fetch('https://uguu.se/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const uploadResult = await uploadResponse.json();
+        if (!uploadResult.success || !uploadResult.files?.length) {
+          throw new Error('Image host rejected the upload');
+        }
+
+        const avatarUrl = uploadResult.files[0].url;
+
+        const { error } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl })
+          .eq('id', user.id);
+
+        if (error) throw error;
+
+        await checkUser();
+        hapticSuccess();
+        Alert.alert('Success', 'Profile picture updated!');
+      } catch (error) {
+        console.error('Upload error:', error);
+        Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+      } finally {
+        setUploadingAvatar(false);
+      }
+    }
+  };
 
   const fetchStall = useCallback(async () => {
     if (!user?.id) return;
@@ -743,8 +810,17 @@ export default function VendorProfileScreen({ navigation }) {
             PROFILE HEADER
         ============================================================ */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            {profile?.avatar_url ? (
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={uploadAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.8}
+          >
+            {uploadingAvatar ? (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              </View>
+            ) : profile?.avatar_url ? (
               <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarFallback}>
@@ -753,7 +829,13 @@ export default function VendorProfileScreen({ navigation }) {
                 </Text>
               </View>
             )}
-          </View>
+            {!uploadingAvatar && (
+              <View style={styles.avatarCameraBadge}>
+                <Ionicons name="camera" size={14} color="#FFFFFF" />
+              </View>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.changePhotoHint}>Tap photo to change</Text>
           <Text style={styles.name}>{profile?.full_name || 'Vendor'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.roleBadge}>
@@ -1114,6 +1196,25 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 40,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  changePhotoHint: {
+    fontSize: 12,
+    color: COLORS.text.lighter,
+    marginTop: -SPACING.sm + 2,
+    marginBottom: SPACING.xs,
   },
   name: {
     fontSize: 20,

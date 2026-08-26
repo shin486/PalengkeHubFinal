@@ -856,14 +856,22 @@ function ProductCategories() {
     return matchSearch && matchCategory && matchStall;
   });
 
-  const catOptions = [...new Set([...categories.map(c => c.name), ...products.map(p => p.category).filter(Boolean)])];
+  // Case/whitespace-insensitive dedupe so "Meat" and "meat" collapse to one
+  const catOptions = [...new Set(
+    [...categories.map(c => c.name), ...products.map(p => p.category).filter(Boolean)]
+      .map(c => c.trim())
+  )].sort((a, b) => a.localeCompare(b));
+
+  const uniqueCatOptions = Object.values(
+    catOptions.reduce((acc, c) => { acc[c.toLowerCase()] = c; return acc; }, {})
+  );
 
   return (
     <div className="admin-section">
       <div className="admin-section-header">Product Categories</div>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
-        <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={catOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+        <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={uniqueCatOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
         <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
       </div>
       <div className="admin-table-wrap">
@@ -913,7 +921,14 @@ function PriceMonitor() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+  const categories = Object.values(
+    products.map(p => p.category).filter(Boolean)
+      .reduce((acc, c) => {
+        const k = c.trim().toLowerCase();
+        if (!acc[k]) acc[k] = c.trim();
+        return acc;
+      }, {})
+  ).sort((a, b) => a.localeCompare(b));
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
@@ -1227,7 +1242,7 @@ function Announcements() {
   const [announcements, setAnnouncements] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
+  const [form, setForm] = useState({ title: '', content: '', audience: 'both', duration_days: 7 });
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
@@ -1237,20 +1252,28 @@ function Announcements() {
 
   const create = async () => {
     setSaving(true);
+    // Live schema: target_audience text[], priority text, expires_at timestamptz.
+    // No duration_days / is_promotion / promotion_type columns exist.
+    const audienceMap = {
+      both: ['vendors', 'customers'],
+      vendors: ['vendors'],
+      customers: ['customers'],
+    };
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + (parseInt(form.duration_days) || 7));
     const { error } = await supabase.from('announcements').insert({
       title: form.title,
       content: form.content,
-      audience: form.audience,
-      duration_days: form.duration_days,
-      is_promotion: form.is_promotion,
-      promotion_type: form.is_promotion ? form.promotion_type : null,
+      target_audience: audienceMap[form.audience] || ['all'],
+      priority: 'normal',
+      expires_at: expiresAt.toISOString(),
     });
     if (error) {
       toast({ message: `Failed to create announcement: ${error.message}`, type: 'error' });
     } else {
       setSaving(false);
       setShowForm(false);
-      setForm({ title: '', content: '', audience: 'all', duration_days: 7, is_promotion: false, promotion_type: '' });
+      setForm({ title: '', content: '', audience: 'both', duration_days: 7 });
       toast({ message: 'Announcement created successfully', type: 'success' });
       load();
     }
@@ -1277,12 +1300,11 @@ function Announcements() {
             <div key={a.id} className="announcement-card">
               <div className="announcement-card-top">
                 <h4>{a.title}</h4>
-                {a.is_promotion && <span className="badge badge-warning">Promotion</span>}
               </div>
               <p>{a.content}</p>
               <div className="announcement-meta">
-                <span className="badge badge-info">Audience: {a.audience}</span>
-                <span className="badge badge-primary">Duration: {a.duration_days} days</span>
+                <span className="badge badge-info">Audience: {(a.target_audience || []).join(', ')}</span>
+                <span className="badge badge-primary">Until: {a.expires_at ? PH_DATETIME(a.expires_at) : 'No expiry'}</span>
               </div>
               <div className="announcement-footer">
                 <span className="text-subtext">{PH_DATETIME(a.created_at)}</span>
@@ -1305,25 +1327,14 @@ function Announcements() {
             </FormField>
             <FormField label="Audience">
               <select className="form-input" value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
-                <option value="all">All Users</option>
-                <option value="vendor">Vendors Only</option>
-                <option value="consumer">Customers Only</option>
+                <option value="both">All Users</option>
+                <option value="vendors">Vendors Only</option>
+                <option value="customers">Customers Only</option>
               </select>
             </FormField>
             <FormField label="Duration (days)">
               <input type="number" className="form-input" value={form.duration_days} onChange={e => setForm({ ...form, duration_days: parseInt(e.target.value) || 7 })} />
             </FormField>
-            <FormField label="Is Promotion?">
-              <select className="form-input" value={form.is_promotion ? 'true' : 'false'} onChange={e => setForm({ ...form, is_promotion: e.target.value === 'true' })}>
-                <option value="false">No</option>
-                <option value="true">Yes</option>
-              </select>
-            </FormField>
-            {form.is_promotion && (
-              <FormField label="Promotion Type">
-                <input className="form-input" value={form.promotion_type} onChange={e => setForm({ ...form, promotion_type: e.target.value })} />
-              </FormField>
-            )}
           </div>
           <div className="modal-actions">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
@@ -1438,6 +1449,8 @@ function Chat() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
   const [myId, setMyId] = useState(null);
+  const imgInputRef = useRef(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Store the current admin's user id to identify own sent messages
   useEffect(() => {
@@ -1555,6 +1568,65 @@ function Chat() {
     }
   }
 
+  // ── Send an image (uploaded to ImgBB, stored as an image message) ──
+  async function sendImage(file) {
+    if (!file || !active || uploadingImage) return;
+    setUploadingImage(true);
+    try {
+      // Upload to ImgBB (same service the vendor app uses)
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch('https://api.imgbb.com/1/upload', {
+        method: 'POST',
+        body: fd,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      // ImgBB encodes the key as a query param; retry with it appended if needed
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+      if (!json?.data?.url) {
+        // Retry with key as query param (some setups reject header-encoded)
+        const fd2 = new FormData();
+        fd2.append('image', file);
+        const res2 = await fetch('https://api.imgbb.com/1/upload?key=0f4823dff292c1d4c4a6fdcc7d0037c9', {
+          method: 'POST',
+          body: fd2,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        json = await res2.json();
+      }
+      const imageUrl = json?.data?.url;
+      if (!imageUrl) throw new Error('Image upload failed');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      await supabase.from('messages').insert({
+        conversation_id: active,
+        sender_id: session.user.id,
+        sender_role: 'customer',
+        message: imageUrl,
+        is_image: true,
+      });
+      await supabase.from('conversations').update({
+        last_message: '📷 Image',
+        last_message_time: new Date().toISOString(),
+      }).eq('id', active);
+
+      toast({ message: 'Image sent', type: 'success' });
+      await loadMsgs(active);
+      await loadConvs();
+    } catch (err) {
+      console.error('Send image error:', err);
+      toast({ message: 'Image send failed: ' + (err.message || 'Unknown error'), type: 'error' });
+    } finally {
+      setUploadingImage(false);
+      if (imgInputRef.current) imgInputRef.current.value = '';
+    }
+  }
+
   const activeConv = convs.find(c => c.id === active);
 
   return (
@@ -1649,6 +1721,25 @@ function Chat() {
                 })}
               </div>
               <div className="chat-input-bar">
+                <input
+                  ref={imgInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files && e.target.files[0];
+                    if (f) sendImage(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="chat-attach-btn"
+                  onClick={() => imgInputRef.current && imgInputRef.current.click()}
+                  disabled={!active || uploadingImage}
+                  title="Send an image"
+                >
+                  {uploadingImage ? '⏳' : '📷'}
+                </button>
                 <input
                   value={input}
                   onChange={e => setInput(e.target.value)}
