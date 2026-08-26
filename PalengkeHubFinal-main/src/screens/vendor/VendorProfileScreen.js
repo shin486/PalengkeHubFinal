@@ -22,7 +22,9 @@ import * as Location from 'expo-location';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { useColors } from '../../contexts/ThemeContext';
+import { useColors, useTheme } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
+import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
@@ -254,7 +256,27 @@ export default function VendorProfileScreen({ navigation }) {
   
   // UI states
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingField, setEditingField] = useState(null);
+    const [editingField, setEditingField] = useState(null);
+
+  // ── Settings: theme / language / PIN login ──
+  const { themeMode, setTheme } = useTheme();
+  const { locale, changeLanguage } = useI18n();
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  const [hasPin, setHasPin] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinStep, setPinStep] = useState(0); // 0 verify password, 1 enter PIN, 2 confirm
+  const [pinIdentifier, setPinIdentifier] = useState('');
+  const [pinPassword, setPinPassword] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinSaved, setPinSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => setHasPin(await hasSavedPin()))();
+  }, []);
 
   const fetchStall = useCallback(async () => {
     if (!user?.id) return;
@@ -294,6 +316,88 @@ export default function VendorProfileScreen({ navigation }) {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchStall();
+  };
+
+    // ============================================================
+  // SETTINGS HANDLERS (theme, language, PIN login)
+  // ============================================================
+  const startPinSetup = () => {
+    setPinStep(0);
+    setPinIdentifier(user?.email || profile?.phone || '');
+    setPinPassword('');
+    setNewPin('');
+    setConfirmPin('');
+    setPinError('');
+    setPinSaved(false);
+    setShowPinModal(true);
+  };
+
+  const openPinModal = () => {
+    if (hasPin) {
+      Alert.alert(
+        'PIN Login',
+        'PIN login is enabled. What would you like to do?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove PIN', style: 'destructive', onPress: async () => { await clearPin(); setHasPin(false); } },
+          { text: 'Change PIN', onPress: startPinSetup },
+        ]
+      );
+      return;
+    }
+    startPinSetup();
+  };
+
+  const handlePinVerifyCredentials = async () => {
+    if (!pinIdentifier.trim() || !pinPassword) {
+      setPinError('Please enter your email/phone and password.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError('');
+    try {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const credentials = emailRegex.test(pinIdentifier.trim())
+        ? { email: pinIdentifier.trim() }
+        : { phone: pinIdentifier.trim() };
+      const { error } = await supabase.auth.signInWithPassword({
+        ...credentials,
+        password: pinPassword,
+      });
+      if (error) {
+        setPinError('Wrong password. Please try again.');
+        setPinBusy(false);
+        return;
+      }
+      setPinStep(1);
+    } catch (e) {
+      setPinError('Could not verify password. Please try again.');
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const handlePinNext = () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError('PIN must be exactly 4 digits.');
+      return;
+    }
+    setPinError('');
+    setPinStep(2);
+  };
+
+  const handlePinSave = async () => {
+    if (confirmPin !== newPin) {
+      setPinError('PINs do not match. Please try again.');
+      return;
+    }
+    setPinBusy(true);
+    setPinError('');
+    await savePinWithCredentials(newPin, user?.id, pinIdentifier.trim(), pinPassword);
+    setPinBusy(false);
+    setHasPin(true);
+    setPinSaved(true);
+    setTimeout(() => { setShowPinModal(false); setPinSaved(false); }, 1200);
   };
 
   const handleLogout = async () => {
@@ -767,10 +871,48 @@ export default function VendorProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('VendorReportsList')}
           />
 
-          <MenuItem
+                    <MenuItem
             icon="flag-outline"
             label="Report an Issue"
             onPress={() => navigation.navigate('VendorReportIssue')}
+          />
+        </View>
+
+        {/* ============================================================
+            SETTINGS (theme / language / security / support / policy)
+        ============================================================ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderLeft}>
+              <Ionicons name="options-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.sectionTitle}>Settings</Text>
+            </View>
+          </View>
+
+          <MenuItem
+            icon={themeMode === 'dark' ? 'moon-outline' : 'sunny-outline'}
+            label={`Dark Mode · ${themeMode === 'dark' ? 'On' : themeMode === 'system' ? 'System' : 'Off'}`}
+            onPress={() => setShowThemePicker(true)}
+          />
+          <MenuItem
+            icon="language-outline"
+            label={`Language · ${locale === 'en' ? 'English' : 'Filipino'}`}
+            onPress={() => setShowLanguagePicker(true)}
+          />
+          <MenuItem
+            icon="keypad-outline"
+            label={`PIN Login · ${hasPin ? 'On' : 'Off'}`}
+            onPress={openPinModal}
+          />
+          <MenuItem
+            icon="help-circle-outline"
+            label="Help & Support"
+            onPress={() => navigation.navigate('HelpSupport', { role: 'vendor' })}
+          />
+          <MenuItem
+            icon="lock-closed-outline"
+            label="Privacy & Policy"
+            onPress={() => navigation.navigate('PrivacyPolicy', { role: 'vendor' })}
           />
         </View>
 
@@ -788,8 +930,123 @@ export default function VendorProfileScreen({ navigation }) {
       {/* Edit Modal */}
       {renderEditModal()}
       
-      {/* Map Modal */}
+            {/* Map Modal */}
       {renderMapModal()}
+
+      {/* Theme Picker Modal */}
+      <Modal visible={showThemePicker} transparent animationType="slide" onRequestClose={() => setShowThemePicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Choose theme</Text>
+            {['light', 'dark', 'system'].map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={styles.optionRow}
+                onPress={() => { setTheme(mode); setShowThemePicker(false); }}
+              >
+                <Text style={[styles.optionText, themeMode === mode && styles.optionTextActive]}>
+                  {mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'System default'}
+                </Text>
+                {themeMode === mode && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.optionRow} onPress={() => setShowThemePicker(false)}>
+              <Text style={styles.optionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Language Picker Modal */}
+      <Modal visible={showLanguagePicker} transparent animationType="slide" onRequestClose={() => setShowLanguagePicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Language</Text>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
+            >
+              <Text style={[styles.optionText, locale === 'en' && styles.optionTextActive]}>English</Text>
+              {locale === 'en' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
+            >
+              <Text style={[styles.optionText, locale === 'fil' && styles.optionTextActive]}>Filipino</Text>
+              {locale === 'fil' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.optionRow} onPress={() => setShowLanguagePicker(false)}>
+              <Text style={styles.optionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* PIN Login Modal */}
+      <Modal visible={showPinModal} transparent animationType="slide" onRequestClose={() => setShowPinModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {pinSaved ? (
+              <View style={styles.pinSuccessBox}>
+                <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
+                <Text style={styles.pinSuccessText}>PIN saved! You can now sign in with your 4-digit PIN.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>
+                  {pinStep === 0 ? 'Verify your account' : pinStep === 1 ? 'Create your PIN' : 'Confirm your PIN'}
+                </Text>
+                {pinStep === 0 && (
+                  <>
+                    <TextInput
+                      style={styles.pinInput}
+                      placeholder="Email or phone"
+                      placeholderTextColor={COLORS.text.lighter}
+                      value={pinIdentifier}
+                      onChangeText={setPinIdentifier}
+                      autoCapitalize="none"
+                    />
+                    <TextInput
+                      style={styles.pinInput}
+                      placeholder="Current password"
+                      placeholderTextColor={COLORS.text.lighter}
+                      value={pinPassword}
+                      onChangeText={setPinPassword}
+                      secureTextEntry
+                    />
+                  </>
+                )}
+                {(pinStep === 1 || pinStep === 2) && (
+                  <TextInput
+                    style={styles.pinInput}
+                    placeholder="4-digit PIN"
+                    placeholderTextColor={COLORS.text.lighter}
+                    value={pinStep === 1 ? newPin : confirmPin}
+                    onChangeText={(v) => /^\d{0,4}$/.test(v) && (pinStep === 1 ? setNewPin : setConfirmPin)(v)}
+                    keyboardType="number-pad"
+                    secureTextEntry
+                    maxLength={4}
+                  />
+                )}
+                {!!pinError && <Text style={styles.pinErrorText}>{pinError}</Text>}
+                <TouchableOpacity
+                  style={[styles.pinPrimaryBtn, pinBusy && { opacity: 0.7 }]}
+                  disabled={pinBusy}
+                  onPress={pinStep === 0 ? handlePinVerifyCredentials : pinStep === 1 ? handlePinNext : handlePinSave}
+                >
+                  <Text style={styles.pinPrimaryBtnText}>
+                    {pinBusy ? 'Please wait...' : pinStep === 0 ? 'Verify' : pinStep === 1 ? 'Next' : 'Save PIN'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pinSecondaryBtn} onPress={() => setShowPinModal(false)}>
+                  <Text style={styles.pinSecondaryBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1249,6 +1506,79 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 14,
     color: COLORS.text.light,
     marginTop: 8,
+    textAlign: 'center',
+  },
+
+  // ── Settings modals (theme / language / PIN) ──
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    width: '100%',
+  },
+  optionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  optionText: {
+    fontSize: 15,
+    color: COLORS.text.dark,
+  },
+  optionTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  pinInput: {
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.text.dark,
+    backgroundColor: COLORS.background,
+    marginBottom: SPACING.sm,
+  },
+  pinErrorText: {
+    color: COLORS.error,
+    fontSize: 13,
+    marginBottom: SPACING.sm,
+  },
+  pinPrimaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  pinPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  pinSecondaryBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  pinSecondaryBtnText: {
+    color: COLORS.text.medium,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  pinSuccessBox: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    gap: 10,
+  },
+  pinSuccessText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.success,
     textAlign: 'center',
   },
 });

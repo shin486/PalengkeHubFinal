@@ -135,36 +135,66 @@ export const chatService = {
     }
   },
 
-  async uploadChatImage(uri, file) {
+  async uploadChatImage(uri, conversationId, mimeType) {
     try {
-      console.log(' Uploading image to uguu.se:', uri);
-      
-      // Determine file extension from URI
-      const extMatch = uri.match(/\.(\w+)(\?|$)/);
-      const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
-      const fileName = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      
-      // Upload to uguu.se (free permanent image host — no API key needed)
-      const formData = new FormData();
-      // On web, `file` is a File object; on native, use the uri object
-      formData.append('files[]', file || { uri, name: fileName, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-      
-      const response = await fetch('https://uguu.se/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const result = await response.json();
-      if (!result.success || !result.files?.length) {
-        throw new Error('Image host rejected the upload');
+      if (!uri) {
+        return { url: null, error: 'No image selected' };
       }
-      
-      const imageUrl = result.files[0].url;
-      console.log(' Image uploaded:', imageUrl);
-      return imageUrl;
+
+      console.log(' Uploading chat image to Supabase storage:', uri);
+
+      // Determine content type from the picker’s MIME when available (handles
+      // JPG, PNG, HEIC/HEIF, WebP, GIF safely). Otherwise fall back to a guess
+      // from the file extension; default to jpeg.
+      var extMatch = uri.match(/\.(\w+)(\?|$)/);
+      var ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+      var contentType = 'image/jpeg';
+      if (mimeType && mimeType.indexOf('/') !== -1) {
+        contentType = mimeType;
+      } else if (ext === 'png') contentType = 'image/png';
+      else if (ext === 'heic' || ext === 'heif') contentType = 'image/heic';
+      else if (ext === 'webp') contentType = 'image/webp';
+      else if (ext === 'gif') contentType = 'image/gif';
+
+      // Read the image as a binary blob. Works on native (file:// paths) and on
+      // web (blob:/data: URIs) alike.
+      var response = await fetch(uri);
+      var blob = await response.blob();
+
+      // Permanent path under a per-conversation folder for easy management.
+      var fileName = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10) + '.' + ext;
+      var folder = 'chat_images/' + conversationId;
+
+      var res = await supabase.storage
+        .from('vendor_documents')
+        .upload(folder + '/' + fileName, blob, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: contentType,
+        });
+      var data = res.data;
+      var error = res.error;
+
+      if (error) {
+        console.error('Chat upload storage error:', error);
+        return { url: null, error: error && error.message ? error.message : 'Storage upload failed' };
+      }
+
+            // Read side: use a SIGNED URL (valid 7 days) so private-bucket objects
+      // display even though vendor_documents is not publicly readable.
+      var signed = await supabase.storage
+        .from('vendor_documents')
+        .createSignedUrl(data.path, 7 * 24 * 60 * 60);
+      var url = signed && signed.data && signed.data.signedUrl ? signed.data.signedUrl : null;
+      if (!url) {
+        return { url: null, error: (signed && signed.error ? signed.error.message : 'Could not build a signed URL') };
+      }
+
+            console.log(' Chat image uploaded:', url);
+      return { url: url, error: null };
     } catch (error) {
-      console.error('Error uploading image:', error);
-      return null;
+      console.error('Error uploading chat image:', error);
+      return { url: null, error: error && error.message ? error.message : 'Upload failed' };
     }
   },
 

@@ -33,6 +33,8 @@ import AdminStallDetailsScreen from './src/screens/admin/AdminStallDetailsScreen
 import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
 import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
 import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
+import HelpSupportScreen from './src/screens/shared/HelpSupportScreen';
+import PrivacyPolicyScreen from './src/screens/shared/PrivacyPolicyScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -468,7 +470,9 @@ function AppStack({ isGuest }) {
         
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
-        <Stack.Screen name="Favorites" component={FavoritesScreen} />
+                <Stack.Screen name="Favorites" component={FavoritesScreen} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       </Stack.Navigator>
     </View>
   );
@@ -590,6 +594,10 @@ function RootNavigator() {
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
         
+                {/* Shared screens (Customer + Vendor) */}
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+
         {/* Admin screens */}
         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
         <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />

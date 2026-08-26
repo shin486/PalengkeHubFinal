@@ -1,4 +1,4 @@
-// src/screens/customer/ProfileScreen.js
+﻿// src/screens/customer/ProfileScreen.js
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -603,13 +603,13 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport', { role: 'customer' })}>
             <Ionicons name="help-circle" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Help & Support</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PrivacyPolicy', { role: 'customer' })}>
             <Ionicons name="lock-closed" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Privacy Policy</Text>
             <Text style={styles.chevron}>›</Text>

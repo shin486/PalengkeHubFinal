@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import AdminSidebar from './admin/AdminSidebar';
+import AdminTopbar from './admin/AdminTopbar';
 import { ToastContainer, toast } from '../components/admin/Toast';
 import { Skeleton, SkeletonTable, SkeletonStatCard, SkeletonChart } from '../components/admin/Skeleton';
 import {
@@ -271,7 +272,7 @@ export default function AdminDashboard() {
     prices: 'Price Monitoring', 'price-history': 'Price Change History',
     'price-anomaly': 'Price Anomaly Detection',
     announcements: 'Announcements', complaints: 'Complaint Management',
-    reports: 'Reports Generation', audit: 'Audit Trail', chats: 'Chats',
+    reports: 'Reports & Audit', chats: 'Chats',
   };
 
   return (
@@ -282,20 +283,21 @@ export default function AdminDashboard() {
         adminName={adminName}
       />
       <main className="admin-main">
+        <AdminTopbar setActiveSection={setActiveSection} />
         <div className="admin-page-header">
           <h1 className="admin-page-title">{labels[activeSection] || 'Dashboard'}</h1>
           <p className="admin-page-subtitle">Welcome back, {adminName}</p>
         </div>
-        <SectionRenderer section={activeSection} />
+        <SectionRenderer section={activeSection} setActiveSection={setActiveSection} />
       </main>
       <ToastContainer />
     </div>
   );
 }
 
-function SectionRenderer({ section }) {
+function SectionRenderer({ section, setActiveSection }) {
   switch (section) {
-    case 'overview': return <Overview />;
+    case 'overview': return <Overview onNavigate={setActiveSection} />;
     case 'users': return <UserManagement />;
     case 'stalls': return <StallManagement />;
     case 'products': return <ProductCategories />;
@@ -306,21 +308,23 @@ function SectionRenderer({ section }) {
     case 'announcements': return <Announcements />;
     case 'complaints': return <ComplaintManagement />;
     case 'chats': return <Chat />;
-    case 'reports': return <Reports />;
-    case 'audit': return <AuditTrail />;
+    case 'reports': return <ReportsAndAudit />;
     default: return <Overview />;
   }
 }
 
 /* ==================== OVERVIEW ==================== */
-function Overview() {
+function Overview({ onNavigate }) {
   const [stats, setStats] = useState({});
   const [orders, setOrders] = useState([]);
   const [salesData, setSalesData] = useState([]);
   const [orderStatusData, setOrderStatusData] = useState([]);
   const [revenueByStall, setRevenueByStall] = useState([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [range, setRange] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const completedOrdersRef = useRef([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -337,11 +341,13 @@ function Overview() {
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       ]);
       setStats({ vendors: r[0].count || 0, customers: r[1].count || 0, stalls: r[2].count || 0, orders: r[3].count || 0, products: r[4].count || 0, pendingApps: r[5].count || 0, pendingOrders: r[6].count || 0, pendingComplaints: r[7].count || 0 });
-      const { data: recentOrders } = await supabase.from('orders').select('*, customer:consumer_id(full_name), stall:stall_id(stall_name)').order('created_at', { ascending: false }).limit(5);
+      const { data: recentOrders } = await supabase.from('orders').select('*, customer:consumer_id(full_name), stall:stall_id(stall_name)').order('created_at', { ascending: false }).limit(8);
       setOrders(recentOrders || []);
-      // Sales data for chart (last 7 days)
-      const { data: allOrders } = await supabase.from('orders').select('total_amount, created_at, status').eq('status', 'completed');
-      setSalesData(aggregateSalesByDate(allOrders || [], 7));
+      // Completed orders power the sales trend + total revenue KPI
+      const { data: completedOrders } = await supabase.from('orders').select('total_amount, created_at, status').eq('status', 'completed');
+      completedOrdersRef.current = completedOrders || [];
+      setTotalRevenue(completedOrdersRef.current.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0));
+      setSalesData(aggregateSalesByDate(completedOrdersRef.current, range));
       // Order status distribution
       const { data: allStatusOrders } = await supabase.from('orders').select('status').limit(1000);
       setOrderStatusData(aggregateByStatus(allStatusOrders || []));
@@ -355,8 +361,25 @@ function Overview() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [range]);
   useEffect(() => { load(); }, [load]);
+
+  /* Re-aggregate the trend chart client-side when the date range changes */
+  const changeRange = (days) => {
+    if (!completedOrdersRef.current.length && days !== range) { setRange(days); return; }
+    setRange(days);
+    setSalesData(aggregateSalesByDate(completedOrdersRef.current, days));
+  };
+
+  const exportSalesCSV = () => {
+    if (salesData.length === 0) { toast({ message: 'No sales data to export', type: 'error' }); return; }
+    exportToCSV({
+      data: salesData.map(d => ({ Date: d.date, Sales: d.sales })),
+      filename: `palengkehub-sales-last-${range}-days`,
+      headers: ['Date', 'Sales'],
+    });
+    toast({ message: 'Sales report exported as CSV', type: 'success' });
+  };
 
   const STATUS_COLORS = {
     pending: '#F59E0B', confirmed: '#3B82F6', preparing: '#8B5CF6',
@@ -373,116 +396,190 @@ function Overview() {
     );
   }
 
+  const totalUsers = (stats.vendors || 0) + (stats.customers || 0);
+
   return (
     <>
-      <div className="priority-grid">
-        {[
-          { v: stats.pendingApps, l: 'Pending Applications', c: '#C62828', bg: 'rgba(198,40,40,0.06)' },
-          { v: stats.pendingOrders, l: 'Pending Orders', c: '#E65100', bg: 'rgba(230,81,0,0.06)' },
-          { v: stats.pendingComplaints, l: 'Pending Complaints', c: '#D32F2F', bg: 'rgba(211,47,47,0.06)' },
-        ].map((p, i) => (
-          <div key={i} className="priority-card" style={{ background: p.bg, borderColor: p.c + '30' }}>
-            <div className="priority-card-value" style={{ color: p.c }}>{p.v}</div>
-            <div className="priority-card-label" style={{ color: p.c }}>{p.l}</div>
-          </div>
-        ))}
+      {/* ── Top row: KPI cards ── */}
+      <div className="kpi-grid">
+        {loading ? (
+          <>
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+          </>
+        ) : (
+          <>
+            <div className="kpi-card delay-1">
+              <div className="kpi-icon kpi-icon-revenue" aria-hidden="true">₱</div>
+              <div className="kpi-body">
+                <div className="kpi-value">₱{PH(totalRevenue)}</div>
+                <div className="kpi-label">Total Revenue</div>
+                <div className="kpi-sub">{stats.orders || 0} orders all-time</div>
+              </div>
+            </div>
+            <div className="kpi-card delay-2">
+              <div className="kpi-icon kpi-icon-users" aria-hidden="true">👥</div>
+              <div className="kpi-body">
+                <div className="kpi-value">{totalUsers.toLocaleString()}</div>
+                <div className="kpi-label">Total Users</div>
+                <div className="kpi-sub">{stats.customers || 0} customers · {stats.vendors || 0} vendors</div>
+              </div>
+            </div>
+            <button className="kpi-card kpi-card-link delay-3" onClick={() => onNavigate?.('orders')} title="View orders">
+              <div className="kpi-icon kpi-icon-orders" aria-hidden="true">📦</div>
+              <div className="kpi-body">
+                <div className="kpi-value">{stats.orders || 0}</div>
+                <div className="kpi-label">Total Orders</div>
+                <div className="kpi-sub kpi-sub-warn">{stats.pendingOrders || 0} pending</div>
+              </div>
+            </button>
+            <div className="kpi-card delay-4">
+              <div className="kpi-icon kpi-icon-stalls" aria-hidden="true">🏪</div>
+              <div className="kpi-body">
+                <div className="kpi-value">{stats.stalls || 0}</div>
+                <div className="kpi-label">Market Stalls</div>
+                <div className="kpi-sub">{stats.products || 0} products listed</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-      <div className="stats-grid">
-        {[
-          { v: stats.vendors, l: 'Total Vendors' }, { v: stats.stalls, l: 'Total Stalls' },
-          { v: stats.products, l: 'Total Products' }, { v: stats.orders, l: 'Total Orders' },
-          { v: stats.customers, l: 'Registered Users' }, { v: stats.pendingApps, l: 'Pending Apps' },
-        ].map((s, i) => (
-          <div key={i} className="stat-card">
-            <div className="stat-card-value">{s.v}</div>
-            <div className="stat-card-label">{s.l}</div>
+
+      {/* ── Action-needed alert strip ── */}
+      {(stats.pendingApps > 0 || stats.pendingOrders > 0 || stats.pendingComplaints > 0) && (
+        <div className="alert-strip">
+          {[
+            { v: stats.pendingApps, l: 'vendor applications', section: 'stalls' },
+            { v: stats.pendingOrders, l: 'pending orders', section: 'orders' },
+            { v: stats.pendingComplaints, l: 'open complaints', section: 'complaints' },
+          ].filter(p => p.v > 0).map(p => (
+            <button key={p.l} className="alert-chip" onClick={() => onNavigate?.(p.section)}>
+              <strong>{p.v}</strong> {p.l} need attention →
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Toolbar: filters / date range / export ── */}
+      <div className="overview-toolbar">
+        <div className="overview-toolbar-left">
+          <span className="overview-toolbar-title">Sales Trend</span>
+          <div className="range-group" role="group" aria-label="Date range">
+            {[7, 30, 90].map(d => (
+              <button
+                key={d}
+                className={`range-btn${range === d ? ' active' : ''}`}
+                onClick={() => changeRange(d)}
+              >
+                {d}D
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="chart-card">
-        <div className="chart-card-header">
-          <h3 className="chart-card-title">Sales Overview - Last 7 Days</h3>
+        </div>
+        <div className="overview-toolbar-right">
           <button className="refresh-btn" onClick={load} disabled={loading}>
-            <span className={loading ? 'refreshing' : ''}>Refresh</span>
+            <span className={loading ? 'refreshing' : ''}>↻ Refresh</span>
+          </button>
+          <button className="btn btn-sm btn-primary export-overview-btn" onClick={exportSalesCSV}>
+            ⬇ Export CSV
           </button>
         </div>
-        <div style={{ height: 280 }}>
-          {loading ? <SkeletonChart /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#6B7280' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} />
-                <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
-                <Bar dataKey="sales" fill="#DC2626" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+      </div>
+
+      {/* ── Middle section: charts grid (line · pie · bar) ── */}
+      <div className="chart-grid">
+        <div className="chart-card chart-span-2">
+          <div className="chart-card-header">
+            <h3 className="chart-card-title">Daily Sales — Last {range} Days</h3>
+          </div>
+          <div style={{ height: 280 }}>
+            {loading ? <SkeletonChart /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#6B7280' }} />
+                  <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} />
+                  <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Sales']} />
+                  <Line type="monotone" dataKey="sales" stroke="#DC2626" strokeWidth={2.5} dot={{ r: 3, fill: '#DC2626' }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-card-header">
+            <h3 className="chart-card-title">Order Status</h3>
+          </div>
+          <div style={{ height: 260 }}>
+            {loading ? <SkeletonChart /> : orderStatusData.length === 0 ? (
+              <EmptyState message="No order data available" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Tooltip formatter={(v) => [v, 'Orders']} />
+                  <Legend />
+                  <Pie data={orderStatusData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={85} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                    {orderStatusData.map((entry, i) => (
+                      <Cell key={`cell-${i}`} fill={STATUS_COLORS[entry.status] || '#9CA3AF'} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-card-header">
+            <h3 className="chart-card-title">Revenue by Stall (Top 5)</h3>
+          </div>
+          <div style={{ height: 260 }}>
+            {loading ? <SkeletonChart /> : revenueByStall.length === 0 ? (
+              <EmptyState message="No revenue data available" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueByStall.slice(0, 5)} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} />
+                  <YAxis type="category" dataKey="stall" tick={{ fontSize: 11, fill: '#6B7280' }} width={110} />
+                  <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Revenue']} />
+                  <Bar dataKey="revenue" fill="#DC2626" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
-      <div className="chart-card">
-        <div className="chart-card-header">
-          <h3 className="chart-card-title">Order Status Distribution</h3>
-        </div>
-        <div style={{ height: 280 }}>
-          {loading ? <SkeletonChart /> : orderStatusData.length === 0 ? (
-            <EmptyState message="No order data available" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <Tooltip formatter={(v) => [v, 'Orders']} />
-                <Legend />
-                <Pie data={orderStatusData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
-                  {orderStatusData.map((entry, i) => (
-                    <Cell key={`cell-${i}`} fill={STATUS_COLORS[entry.status] || '#9CA3AF'} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-      <div className="chart-card">
-        <div className="chart-card-header">
-          <h3 className="chart-card-title">Revenue by Stall (Top 5)</h3>
-        </div>
-        <div style={{ height: 280 }}>
-          {loading ? <SkeletonChart /> : revenueByStall.length === 0 ? (
-            <EmptyState message="No revenue data available" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueByStall.slice(0, 5)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis dataKey="stall" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <Tooltip formatter={(v) => [`₱${PH(v)}`, 'Revenue']} />
-                <Legend />
-                <Bar dataKey="revenue" fill="#DC2626" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+
+      {/* ── Bottom section: detailed data table ── */}
       <div className="admin-section">
         <div className="admin-section-header">Recent Orders</div>
         <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead><tr><th>Order #</th><th>Status</th><th>Total</th><th>Date</th></tr></thead>
+          <table className="admin-table admin-table-hover">
+            <thead><tr><th>Order #</th><th>Customer</th><th>Stall</th><th>Status</th><th>Total</th><th>Date</th></tr></thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan="4"><SkeletonTable rows={1} cols={4} /></td></tr>
+                  <tr key={i}><td colSpan="6"><SkeletonTable rows={1} cols={6} /></td></tr>
                 ))
-              ) : orders.length === 0 ? <tr><td colSpan="4"><EmptyState message="No orders yet" /></td></tr>
+              ) : orders.length === 0 ? <tr><td colSpan="6"><EmptyState message="No orders yet" /></td></tr>
                 : orders.map(o => { const s = ORDER_STATUS[o.status] || ORDER_STATUS.pending; return (
-                  <tr key={o.id}><td>#{o.order_number?.slice(-6) || String(o.id).slice(-6)}</td><td><span className={`status-badge ${s.cls}`}>{s.label}</span></td><td>₱{PH(o.total_amount || o.total)}</td><td>{PH_DATE(o.created_at)}</td></tr>
-                ); })}
+                    <tr key={o.id}>
+                      <td>#{o.order_number?.slice(-6) || String(o.id).slice(-6)}</td>
+                      <td>{o.customer?.full_name || '—'}</td>
+                      <td>{o.stall?.stall_name || '—'}</td>
+                      <td><span className={`status-badge ${s.cls}`}>{s.label}</span></td>
+                      <td style={{ fontWeight: 600 }}>₱{PH(o.total_amount || o.total)}</td>
+                      <td>{PH_DATE(o.created_at)}</td>
+                    </tr>
+                  ); })}
             </tbody>
           </table>
         </div>
       </div>
-      <Chat />
     </>
   );
 }
@@ -1570,8 +1667,46 @@ function Chat() {
   );
 }
 
-/* ==================== AUDIT TRAIL ==================== */
-function AuditTrail() {
+/* ==================== REPORTS & AUDIT (unified module) ==================== */
+function ReportsAndAudit() {
+  const [subTab, setSubTab] = useState('analytics');
+
+  return (
+    <div className="admin-section reports-audit-module">
+      <div className="reports-audit-header">
+        <div className="admin-section-header reports-audit-title">Reports &amp; Audit</div>
+        <div className="report-tabs" role="tablist" aria-label="Reports and Audit sections">
+          <button
+            role="tab"
+            aria-selected={subTab === 'analytics'}
+            className={`report-tab${subTab === 'analytics' ? ' active' : ''}`}
+            onClick={() => setSubTab('analytics')}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Analytics Reports
+          </button>
+          <button
+            role="tab"
+            aria-selected={subTab === 'audit'}
+            className={`report-tab${subTab === 'audit' ? ' active' : ''}`}
+            onClick={() => setSubTab('audit')}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Audit Logs
+          </button>
+        </div>
+      </div>
+      {subTab === 'analytics' ? <AnalyticsReports /> : <AuditLogs />}
+    </div>
+  );
+}
+
+/* ==================== AUDIT LOGS (sub-tab) ==================== */
+function AuditLogs() {
   const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
@@ -1592,8 +1727,7 @@ function AuditTrail() {
   const actionTypes = [...new Set(logs.map(l => l.action).filter(Boolean))];
 
   return (
-    <div className="admin-section">
-      <div className="admin-section-header">Audit Trail</div>
+    <>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search by action or details..." />
         <FilterSelect value={actionFilter} onChange={setActionFilter} options={actionTypes.map(a => ({ value: a, label: a }))} placeholder="All Actions" />
@@ -1616,12 +1750,12 @@ function AuditTrail() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }
 
-/* ==================== REPORTS ==================== */
-function Reports() {
+/* ==================== ANALYTICS REPORTS (sub-tab) ==================== */
+function AnalyticsReports() {
   const [products, setProducts] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -1873,9 +2007,7 @@ function Reports() {
 
   return (
     <>
-      <div className="admin-section">
-        <div className="admin-section-header">Report Generation</div>
-        <p style={{ color: 'var(--admin-text-muted)', marginBottom: '20px', fontSize: '0.9rem' }}>
+      <p className="reports-audit-intro">
           Generate professional PDF or CSV reports with the PalengkeHub branding. All data is fetched directly from the database.
           Use the date range filter to narrow down report data.
         </p>
@@ -1999,7 +2131,6 @@ function Reports() {
             </div>
           </div>
         </div>
-      </div>
       <div className="chart-card">
         <div className="chart-card-header">
           <h3 className="chart-card-title">Sales Trend</h3>

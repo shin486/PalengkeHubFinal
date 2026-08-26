@@ -443,7 +443,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 onBlur={() => setEmailFocused(false)}
               />
               {emailValid && email.length > 0 && (
-                
+                <Ionicons name="checkmark" size={18} color="#10B981" />
               )}
             </View>
             {email.length > 0 && !emailValid && (
@@ -489,7 +489,7 @@ export const LoginScreen = ({ setIsGuest }) => {
               activeOpacity={0.7}
             >
               <View style={[styles.checkbox, rememberMe && styles.checkboxOn]}>
-                {rememberMe && }
+                {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
               <Text style={styles.rememberLabel}>Remember me</Text>
             </TouchableOpacity>

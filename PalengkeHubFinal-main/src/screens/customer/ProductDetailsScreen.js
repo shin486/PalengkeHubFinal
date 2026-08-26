@@ -90,14 +90,14 @@ const StarRating = ({ rating, size = 12 }) => {
   
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {[...Array(fullStars)].map((_, i) => (
-        
+            {[...Array(fullStars)].map((_, i) => (
+        <Ionicons key={`full-${i}`} name="star" size={size} color="#F59E0B" />
       ))}
       {hasHalfStar && (
         <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color="#D1D5DB" />
       ))}
     </View>
   );

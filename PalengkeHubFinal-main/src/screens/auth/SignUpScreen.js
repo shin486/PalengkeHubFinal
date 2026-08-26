@@ -1277,7 +1277,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
                 autoCapitalize="none"
               />
               {emailValid && email.length > 0 && (
-                
+                <Ionicons name="checkmark" size={18} color="#10B981" />
               )}
             </Animated.View>
             {verificationMethod === 'email' && email.length > 0 && !emailValid && (
@@ -1449,7 +1449,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               onPress={() => setTermsAccepted(!termsAccepted)}
             >
               <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-                {termsAccepted && }
+                                {termsAccepted && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
               <Text style={styles.termsTextSmall}>
                 I agree to the{' '}

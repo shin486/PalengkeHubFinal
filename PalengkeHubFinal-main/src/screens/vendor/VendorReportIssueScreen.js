@@ -256,8 +256,8 @@ export default function VendorReportIssueScreen({ navigation, route }) {
         <Text style={styles.customerName}>{item.name}</Text>
         <Text style={styles.customerEmail}>{item.email}</Text>
       </View>
-      {selectedCustomer?.id === item.id && (
-        
+                  {selectedCustomer?.id === item.id && (
+        <Text style={styles.checkmark}>✓</Text>
       )}
     </TouchableOpacity>
   );

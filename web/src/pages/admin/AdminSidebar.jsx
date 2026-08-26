@@ -14,24 +14,47 @@ const SIDEBAR_ICONS = {
   reports: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   complaints: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
   announcements: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z',
-  chats: 'M17 2a4 4 0 0 1 4 4v8.5a2.5 2.5 0 0 1-2.5 2.5H7a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h10z M7 2h10a2 2 0 0 1 2 2v8.5a.5.5 0 0 1-.5.5H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M9 11h6M9 7h6',
-  audit: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  chats: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+  logout: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
 };
 
-const MENU_ITEMS = [
-  { id: 'overview', label: 'Dashboard' },
-  { id: 'stalls', label: 'Stall Management' },
-  { id: 'products', label: 'Product Categories' },
-  { id: 'prices', label: 'Price Monitoring' },
-  { id: 'price-history', label: 'Price Change History' },
-  { id: 'price-anomaly', label: 'Price Anomaly Detection' },
-  { id: 'orders', label: 'Order Monitoring' },
-  { id: 'users', label: 'User Management' },
-  { id: 'reports', label: 'Reports Generation' },
-  { id: 'complaints', label: 'Complaint Management' },
-  { id: 'announcements', label: 'Announcements' },
-  { id: 'chats', label: 'Admin Chat' },
-  { id: 'audit', label: 'Audit Trail' },
+/* Grouped navigation — keeps the 13 sections scannable for new admins */
+const NAV_GROUPS = [
+  {
+    label: 'Overview',
+    items: [{ id: 'overview', label: 'Dashboard' }],
+  },
+  {
+    label: 'Marketplace',
+    items: [
+      { id: 'stalls', label: 'Stalls' },
+      { id: 'products', label: 'Products' },
+      { id: 'orders', label: 'Orders' },
+      { id: 'users', label: 'Users' },
+    ],
+  },
+  {
+    label: 'Pricing',
+    items: [
+      { id: 'prices', label: 'Price Monitor' },
+      { id: 'price-history', label: 'Price History' },
+      { id: 'price-anomaly', label: 'Price Anomalies' },
+    ],
+  },
+  {
+    label: 'Engagement',
+    items: [
+      { id: 'complaints', label: 'Complaints' },
+      { id: 'announcements', label: 'Announcements' },
+      { id: 'chats', label: 'Messages' },
+    ],
+  },
+  {
+    label: 'Insights',
+    items: [
+      { id: 'reports', label: 'Reports & Audit' },
+    ],
+  },
 ];
 
 export default function AdminSidebar({ activeSection, setActiveSection, adminName }) {
@@ -42,37 +65,56 @@ export default function AdminSidebar({ activeSection, setActiveSection, adminNam
     navigate('/admin-login');
   };
 
+  const initial = (adminName || 'A').trim().charAt(0).toUpperCase();
+
   return (
     <aside className="admin-sidebar">
+      {/* ── Top: logo / title ── */}
       <div className="admin-sidebar-brand">
         <img src="/palengkehublogo.jpg" alt="PalengkeHub" className="admin-sidebar-logo" />
-        <div>
+        <div className="admin-sidebar-brand-text">
           <div className="admin-sidebar-title">PalengkeHub</div>
           <div className="admin-sidebar-subtitle">Admin Panel</div>
         </div>
       </div>
-      <nav className="admin-sidebar-nav">
-        {MENU_ITEMS.map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveSection(item.id)}
-            className={`admin-nav-item${activeSection === item.id ? ' active' : ''}`}
-            title={item.label}
-          >
-            <span className="admin-nav-item-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d={SIDEBAR_ICONS[item.id]} />
-              </svg>
-            </span>
-            <span>{item.label}</span>
-            <span className="admin-nav-item-dot" />
-          </button>
+
+      {/* ── Middle: grouped nav links (icon + label) ── */}
+      <nav className="admin-sidebar-nav" aria-label="Admin sections">
+        {NAV_GROUPS.map(group => (
+          <div key={group.label} className="admin-nav-group">
+            <div className="admin-nav-group-label">{group.label}</div>
+            {group.items.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`admin-nav-item${activeSection === item.id ? ' active' : ''}`}
+                title={item.label}
+                aria-current={activeSection === item.id ? 'page' : undefined}
+              >
+                <span className="admin-nav-item-icon">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d={SIDEBAR_ICONS[item.id]} />
+                  </svg>
+                </span>
+                <span className="admin-nav-item-label">{item.label}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
+
+      {/* ── Bottom: profile + logout ── */}
       <div className="admin-sidebar-footer">
-        <div className="admin-sidebar-user">{adminName || 'Admin'}</div>
-        <div className="admin-sidebar-role">System Administrator</div>
-        <button className="admin-sidebar-logout" onClick={handleLogout}>Sign Out</button>
+        <div className="admin-sidebar-avatar" aria-hidden="true">{initial}</div>
+        <div className="admin-sidebar-userinfo">
+          <div className="admin-sidebar-user">{adminName || 'Admin'}</div>
+          <div className="admin-sidebar-role">System Administrator</div>
+        </div>
+        <button className="admin-sidebar-logout" onClick={handleLogout} title="Sign Out" aria-label="Sign Out">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d={SIDEBAR_ICONS.logout} />
+          </svg>
+        </button>
       </div>
     </aside>
   );

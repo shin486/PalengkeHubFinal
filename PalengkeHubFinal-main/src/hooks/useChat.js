@@ -14,12 +14,15 @@ const pickImage = async () => {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,
-    aspect: [1, 1],
     quality: 0.8,
   });
 
-  if (!result.canceled) {
-    return result.assets[0].uri;
+  if (!result.canceled && result.assets && result.assets[0]) {
+    const asset = result.assets[0];
+    return {
+      uri: asset.uri,
+      mimeType: asset.mimeType || null,
+    };
   }
   return null;
 };
@@ -98,14 +101,18 @@ export const useChat = (conversationId, currentUser, userRole) => {
     }
     
     console.log('Opening image picker...');
-    const imageUri = await pickImage();
-    if (!imageUri) return;
+    const asset = await pickImage();
+    if (!asset) return;
     
     setUploadingImage(true);
     try {
-      const imageUrl = await chatService.uploadChatImage(imageUri, conversationId);
-      console.log('Upload result URL:', imageUrl);
-      
+      const { url: imageUrl, error: uploadError } = await chatService.uploadChatImage(
+        asset.uri,
+        conversationId,
+        asset.mimeType || undefined
+      );
+      console.log('Upload result URL:', imageUrl, 'error:', uploadError);
+
       if (imageUrl) {
         const newMessage = await chatService.sendImageMessage(
           conversationId,
@@ -118,11 +125,11 @@ export const useChat = (conversationId, currentUser, userRole) => {
         }
         await loadMessages();
       } else {
-        alert('Failed to upload image');
+        alert(`Failed to upload image${uploadError ? `: ${uploadError}` : ''}`);
       }
     } catch (error) {
       console.error('Error sending image:', error);
-      alert('Failed to send image');
+      alert(`Failed to send image: ${error?.message || ''}`);
     } finally {
       setUploadingImage(false);
     }
