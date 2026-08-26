@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const SECTION_LABELS = {
@@ -13,6 +13,8 @@ export default function AdminTopbar({ setActiveSection }) {
   const [showResults, setShowResults] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
+    const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const searchRef = useRef(null);
   const notifRef = useRef(null);
 
@@ -50,14 +52,52 @@ export default function AdminTopbar({ setActiveSection }) {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const matches = query.trim()
-    ? Object.entries(SECTION_LABELS).filter(([, label]) => label.toLowerCase().includes(query.trim().toLowerCase()))
-    : [];
+    /* Global content search across products, stalls, orders, vendors, users */
+  const doSearch = async (term) => {
+    const q = term.trim();
+    if (!q || q.length < 2) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    setSearchResults([]);
+    const [p, s, o, u] = await Promise.all([
+      supabase.from('products').select('id, name, price, stall:stall_id(stall_name, stall_number)').ilike('name', `%${q}%`).order('name').limit(8),
+      supabase.from('stalls').select('id, stall_name, stall_number, section, vendor:profiles(full_name)').or(`stall_name.ilike.%${q}%,stall_number.eq.${q}`).order('stall_number').limit(8),
+      supabase.from('orders').select('id, order_number, total_amount, status, created_at, customer:consumer_id(full_name)').or(`order_number.ilike.%${q}%,id.eq.${q}`).order('created_at', { ascending: false }).limit(8),
+      supabase.from('profiles').select('id, full_name, email, role').or(`full_name.ilike.%${q}%,email.ilike.%${q}%`).order('full_name').limit(8),
+    ]);
+    const results = [
+      ...(p.data || []).map(r => ({ type: 'product', label: r.name, sub: `₱${parseFloat(r.price).toLocaleString()} · ${r.stall?.stall_name || ''}`, icon: '🛒', goto: 'products', tag: r.id })),
+      ...(s.data || []).map(r => ({ type: 'stall', label: r.stall_name || `Stall #${r.stall_number}`, sub: `${r.section || ''} ${r.vendor?.full_name ? `· ${r.vendor.full_name}` : ''}`, icon: '🏪', goto: 'stalls', tag: r.id })),
+      ...(o.data || []).map(r => ({ type: 'order', label: `#${r.order_number?.slice(-8) || String(r.id).slice(-6)}`, sub: `₱${parseFloat(r.total_amount || 0).toLocaleString()} · ${new Date(r.created_at).toLocaleDateString('en-PH', { month:'short', day:'numeric' })}`, icon: '📦', goto: 'orders', tag: r.id })),
+      ...(u.data || []).map(r => ({ type: 'user', label: r.full_name || r.email, sub: r.email || r.role, icon: '👤', goto: 'users', tag: r.id })),
+    ];
+    setSearchResults(results);
+    setSearchLoading(false);
+  };
 
-  const jumpTo = (section) => {
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    setShowResults(true);
+    doSearch(val);
+  };
+
+  const SECTION_ORDER = [
+    'overview', 'stalls', 'products', 'orders',
+    'users', 'prices', 'price-history', 'price-anomaly',
+    'announcements', 'complaints', 'chats', 'reports',
+  ];
+  const sectionMatches = useMemo(() => {
+    if (!query.trim() || query.trim().length < 2) return [];
+    return SECTION_ORDER
+      .filter(id => SECTION_LABELS[id]?.toLowerCase().includes(query.trim().toLowerCase()))
+      .map(id => ({ id, label: SECTION_LABELS[id] }));
+  }, [query]);
+
+  const jumpTo = (section, tag = null) => {
     setActiveSection(section);
     setQuery('');
     setShowResults(false);
+    setSearchResults([]);
   };
 
   return (
@@ -70,16 +110,36 @@ export default function AdminTopbar({ setActiveSection }) {
         <input
           type="text"
           value={query}
-          placeholder="Search pages…"
-          onChange={(e) => { setQuery(e.target.value); setShowResults(true); }}
+                    placeholder="Search products, stalls, orders, vendors…"
+          onChange={handleSearchChange}
           onFocus={() => setShowResults(true)}
-          aria-label="Search pages"
+          aria-label="Global search"
         />
-        {showResults && matches.length > 0 && (
-          <div className="admin-topbar-search-results">
-            {matches.map(([id, label]) => (
-              <button key={id} onClick={() => jumpTo(id)}>
-                <span>{label}</span>
+        {showResults && (
+          <div className="admin-topbar-search-results-expanded">
+            {searchLoading && <div className="admin-topbar-search-loading">Searching…</div>}
+            {!searchLoading && searchResults.length === 0 && query.trim().length < 2 && (
+              <div className="admin-topbar-search-hint-small">Type 2+ chars to search products, stalls, orders, users</div>
+            )}
+            {!searchLoading && searchResults.length === 0 && query.trim().length >= 2 && (
+              <div className="admin-topbar-search-empty">No results found</div>
+            )}
+            {!searchLoading && searchResults.map((r) => (
+              <button key={`${r.type}-${r.tag}`} className="admin-topbar-search-result-row" onClick={() => jumpTo(r.goto, r.tag)}>
+                <span className="admin-topbar-search-result-icon">{r.icon}</span>
+                <div className="admin-topbar-search-result-labels">
+                  <span className="admin-topbar-search-result-title">{r.label}</span>
+                  <span className="admin-topbar-search-result-sub">{r.sub}</span>
+                </div>
+                <span className="admin-topbar-search-hint">Go →</span>
+              </button>
+            ))}
+            {!searchLoading && query.trim().length >= 2 && searchResults.length === 0 && sectionMatches.length > 0 && (
+              <div className="admin-topbar-search-divider" />
+            )}
+            {!searchLoading && sectionMatches.map((m) => (
+              <button key={m.id} onClick={() => jumpTo(m.id)}>
+                <span>{m.label}</span>
                 <span className="admin-topbar-search-hint">Go →</span>
               </button>
             ))}

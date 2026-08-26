@@ -911,13 +911,26 @@ function PriceMonitor() {
   const [graphRange, setGraphRange] = useState('week');
   const [graphData, setGraphData] = useState([]);
 
-  const load = useCallback(async () => {
-    const [p, s] = await Promise.all([
-      supabase.from('products').select('*, stall:stall_id(stall_name, stall_number), price_history:price_history(order by changed_at desc limit 1)').order('name'),
-      supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
-    ]);
-    setProducts(p.data || []);
-    setStalls(s.data || []);
+    const load = useCallback(async () => {
+    try {
+      const [p, s, ph] = await Promise.all([
+        supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
+        supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
+        supabase.from('price_history').select('*').catch(() => ({ data: [] })),
+      ]);
+      const histByProduct = {};
+      (ph.data || []).forEach(h => { if (!histByProduct[h.product_id]) histByProduct[h.product_id] = h; });
+      const productsWithHistory = (p.data || []).map(prod => ({
+        ...prod,
+        price_history: histByProduct[prod.id] ? [histByProduct[prod.id]] : [],
+      }));
+      setProducts(productsWithHistory);
+      setStalls(s.data || []);
+    } catch (err) {
+      console.error('PriceMonitor load error:', err.message);
+      setProducts([]);
+      setStalls([]);
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
