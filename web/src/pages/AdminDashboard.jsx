@@ -851,8 +851,9 @@ function ProductCategories() {
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
     const matchSearch = !q || (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q);
-    const matchCategory = !categoryFilter || p.category === categoryFilter;
-    const matchStall = !stallFilter || p.stall_id === stallFilter;
+        const matchCategory = !categoryFilter || (p.category || '').toLowerCase() === categoryFilter.toLowerCase();
+    // Coerce both sides to strings to avoid bigint/string comparison mismatches
+    const matchStall = !stallFilter || String(p.stall_id) === String(stallFilter);
     return matchSearch && matchCategory && matchStall;
   });
 
@@ -872,7 +873,7 @@ function ProductCategories() {
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={uniqueCatOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
-        <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
+        <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || s.stall_number || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -880,14 +881,15 @@ function ProductCategories() {
           <tbody>
             {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No products found" /></td></tr>
               : filtered.map(p => {
-                const isLow = p.stock < 5;
+                // The DB column is 'stock_quantity' (nullable); map to 'stock' for the UI
+                const isLow = (p.stock_quantity ?? 0) < 5;
                 return (
                   <tr key={p.id}>
                     <td><strong>{p.name}</strong></td>
                     <td><span className="status-badge status-confirmed">{p.category || 'Uncategorized'}</span></td>
-                    <td>{p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
+                    <td>{p.stall?.stall_name || p.stall?.stall_number || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
                     <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
-                    <td>{p.stock || 0} {isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low Stock</span>}</td>
+                    <td>{p.stock_quantity ?? 0}{isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low</span>}</td>
                     <td><span className={`status-badge ${isLow ? 'status-pending' : 'status-completed'}`}>{isLow ? 'Reorder' : 'In Stock'}</span></td>
                   </tr>
                 );
@@ -946,8 +948,9 @@ function PriceMonitor() {
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
     const matchSearch = !q || (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q);
-    const matchCategory = !categoryFilter || p.category === categoryFilter;
-    const matchStall = !stallFilter || p.stall_id === stallFilter;
+        const matchCategory = !categoryFilter || (p.category || '').toLowerCase() === categoryFilter.toLowerCase();
+    // Coerce both sides to strings to avoid bigint/string comparison mismatches
+    const matchStall = !stallFilter || String(p.stall_id) === String(stallFilter);
     return matchSearch && matchCategory && matchStall;
   });
 
@@ -983,7 +986,7 @@ function PriceMonitor() {
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={categories.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
-        <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
+        <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || s.stall_number || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -991,7 +994,7 @@ function PriceMonitor() {
           <tbody>
             {filtered.length === 0 ? <tr><td colSpan="8"><EmptyState message="No products found" /></td></tr>
               : filtered.map(p => {
-                const isLow = p.stock < 5;
+                                const isLow = (p.stock_quantity ?? 0) < 5;
                 const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
                 return (
                   <tr key={p.id}>
@@ -1000,7 +1003,7 @@ function PriceMonitor() {
                     <td>{p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
                     <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
                     <td>{lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A'}</td>
-                    <td>{p.stock || 0} {isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low</span>}</td>
+                    <td>{p.stock_quantity ?? 0}{isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low</span>}</td>
                     <td><span className={`status-badge ${isLow ? 'status-pending' : 'status-completed'}`}>{isLow ? 'Reorder' : 'In Stock'}</span></td>
                     <td><button className="btn btn-sm btn-primary" onClick={() => viewProduct(p)}>View History</button></td>
                   </tr>
@@ -1067,9 +1070,16 @@ function PriceHistory() {
   const [dateFilter, setDateFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 
-  const load = useCallback(async () => {
-    const { data } = await supabase.from('price_history').select('*, product:product_id(name)').order('changed_at', { ascending: false }).limit(200);
-    setHistory(data || []);
+    const load = useCallback(async () => {
+    const { data, error } = await supabase.from('price_history').select('*, product:product_id(name)').order('changed_at', { ascending: false }).limit(200);
+    if (error) {
+      console.warn('price_history table issue:', error.message);
+      // If the price_history table doesn't exist yet in the schema, we gracefully show "No price changes recorded"
+      // rather than crashing the entire Price Monitor section.
+      setHistory([]);
+    } else {
+      setHistory(data || []);
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -1939,7 +1949,7 @@ function AnalyticsReports() {
     setExporting(type);
     try {
       if (type === 'products-pdf') {
-        const rows = products.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.stock || 0]);
+        const rows = products.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.stock_quantity ?? 0]);
         generatePdf({
           title: 'Product Price Report',
           subtitle: `Complete list of products and their current prices (${formatDateRange(customStart, customEnd)})`,
@@ -1953,7 +1963,7 @@ function AnalyticsReports() {
         exportToCSV({
           data: products,
           filename: `palengkehub_products_${formatDateRange(customStart, customEnd)}.csv`,
-          headers: ['name', 'category', 'price', 'stock', 'stall_name'],
+          headers: ['name', 'category', 'price', 'stock_quantity', 'stall_name'],
         });
         toast({ message: 'Product data exported to CSV', type: 'success' });
       } else if (type === 'stalls-pdf') {
