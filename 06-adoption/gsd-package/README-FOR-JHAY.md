@@ -8,6 +8,18 @@ Read this file once, top to bottom. It takes about ten minutes. Then start with 
 
 ---
 
+## The easiest way
+
+If you would rather not run the setup yourself, you do not have to. There is a file at the root of this repo called **`FOR-CLAUDE.md`**. It is written for the AI, not for you, and it contains the whole process: the setup commands, the phase order, the guardrails and what to do when something goes wrong.
+
+Open Claude Code in the root folder of this repo and type exactly this one sentence:
+
+> Read FOR-CLAUDE.md and help me start.
+
+That is it. Claude will read the plan, walk you through the install, and drive the phases with you one at a time. Everything below is still worth reading so you know what it is doing, but you can start with that sentence today.
+
+---
+
 ## 1. What is on this branch
 
 Three things were added. Nothing that already existed was deleted or moved.
