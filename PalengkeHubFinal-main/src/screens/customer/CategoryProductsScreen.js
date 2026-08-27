@@ -109,6 +109,7 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPromotion }) => {
   const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [imageError, setImageError] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const rating = getStallRating(stall?.id || 0);
@@ -209,6 +210,7 @@ const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPr
 // ============================================================
 const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewStall }) => {
   const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const rating = getStallRating(stall.id);
   
   return (
@@ -297,6 +299,8 @@ const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewSt
 // SKELETON LOADING COMPONENT
 // ============================================================
 const SkeletonLoader = () => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {

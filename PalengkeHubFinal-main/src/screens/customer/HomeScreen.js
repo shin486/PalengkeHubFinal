@@ -15,6 +15,7 @@ import {
   Platform,
   Animated,
   Vibration,
+  AccessibilityInfo,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,12 +29,27 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
 import { hapticLight, hapticMedium } from '../../theme/motion';
-import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
+import { ProductCard } from '../../components/ProductCard';
+import { Badge } from '../../components/ui/Badge';
+import { Chip } from '../../components/ui/Chip';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.44;
+
+// Tagalog first, English underneath — that is how the market is spoken.
+// `categoryName` must stay the exact English string: CategoryProductsScreen
+// filters `.eq('category', categoryName)` against it. Matches
+// CATEGORY_CONFIG in CategoryProductsScreen.js exactly.
+const CATEGORY_CHIPS = [
+  { categoryName: 'Vegetables', tagalog: 'Gulay', english: 'Vegetables', icon: 'leaf' },
+  { categoryName: 'Meat', tagalog: 'Karne', english: 'Meat', icon: 'restaurant' },
+  { categoryName: 'Fruits', tagalog: 'Prutas', english: 'Fruits', icon: 'basket' },
+  { categoryName: 'Poultry', tagalog: 'Manok', english: 'Poultry', icon: 'egg' },
+  { categoryName: 'Rice', tagalog: 'Bigas', english: 'Rice', icon: 'cafe' },
+  { categoryName: 'Other', tagalog: 'Iba pa', english: 'Other', icon: 'apps' },
+];
 
 // ============================================================
 // TYPEWRITER PLACEHOLDER
@@ -50,9 +66,29 @@ const TypewriterPlaceholder = ({
   const [displayText, setDisplayText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [phraseIndex, setPhraseIndex] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled?.().then((enabled) => {
+      if (mounted) setReduceMotion(!!enabled);
+    });
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', (enabled) => {
+      setReduceMotion(!!enabled);
+    });
+    return () => {
+      mounted = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setDisplayText(phrases[0]);
+      return;
+    }
+
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
@@ -85,7 +121,7 @@ const TypewriterPlaceholder = ({
         clearTimeout(timerRef.current);
       }
     };
-  }, [displayText, isDeleting, phraseIndex]);
+  }, [displayText, isDeleting, phraseIndex, reduceMotion]);
 
   return (
     <Text style={styles.searchPlaceholder}>
@@ -99,20 +135,21 @@ const TypewriterPlaceholder = ({
 // STAR RATING COMPONENT
 // ============================================================
 const StarRating = ({ rating, size = 12 }) => {
+  const { colors } = useTheme();
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
-  
+
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {[...Array(fullStars)].map((_, i) => (
-        <Ionicons key={`full-${i}`} name="star" size={size} color="#F59E0B" />
+        <Ionicons key={`full-${i}`} name="star" size={size} color={colors.gold} />
       ))}
       {hasHalfStar && (
-        <Ionicons name="star-half" size={size} color="#F59E0B" />
+        <Ionicons name="star-half" size={size} color={colors.gold} />
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color="#D1D5DB" />
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color={colors.text.quaternary} />
       ))}
     </View>
   );
@@ -121,88 +158,9 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 // PRODUCT CARD COMPONENT
 // ============================================================
-const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, isPromo = false, priceTrend, isFavorite = false, onToggleFavorite }) => {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const [imageError, setImageError] = useState(false);
-
-  return (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <View style={styles.productImageWrapper}>
-        {product.image_url && !imageError ? (
-          <Image 
-            source={{ uri: product.image_url }} 
-            style={styles.productImage}
-            onError={() => setImageError(true)}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="image-outline" size={40} color="#D1D5DB" />
-          </View>
-        )}
-        {discountText && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountBadgeText}>{discountText}</Text>
-          </View>
-        )}
-        {onToggleFavorite && (
-          <TouchableOpacity
-            style={styles.favHeartBtn}
-            onPress={onToggleFavorite}
-            activeOpacity={0.7}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={16}
-              color={isFavorite ? colors.primary : '#FFFFFF'}
-            />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.productDetails}>
-        <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-        
-        <View style={styles.productPriceRow}>
-          {isPromo ? (
-            <>
-              <Text style={styles.productOriginalPrice}>₱{product.original_price?.toFixed(2)}</Text>
-              <Text style={styles.productPrice}>₱{product.price?.toFixed(2)}</Text>
-            </>
-          ) : (
-            <Text style={styles.productPrice}>₱{product.price?.toFixed(2)}</Text>
-          )}
-          <Text style={styles.productUnit}>/{product.unit}</Text>
-        </View>
-
-        {priceTrend && (
-          <PriceTrendBadge
-            currentPrice={product.price}
-            previousPrice={priceTrend.previous_price}
-          />
-        )}
-        
-        <Text style={styles.productVendor} numberOfLines={1}>
-          {stall?.stall_name || `Stall ${stall?.stall_number}`}
-        </Text>
-      </View>
-
-      <TouchableOpacity 
-        style={styles.addToCartButton}
-        onPress={onAddToCart}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={22} color="#FFFFFF" />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-};
+// Local ProductCard duplicate removed (phase 4) — this screen now uses the
+// shared src/components/ProductCard.js primitive from phase 2, imported
+// above, matching how CategoryProductsScreen already renders products.
 
 // ============================================================
 // STALL CARD COMPONENT
@@ -232,7 +190,7 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
             />
           ) : (
             <View style={styles.stallImagePlaceholder}>
-              <Ionicons name="storefront-outline" size={30} color="#D1D5DB" />
+              <Ionicons name="storefront-outline" size={30} color={colors.text.quaternary} />
             </View>
           )}
           {isClosed && (
@@ -291,12 +249,12 @@ const PriceDropItem = ({ item, onPress }) => {
           />
         ) : (
           <View style={styles.priceDropImagePlaceholder}>
-            <Ionicons name="trending-down-outline" size={32} color="#D1D5DB" />
+            <Ionicons name="trending-down-outline" size={32} color={colors.text.quaternary} />
           </View>
         )}
-        <View style={styles.savingsBadge}>
-          <Text style={styles.savingsBadgeText}>{t('products.save')} ₱{item.savings.toFixed(2)}</Text>
-        </View>
+        <Badge tone="tomato" style={styles.savingsBadge}>
+          {t('products.save')} ₱{item.savings.toFixed(2)}
+        </Badge>
       </View>
 
       <View style={styles.priceDropDetails}>
@@ -721,13 +679,10 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={true} />
-        <LinearGradient
-          colors={[colors.primary, colors.primaryLight]}
-          style={{ paddingTop: Platform.OS === 'ios' ? 44 : 28, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}
-        >
+        <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={colors.surface} />
+        <View style={[styles.searchHeader, { paddingTop: Platform.OS === 'ios' ? 44 : 28, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }]}>
           <View style={{ height: 44 }} />
-        </LinearGradient>
+        </View>
         <ScrollView>
           <SkeletonList count={4} />
           <SkeletonList count={4} />
@@ -738,39 +693,34 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={true} />
-      
+      <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={colors.surface} />
+
       {/*  Search Header with Notification Bell */}
-      <LinearGradient
-        colors={[colors.primary, colors.primaryLight]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.searchHeaderGradient}
-      >
+      <View style={styles.searchHeader}>
         <View style={styles.searchHeaderContent}>
           <View style={styles.searchHeaderRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.searchBar}
               onPress={() => navigation.navigate('Search')}
               activeOpacity={0.7}
             >
-              <Ionicons name="search-outline" size={22} color="rgba(255,255,255,0.8)" />
-              <TypewriterPlaceholder 
+              <Ionicons name="search-outline" size={22} color={colors.text.tertiary} />
+              <TypewriterPlaceholder
                 phrases={searchPhrases}
                 typingSpeed={100}
                 deletingSpeed={50}
                 pauseDelay={1500}
               />
-              <Ionicons name="scan-outline" size={22} color="rgba(255,255,255,0.6)" />
+              <Ionicons name="scan-outline" size={22} color={colors.text.tertiary} />
             </TouchableOpacity>
 
             {/*  Notification Bell */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.notificationButton}
               onPress={() => navigation.navigate('Notifications')}
               activeOpacity={0.7}
             >
-              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+              <Ionicons name="notifications-outline" size={24} color={colors.text.primary} />
               {unreadCount > 0 && (
                 <View style={styles.notificationBadge}>
                   <Text style={styles.notificationBadgeText}>
@@ -781,7 +731,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       <ScrollView 
         style={styles.scrollView}
@@ -795,6 +745,33 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           />
         }
       >
+        {/* ============================================================
+            SHOP BY CATEGORY — the round chip row
+        ============================================================ */}
+        <View style={[styles.section, styles.categorySection]}>
+          <Text style={styles.sectionTitle}>{t('home.shop_by_category')}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryChipRow}
+          >
+            {CATEGORY_CHIPS.map((cat) => (
+              <TouchableOpacity
+                key={cat.categoryName}
+                style={styles.categoryChip}
+                onPress={() => navigation.navigate('CategoryProducts', { categoryName: cat.categoryName })}
+                activeOpacity={0.8}
+              >
+                <View style={styles.categoryChipIconCircle}>
+                  <Ionicons name={cat.icon} size={24} color={colors.primaryDark} />
+                </View>
+                <Text style={styles.categoryChipLabel} numberOfLines={1}>{cat.tagalog}</Text>
+                <Text style={styles.categoryChipSubLabel} numberOfLines={1}>{cat.english}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* ============================================================
             ANNOUNCEMENT BANNER — latest customer announcement
         ============================================================ */}
@@ -840,7 +817,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
           {promoProducts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="pricetag-outline" size={48} color="#D1D5DB" />
+              <Ionicons name="pricetag-outline" size={48} color={colors.text.quaternary} />
               <Text style={styles.emptyStateTitle}>{t('home.no_deals')}</Text>
               <Text style={styles.emptyStateText}>{t('home.check_back_later')}</Text>
             </View>
@@ -862,12 +839,12 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     product={{ ...product, price: promo.discounted_price, original_price: promo.original_price }}
                     stall={stall}
                     discountText={discountText}
-                    isPromo={true}
+                    hasPromotion={true}
                     priceTrend={priceTrends.get(product.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                     onAddToCart={() => handleAddToCart({ ...product, price: promo.discounted_price }, stall)}
-                    isFavorite={product?.id ? isProductFavorite(product.id) : false}
-                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(product); }}
+                    isWishlisted={product?.id ? isProductFavorite(product.id) : false}
+                    onToggleWishlist={() => { hapticLight(); toggleProductFavorite(product); }}
                   />
                 );
               })}
@@ -902,9 +879,9 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     source={{ uri: item.image }}
                     style={styles.productImage}
                   />
-                  <View style={styles.productInfo}>
+                  <View style={styles.recentInfo}>
                     <Text numberOfLines={2} style={styles.productName}>{item.name}</Text>
-                    <Text numberOfLines={1} style={styles.productStall}>{item.stall_name}</Text>
+                    <Text numberOfLines={1} style={styles.recentStallText}>{item.stall_name}</Text>
                     <Text style={styles.productPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
                   </View>
                 </TouchableOpacity>
@@ -943,8 +920,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     priceTrend={priceTrends.get(item.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
                     onAddToCart={() => handleOrderAgain(item)}
-                    isFavorite={isProductFavorite(item.id)}
-                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(item); }}
+                    isWishlisted={isProductFavorite(item.id)}
+                    onToggleWishlist={() => { hapticLight(); toggleProductFavorite(item); }}
                   />
                 ))}
               </View>
@@ -967,8 +944,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     priceTrend={priceTrends.get(item.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
                     onAddToCart={() => handleOrderAgain(item)}
-                    isFavorite={isProductFavorite(item.id)}
-                    onToggleFavorite={() => { hapticLight(); toggleProductFavorite(item); }}
+                    isWishlisted={isProductFavorite(item.id)}
+                    onToggleWishlist={() => { hapticLight(); toggleProductFavorite(item); }}
                   />
                 ))}
               </ScrollView>
@@ -1059,16 +1036,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             contentContainerStyle={styles.filterContainer}
           >
             {sections.map((section, index) => (
-              <TouchableOpacity 
-                key={index} 
-                style={[styles.filterChip, selectedSection === section && styles.filterChipActive]} 
+              <Chip
+                key={index}
+                isOn={selectedSection === section}
                 onPress={() => setSelectedSection(section)}
-                activeOpacity={0.7}
               >
-                <Text style={[styles.filterChipText, selectedSection === section && styles.filterChipTextActive]}>
-                  {section}
-                </Text>
-              </TouchableOpacity>
+                {section}
+              </Chip>
             ))}
           </ScrollView>
 
@@ -1098,7 +1072,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
           <View style={styles.toastContent}>
             <View style={styles.toastIcon}>
-              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+              <Ionicons name="checkmark-circle" size={22} color={colors.onSuccess} />
             </View>
             <View style={styles.toastTextWrap}>
               <Text style={styles.toastTitle}>Added to Cart</Text>
@@ -1134,21 +1108,17 @@ const createStyles = (colors) => StyleSheet.create({
   toastContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderRadius: 14,
+    backgroundColor: colors.inkSurface,
+    borderRadius: RADIUS.md,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
+    ...SHADOWS.float,
   },
   toastIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1157,12 +1127,13 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
   },
   toastTitle: {
-    color: '#FFFFFF',
+    color: colors.onInk,
     fontSize: 15,
     fontWeight: '700',
   },
   toastSubtitle: {
-    color: '#D1D5DB',
+    color: colors.onInk,
+    opacity: 0.75,
     fontSize: 13,
     marginTop: 2,
   },
@@ -1184,7 +1155,10 @@ const createStyles = (colors) => StyleSheet.create({
   },
 
   // ── Search Header ──
-  searchHeaderGradient: {
+  searchHeader: {
+    backgroundColor: colors.surface,
+    borderBottomWidth: LAYOUT.hairlineWidth,
+    borderBottomColor: colors.border,
     paddingTop: Platform.OS === 'ios' ? 44 : 28,
     paddingBottom: SPACING.md,
     paddingHorizontal: SPACING.lg,
@@ -1199,41 +1173,36 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: RADIUS.lg,
-    paddingVertical: 12,
+    backgroundColor: colors.inputBg,
+    borderRadius: RADIUS.full,
+    height: LAYOUT.searchHeight,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   searchPlaceholder: {
     flex: 1,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
+    ...TEXT_STYLES.body,
+    color: colors.text.tertiary,
     includeFontPadding: false,
   },
   searchPlaceholderDynamic: {
-    color: 'rgba(255,255,255,0.95)',
-    fontWeight: '600',
+    color: colors.text.primary,
+    fontWeight: TYPE.weight.bold,
   },
   searchCursor: {
-    color: '#FFFFFF',
-    fontWeight: '300',
+    color: colors.text.tertiary,
+    fontWeight: TYPE.weight.regular,
     opacity: 0.8,
   },
 
   // ── Notification Bell ──
   notificationButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: LAYOUT.minTapTarget,
+    height: LAYOUT.minTapTarget,
+    borderRadius: LAYOUT.minTapTarget / 2,
+    backgroundColor: colors.wickerSoft,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     position: 'relative',
   },
   notificationBadge: {
@@ -1243,24 +1212,24 @@ const createStyles = (colors) => StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.error,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: colors.surface,
   },
   notificationBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.black,
+    color: colors.onError,
     includeFontPadding: false,
   },
 
   // ── Sections ──
   section: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
+    paddingTop: SPACING.xxxl,
   },
   announcementBanner: {
     flexDirection: 'row',
@@ -1316,20 +1285,52 @@ const createStyles = (colors) => StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    ...TEXT_STYLES.h2,
     color: colors.text.primary,
-    letterSpacing: -0.5,
   },
   sectionSubtitle: {
-    fontSize: 13,
+    fontSize: TYPE.size.caption,
     color: colors.text.tertiary,
     marginTop: 2,
   },
   sectionLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.primary,
+    ...TEXT_STYLES.label,
+    color: colors.primaryDark,
+  },
+
+  // ── Category Chips ──
+  categorySection: {
+    paddingTop: SPACING.lg,
+  },
+  categoryChipRow: {
+    paddingTop: SPACING.md,
+    paddingRight: SPACING.lg,
+    gap: SPACING.md,
+  },
+  categoryChip: {
+    alignItems: 'center',
+    width: 72,
+    minHeight: 42,
+  },
+  categoryChipIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.full,
+    backgroundColor: colors.wickerSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  categoryChipLabel: {
+    ...TEXT_STYLES.label,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  categoryChipSubLabel: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.medium,
+    color: colors.text.tertiary,
+    textAlign: 'center',
   },
 
   horizontalList: {
@@ -1342,136 +1343,50 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
 
-  // ── Product Cards ──
+  // ── Recently Viewed card (its own lightweight card, not the shared
+  // ProductCard primitive — no add-to-cart data available for this rail) ──
   productCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
     marginBottom: SPACING.md,
     position: 'relative',
     width: CARD_WIDTH,
-  },
-  productImageWrapper: {
-    position: 'relative',
-    backgroundColor: colors.inputBg,
-    padding: SPACING.md,
-    height: 100,
-  },
-  favHeartBtn: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   productImage: {
     width: '100%',
     height: 80,
     borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  productImagePlaceholder: {
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.inputBg,
-    borderRadius: RADIUS.md,
-  },
-  discountBadge: {
-    position: 'absolute',
-    top: SPACING.sm,
-    left: SPACING.sm,
-    backgroundColor: colors.primary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: RADIUS.md,
-  },
-  discountBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  productDetails: {
+  recentInfo: {
     padding: SPACING.md,
-    paddingBottom: SPACING.lg,
-    paddingRight: 48,
-    minHeight: 80,
   },
   productName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TEXT_STYLES.bodySmall,
     color: colors.text.primary,
     marginBottom: 4,
   },
-  productPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+  recentStallText: {
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
     marginBottom: 4,
-    flexWrap: 'wrap',
   },
   productPrice: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...TEXT_STYLES.price,
     color: colors.primary,
-  },
-  productOriginalPrice: {
-    fontSize: 12,
-    color: colors.text.tertiaryer,
-    textDecorationLine: 'line-through',
-  },
-  productUnit: {
-    fontSize: 11,
-    color: colors.text.tertiary,
-  },
-  productVendor: {
-    fontSize: 11,
-    color: colors.text.tertiary,
-  },
-  addToCartButton: {
-    position: 'absolute',
-    bottom: SPACING.md,
-    right: SPACING.md,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: colors.shadowDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 4,
   },
 
   // ── Price Drop Cards ──
   priceDropCard: {
     width: CARD_WIDTH,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
     marginBottom: SPACING.md,
   },
   priceDropImageWrapper: {
@@ -1497,24 +1412,13 @@ const createStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     top: SPACING.sm,
     left: SPACING.sm,
-    backgroundColor: colors.success,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: RADIUS.md,
-  },
-  savingsBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
   },
   priceDropDetails: {
     padding: SPACING.md,
     paddingBottom: SPACING.lg,
   },
   priceDropName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TEXT_STYLES.bodySmall,
     color: colors.text.primary,
     marginBottom: 4,
   },
@@ -1525,13 +1429,12 @@ const createStyles = (colors) => StyleSheet.create({
     marginBottom: 4,
   },
   priceDropOldPrice: {
-    fontSize: 12,
-    color: colors.text.tertiaryer,
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
     textDecorationLine: 'line-through',
   },
   priceDropNewPrice: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...TEXT_STYLES.price,
     color: colors.success,
   },
   priceDropVendor: {
@@ -1542,33 +1445,8 @@ const createStyles = (colors) => StyleSheet.create({
   // ── Filter Chips ──
   filterContainer: {
     paddingRight: SPACING.lg,
-    gap: 8,
+    gap: SPACING.sm,
     marginBottom: SPACING.lg,
-  },
-  filterChip: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: 8,
-    backgroundColor: colors.surface,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 1,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text.secondary,
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
   },
 
   // ── Stall Cards ──
@@ -1576,16 +1454,11 @@ const createStyles = (colors) => StyleSheet.create({
     gap: SPACING.md,
   },
   stallCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     padding: SPACING.lg,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
     marginBottom: SPACING.md,
   },
   stallCardClosed: {
@@ -1619,7 +1492,7 @@ const createStyles = (colors) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1627,7 +1500,7 @@ const createStyles = (colors) => StyleSheet.create({
   stallClosedText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.onInk,
     letterSpacing: 0.5,
   },
   stallInfo: {
