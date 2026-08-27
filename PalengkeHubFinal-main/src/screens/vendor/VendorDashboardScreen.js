@@ -20,28 +20,11 @@ import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
 // ============================================================
-
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();

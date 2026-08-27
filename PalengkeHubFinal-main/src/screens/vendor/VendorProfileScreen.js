@@ -27,28 +27,11 @@ import { useI18n } from '../../contexts/i18nContext';
 import * as ImagePicker from 'expo-image-picker';
 import { hapticLight, hapticSuccess } from '../../theme/motion';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
 // ============================================================
-
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 // ============================================================
 // GOOGLE MAPS COMPONENT - Web Version

@@ -52,3 +52,7 @@ c
 
 # ── Launcher logs ──
 run-logs/
+
+# ── GSD local tooling (installed per-machine, not app code) ──
+.claude/
+.planning/

@@ -30,29 +30,10 @@ import { useLastViewed } from '../../hooks/useLastViewed';
 import { hapticLight, hapticMedium } from '../../theme/motion';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.44;
-
-// ============================================================
-// SPACING CONSTANTS
-// ============================================================
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 24,
-};
 
 // ============================================================
 // TYPEWRITER PLACEHOLDER
@@ -1193,13 +1174,13 @@ const createStyles = (colors) => StyleSheet.create({
   loadingCategories: {
     height: 100,
     backgroundColor: colors.surfaceSecondary,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     marginBottom: SPACING.lg,
   },
   loadingProducts: {
     height: 200,
     backgroundColor: colors.surfaceSecondary,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
   },
 
   // ── Search Header ──
@@ -1219,7 +1200,7 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     paddingVertical: 12,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
@@ -1364,7 +1345,7 @@ const createStyles = (colors) => StyleSheet.create({
   // ── Product Cards ──
   productCard: {
     backgroundColor: colors.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -1397,7 +1378,7 @@ const createStyles = (colors) => StyleSheet.create({
   productImage: {
     width: '100%',
     height: 80,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1407,7 +1388,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.inputBg,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
   },
   discountBadge: {
     position: 'absolute',
@@ -1416,7 +1397,7 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
   },
   discountBadgeText: {
     fontSize: 10,
@@ -1482,7 +1463,7 @@ const createStyles = (colors) => StyleSheet.create({
   priceDropCard: {
     width: CARD_WIDTH,
     backgroundColor: colors.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -1502,7 +1483,7 @@ const createStyles = (colors) => StyleSheet.create({
   priceDropImage: {
     width: '100%',
     height: 80,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
   },
   priceDropImagePlaceholder: {
@@ -1510,7 +1491,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.inputBg,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
   },
   savingsBadge: {
     position: 'absolute',
@@ -1519,7 +1500,7 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.success,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
   },
   savingsBadgeText: {
     fontSize: 10,
@@ -1568,7 +1549,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: 8,
     backgroundColor: colors.surface,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: colors.shadow,
@@ -1596,7 +1577,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   stallCard: {
     backgroundColor: colors.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     padding: SPACING.lg,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -1621,13 +1602,13 @@ const createStyles = (colors) => StyleSheet.create({
   stallImage: {
     width: 56,
     height: 56,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     backgroundColor: colors.borderLight,
   },
   stallImagePlaceholder: {
     width: 56,
     height: 56,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1639,7 +1620,7 @@ const createStyles = (colors) => StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1707,7 +1688,7 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 48,
     backgroundColor: colors.accentSoft,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     marginVertical: SPACING.sm,
   },
   emptyStateTitle: {

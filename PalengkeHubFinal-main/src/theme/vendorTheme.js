@@ -3,47 +3,51 @@
 // EXACTLY matches the Customer module's design language
 
 import { useColors, useTheme } from '../contexts/ThemeContext';
+import { COLORS, SPACING, RADIUS, ORDER_STATUS } from './tokens';
 
-// Legacy static colors (kept for backward compatibility)
+// Legacy static colors (kept for backward compatibility), now derived from
+// tokens.js instead of a private hex copy. `purple`/`purpleLight` have no
+// home in the design system (nothing in the logo is violet), so they stay
+// as literal legacy values.
 export const vendorColors = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F9FAFB',
-  divider: '#F3F4F6',
+  primary: COLORS.light.primary,
+  primaryLight: COLORS.light.primaryLight,
+  primaryDark: COLORS.light.primaryDark,
+  accent: COLORS.light.accent,
+  accentLight: COLORS.light.accentLight,
+  accentSoft: COLORS.light.accentSoft,
+  background: COLORS.light.background,
+  surface: COLORS.light.surface,
+  surfaceAlt: COLORS.light.surfaceSecondary,
+  divider: COLORS.light.borderLight,
   text: {
-    primary: '#111827',
-    dark: '#111827',
-    medium: '#374151',
-    secondary: '#6B7280',
-    light: '#6B7280',
-    tertiary: '#9CA3AF',
-    lighter: '#9CA3AF',
-    quaternary: '#D1D5DB',
-    white: '#FFFFFF',
+    primary: COLORS.light.text.primary,
+    dark: COLORS.light.text.dark,
+    medium: COLORS.light.text.medium,
+    secondary: COLORS.light.text.secondary,
+    light: COLORS.light.text.light,
+    tertiary: COLORS.light.text.tertiary,
+    lighter: COLORS.light.text.lighter,
+    quaternary: COLORS.light.text.quaternary,
+    white: COLORS.light.text.white,
   },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  successLight: '#D1FAE5',
-  error: '#DC2626',
-  danger: '#EF4444',
-  dangerLight: '#FEE2E2',
-  warning: '#F59E0B',
-  warningLight: '#FEF3C7',
-  info: '#3B82F6',
-  infoLight: '#DBEAFE',
+  border: COLORS.light.border,
+  borderLight: COLORS.light.borderLight,
+  success: COLORS.light.success,
+  successLight: COLORS.light.successLight,
+  error: COLORS.light.error,
+  danger: COLORS.light.error,
+  dangerLight: COLORS.light.errorLight,
+  warning: COLORS.light.warning,
+  warningLight: COLORS.light.warningLight,
+  info: COLORS.light.info,
+  infoLight: COLORS.light.infoLight,
   purple: '#7C3AED',
   purpleLight: '#EDE9FE',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-  gcash: '#007DFE',
-  gcashLight: '#E8F4FF',
+  shadow: COLORS.light.shadow,
+  shadowDark: COLORS.light.shadowDark,
+  gcash: COLORS.light.gcash,
+  gcashLight: COLORS.light.gcashLight,
 };
 
 //  Theme-aware vendor colors hook — uses ThemeContext colors with vendor-specific extras
@@ -87,23 +91,15 @@ export const useVendorColors = () => {
   };
 };
 
-export const vendorSpacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
+export const vendorSpacing = SPACING;
 
 export const vendorBorderRadius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  full: 999,
+  sm: RADIUS.sm,
+  md: RADIUS.md,
+  lg: RADIUS.lg,
+  xl: RADIUS.xl,
+  xxl: RADIUS.xl,
+  full: RADIUS.full,
 };
 
 //  Theme-aware vendor typography
@@ -168,37 +164,20 @@ export const vendorGradients = {
   directions: ['#DC2626', '#EF4444'],
 };
 
-//  Theme-aware status color helpers
+//  Theme-aware status color helpers, from tokens.js's ORDER_STATUS.
+// awaiting_verification and rejected_payment are payment-only states with
+// no ORDER_STATUS entry of their own; they reuse the closest status
+// (pending, rejected) rather than inventing a new color.
 const darkStatusMap = {
-  pending: '#FBBF24',
-  accepted: '#60A5FA',
-  confirmed: '#60A5FA',
-  preparing: '#A78BFA',
-  ready: '#34D399',
-  completed: '#9CA3AF',
-  cancelled: '#F87171',
-  expired: '#9CA3AF',
-  rejected: '#F87171',
-  paid: '#34D399',
-  awaiting_verification: '#FBBF24',
-  verified: '#34D399',
-  rejected_payment: '#F87171',
+  ...ORDER_STATUS.dark,
+  awaiting_verification: ORDER_STATUS.dark.pending,
+  rejected_payment: ORDER_STATUS.dark.rejected,
 };
 
 const lightStatusMap = {
-  pending: '#F59E0B',
-  accepted: '#3B82F6',
-  confirmed: '#3B82F6',
-  preparing: '#7C3AED',
-  ready: '#10B981',
-  completed: '#9CA3AF',
-  cancelled: '#DC2626',
-  expired: '#6B7280',
-  rejected: '#DC2626',
-  paid: '#10B981',
-  awaiting_verification: '#F59E0B',
-  verified: '#10B981',
-  rejected_payment: '#DC2626',
+  ...ORDER_STATUS.light,
+  awaiting_verification: ORDER_STATUS.light.pending,
+  rejected_payment: ORDER_STATUS.light.rejected,
 };
 
 export const getStatusColor = (status) => {

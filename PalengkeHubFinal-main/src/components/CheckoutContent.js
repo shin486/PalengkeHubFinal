@@ -25,6 +25,7 @@ import { useCart } from '../hooks/useCart';
 import { useColors } from '../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../utils/receiptScanner';
+import { SPACING, RADIUS } from '../theme/tokens';
 
 // Theme-aware colors are provided by ThemeContext via useColors().
 
@@ -66,23 +67,6 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
   }
 };
 
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();

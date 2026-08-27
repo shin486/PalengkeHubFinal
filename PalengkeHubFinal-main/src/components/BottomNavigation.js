@@ -14,6 +14,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useTheme } from '../contexts/ThemeContext';
 import { hapticSelection } from '../theme/motion';
+import { NAV_SPACING } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -22,17 +23,6 @@ const { width } = Dimensions.get('window');
 // ============================================================
 // Theme-aware colors are now provided by ThemeContext via useColors().
 // ============================================================
-
-// ============================================================
-// SPACING CONSTANTS
-// ============================================================
-const SPACING = {
-  xs: 4,
-  sm: 6,
-  md: 8,
-  lg: 12,
-  xl: 16,
-};
 
 // ============================================================
 // MAIN COMPONENT
@@ -184,7 +174,7 @@ export default function BottomNavigation({
       style={[
         styles.container,
         { 
-          paddingBottom: insets.bottom || SPACING.sm,
+          paddingBottom: insets.bottom || NAV_SPACING.sm,
           transform: [{ translateY: translateY }],
           backgroundColor: isDark
             ? 'rgba(26, 26, 46, 0.82)'
@@ -286,8 +276,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.sm,
+    paddingTop: NAV_SPACING.sm,
+    paddingBottom: NAV_SPACING.sm,
     height: 68,
   },
   tabItem: {

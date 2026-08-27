@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 // Only import MapView on native platforms
 let MapView, Marker, Callout;
@@ -26,30 +27,6 @@ if (Platform.OS !== 'web') {
 }
 
 const { width } = Dimensions.get('window');
-
-// ============================================================
-// COLORS - PalengkeHub Branding
-// ============================================================
-
-// ============================================================
-// SPACING CONSTANTS
-// ============================================================
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 12,
-  md: 16,
-  lg: 20,
-  xl: 24,
-};
 
 // ============================================================
 // MAIN COMPONENT
@@ -355,7 +332,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   // ── Main Container ──
   container: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -404,7 +381,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     backgroundColor: COLORS.primarySurface,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 3,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
   },
   userLocationDot: {
     width: 6,
@@ -422,7 +399,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   mapContainer: {
     position: 'relative',
     marginHorizontal: SPACING.lg,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -536,7 +513,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     gap: SPACING.sm,
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -558,7 +535,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.primary,
     paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
   },
   secondaryButtonText: {
     fontSize: 14,
@@ -569,7 +546,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   // ── Web Placeholder ──
   webContainer: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
@@ -607,7 +584,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   webPlaceholderInfo: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.md,
     padding: SPACING.md,
     width: '100%',
     borderWidth: 1,
@@ -632,7 +609,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.xxl,
     paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -648,7 +625,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   // ── Loading State ──
   loadingContainer: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderLight,

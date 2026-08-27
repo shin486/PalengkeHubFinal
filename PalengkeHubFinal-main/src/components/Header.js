@@ -15,20 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../contexts/ThemeContext';
+import { SPACING } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
-
-// ============================================================
-// SPACING CONSTANTS
-// ============================================================
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 // ============================================================
 // MAIN COMPONENT

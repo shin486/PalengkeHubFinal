@@ -21,30 +21,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 const { width } = Dimensions.get('window');
-
-// ============================================================
-// COLORS
-// ============================================================
-
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 // ============================================================
 // CATEGORY CONFIG

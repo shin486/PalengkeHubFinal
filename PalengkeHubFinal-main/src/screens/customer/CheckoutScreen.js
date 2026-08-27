@@ -33,6 +33,7 @@ import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../../utils/receiptScanner';
+import { SPACING, RADIUS } from '../../theme/tokens';
 
 // Downscale an image (data URI or blob URI) to a compressed JPEG data URI using
 // a canvas, so receipts stay small when stored directly on the order (fallback
@@ -73,24 +74,6 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 };
 
 const { width, height } = Dimensions.get('window');
-
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-};
 
 export default function CheckoutScreen({ navigation, route }) {
   const COLORS = useColors();

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,33 +25,9 @@ import { supabase } from '../../../lib/supabase';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { useColors } from '../../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#DC2626',
-  primaryLight: '#EF4444',
-  primaryDark: '#B91C1C',
-  accent: '#F87171',
-  accentLight: '#FEE2E2',
-  accentSoft: '#FEF2F2',
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  text: {
-    dark: '#111827',
-    medium: '#374151',
-    light: '#6B7280',
-    lighter: '#9CA3AF',
-    white: '#FFFFFF',
-  },
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
-  success: '#10B981',
-  error: '#DC2626',
-  warning: '#F59E0B',
-  shadow: 'rgba(0, 0, 0, 0.08)',
-  shadowDark: 'rgba(0, 0, 0, 0.12)',
-};
 
 // Stall sections available in the market
 const STALL_SECTIONS = [
@@ -85,6 +61,7 @@ const OTPModal = ({
   onClose,
   resendCooldown,
   hintText = '⏳ The SMS may take 30–60 seconds to arrive, depending on your network.',
+  styles,
 }) => (
   <Modal
     visible={visible}
@@ -158,6 +135,8 @@ const OTPModal = ({
 );
 
 export const SignUpScreen = ({ setIsGuest }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -1539,6 +1518,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
         onResend={otpMode === 'email' ? handleSendEmailVerification : handleSendSmsVerification}
         onClose={handleOtpModalClose}
         resendCooldown={resendCooldown}
+        styles={styles}
       />
       {/* Terms and Conditions Modal */}
       <TermsModal />
@@ -1546,7 +1526,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
