@@ -56,6 +56,19 @@ const getStarDistribution = (rating) => {
   return { fullStars, halfStar, emptyStars };
 };
 
+// D-14: a product-name group has no single "viewed product" to anchor a
+// reference unit the way ProductDetailsScreen does, so the reference unit
+// here is whichever unit the most stalls actually use. Rows in any other
+// unit are real listings, just never ranked or badged against this group.
+const getReferenceUnit = (items) => {
+  const counts = {};
+  items.forEach((i) => {
+    const unit = i.data ? i.data.unit : i.unit;
+    counts[unit] = (counts[unit] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+};
+
 const getDiscountedPrice = (originalPrice, promotion) => {
   if (!promotion) return originalPrice;
   if (promotion.discount_type === 'percentage') {
@@ -584,7 +597,15 @@ export default function SearchScreen({ navigation }) {
 
           const results = [];
           for (const [productName, variants] of Object.entries(grouped)) {
-            variants.sort((a, b) => a.price - b.price);
+            // D-14: comparable (reference-unit) rows sort by price and lead
+            // the group; different-unit rows sort by price among themselves
+            // but always trail, since they are not part of the ranking.
+            const referenceUnit = getReferenceUnit(variants);
+            variants.sort((a, b) => {
+              const aRef = a.unit === referenceUnit ? 0 : 1;
+              const bRef = b.unit === referenceUnit ? 0 : 1;
+              return aRef !== bRef ? aRef - bRef : a.price - b.price;
+            });
             results.push({ type: 'header', name: productName });
             variants.forEach(variant => {
               results.push({ type: 'product', data: variant });
@@ -649,7 +670,12 @@ export default function SearchScreen({ navigation }) {
               });
               const results = [];
               for (const [productName, variants] of Object.entries(grouped)) {
-                variants.sort((a, b) => a.price - b.price);
+                const referenceUnit = getReferenceUnit(variants);
+                variants.sort((a, b) => {
+                  const aRef = a.unit === referenceUnit ? 0 : 1;
+                  const bRef = b.unit === referenceUnit ? 0 : 1;
+                  return aRef !== bRef ? aRef - bRef : a.price - b.price;
+                });
                 results.push({ type: 'header', name: productName });
                 variants.forEach(variant => {
                   results.push({ type: 'product', data: variant });
@@ -720,6 +746,10 @@ export default function SearchScreen({ navigation }) {
 
   const renderProductComparisonItem = ({ item }) => {
     if (item.type === 'header') {
+      const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === item.name);
+      const referenceUnit = getReferenceUnit(groupItems);
+      const comparableCount = groupItems.filter(i => i.data.unit === referenceUnit).length;
+      const differentUnitCount = groupItems.length - comparableCount;
       return (
         <View style={styles.comparisonHeader}>
           <View style={styles.comparisonHeaderLeft}>
@@ -727,7 +757,8 @@ export default function SearchScreen({ navigation }) {
             <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
           </View>
           <Badge tone="brand">
-            {productsData.filter(i => i.type === 'product' && i.data.name === item.name).length} stalls
+            {comparableCount} stall{comparableCount === 1 ? '' : 's'}
+            {differentUnitCount > 0 ? ` (+${differentUnitCount} ibang unit)` : ''}
           </Badge>
         </View>
       );
@@ -737,11 +768,15 @@ export default function SearchScreen({ navigation }) {
     const stall = product.stalls;
     const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
 
-    // D-13: only rank a row against rows that share its own unit string. A
-    // stall selling by "bundle" never competes against one selling by "kilo".
-    const sameUnitItems = groupItems.filter(i => i.data.unit === product.unit);
-    const hasDifferentUnitSiblings = sameUnitItems.length < groupItems.length;
-    const isComparable = sameUnitItems.length > 1;
+    // D-11/D-14: the reference unit is whichever unit most stalls in this
+    // group use. Only rows in that unit ever rank or carry Pinakamura — a
+    // stall selling by "bundle" never competes against one selling by "kilo",
+    // and two different units can't each produce their own "cheapest".
+    const referenceUnit = getReferenceUnit(groupItems);
+    const isInReferenceUnit = product.unit === referenceUnit;
+    const sameUnitItems = isInReferenceUnit ? groupItems.filter(i => i.data.unit === referenceUnit) : [];
+    const hasDifferentUnitSiblings = !isInReferenceUnit;
+    const isComparable = isInReferenceUnit && sameUnitItems.length > 1;
     const minPriceInUnit = isComparable ? Math.min(...sameUnitItems.map(i => i.data.price)) : product.price;
     const isCheapest = isComparable && product.price === minPriceInUnit;
     const sortedSameUnit = isComparable

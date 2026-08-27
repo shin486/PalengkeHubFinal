@@ -706,10 +706,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const computeMarketAnalytics = () => {
     if (!marketProducts || marketProducts.length === 0) return null;
 
-    const prices = marketProducts.map(p => p.price || 0).filter(p => p > 0);
+    // D-11: the unit of the product being viewed is the reference unit.
+    // Rows sold in any other unit are real listings — they still render,
+    // with their real price and real unit — but they never enter the
+    // roster, the ranking, the badges, or any of the five KPIs below.
+    // When every row already shares one unit (the common case), this
+    // filter is a no-op and nothing about the numbers changes at all.
+    const referenceUnit = product?.unit;
+    const sameUnitProducts = marketProducts.filter(p => p.unit === referenceUnit);
+    const differentUnitProducts = marketProducts.filter(p => p.unit !== referenceUnit);
+
+    const prices = sameUnitProducts.map(p => p.price || 0).filter(p => p > 0);
     if (prices.length === 0) return null;
 
-    const sorted = [...marketProducts].sort((a, b) => (a.price || 0) - (b.price || 0));
+    const sorted = [...sameUnitProducts].sort((a, b) => (a.price || 0) - (b.price || 0));
     const lowest = sorted[0];
     const highest = sorted[sorted.length - 1];
     const minPrice = Math.min(...prices);
@@ -748,6 +758,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
       outdated,
       unusual,
       sorted,
+      referenceUnit,
+      differentUnitProducts,
     };
   };
 
@@ -950,6 +962,31 @@ export default function ProductDetailsScreen({ route, navigation }) {
               />
             ))}
 
+            {/* Ibang unit: real listings, never ranked against the roster above */}
+            {marketAnalytics.differentUnitProducts.length > 0 && (
+              <View style={styles.differentUnitGroup}>
+                <Text style={styles.differentUnitHeading}>Ibang unit</Text>
+                <Text style={styles.differentUnitNote}>
+                  Hindi ito kasama sa paghahambing dahil ibang unit ang ginamit.
+                </Text>
+                {marketAnalytics.differentUnitProducts.map((item) => (
+                  <View key={item.id} style={styles.differentUnitRow}>
+                    <View style={styles.differentUnitInfo}>
+                      <Text style={styles.differentUnitStallName} numberOfLines={1}>
+                        {item.stalls?.stall_name || 'Unknown Stall'}
+                      </Text>
+                      <Text style={styles.differentUnitStallSub} numberOfLines={1}>
+                        {item.stalls?.section || 'N/A'} • #{item.stalls?.stall_number || 'N/A'}
+                      </Text>
+                    </View>
+                    <Text style={styles.differentUnitPrice}>
+                      ₱{(item.price || 0).toFixed(2)} / {getUnitSuffix(item.unit)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* KPI stat cards */}
             <View style={styles.kpiGrid}>
               <View style={styles.kpiCard}>
@@ -957,21 +994,21 @@ export default function ProductDetailsScreen({ route, navigation }) {
                   <MaterialIcons name="trending-down" size={16} color={COLORS.success} />
                 </View>
                 <Text style={styles.kpiValue}>₱{marketAnalytics.minPrice.toFixed(2)}</Text>
-                <Text style={styles.kpiLabel}>Pinakamura / {unitSuffix}</Text>
+                <Text style={styles.kpiLabel}>Pinakamura / {getUnitSuffix(marketAnalytics.referenceUnit)}</Text>
               </View>
               <View style={styles.kpiCard}>
                 <View style={[styles.kpiIcon, { backgroundColor: COLORS.errorLight }]}>
                   <MaterialIcons name="trending-up" size={16} color={COLORS.errorDark} />
                 </View>
                 <Text style={styles.kpiValue}>₱{marketAnalytics.maxPrice.toFixed(2)}</Text>
-                <Text style={styles.kpiLabel}>Pinakamahal / {unitSuffix}</Text>
+                <Text style={styles.kpiLabel}>Pinakamahal / {getUnitSuffix(marketAnalytics.referenceUnit)}</Text>
               </View>
               <View style={styles.kpiCard}>
                 <View style={[styles.kpiIcon, { backgroundColor: COLORS.infoLight }]}>
                   <MaterialIcons name="calculate" size={16} color={COLORS.info} />
                 </View>
                 <Text style={styles.kpiValue}>₱{marketAnalytics.avgPrice.toFixed(2)}</Text>
-                <Text style={styles.kpiLabel}>Karaniwan / {unitSuffix}</Text>
+                <Text style={styles.kpiLabel}>Karaniwan / {getUnitSuffix(marketAnalytics.referenceUnit)}</Text>
               </View>
               <View style={styles.kpiCard}>
                 <View style={[styles.kpiIcon, { backgroundColor: COLORS.warningLight }]}>
@@ -1860,6 +1897,50 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: TYPE.size.caption,
     color: COLORS.text.tertiary,
     textAlign: 'center',
+  },
+  // ── Ibang unit: deliberately quiet, never mistaken for part of the ranking ──
+  differentUnitGroup: {
+    backgroundColor: COLORS.wickerSoft,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  differentUnitHeading: {
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.secondary,
+  },
+  differentUnitNote: {
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
+    marginBottom: SPACING.sm,
+  },
+  differentUnitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.xs + 2,
+    borderTopWidth: LAYOUT.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
+  differentUnitInfo: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  differentUnitStallName: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.semibold,
+    color: COLORS.text.secondary,
+  },
+  differentUnitStallSub: {
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.quaternary,
+  },
+  differentUnitPrice: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.secondary,
   },
   kpiGrid: {
     flexDirection: 'row',
