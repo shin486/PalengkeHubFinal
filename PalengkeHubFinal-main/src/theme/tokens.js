@@ -72,6 +72,7 @@ export const COLORS = {
     successLight: '#EDF3DE',
     error: '#D34638',
     errorLight: '#FBE2DE',
+    errorDark: '#9E2B20', // the tomato text tone: badges/deltas on an errorLight fill
     warning: '#D89A17',
     warningLight: '#FBEFD2',
     info: '#2C6C93',
@@ -164,6 +165,7 @@ export const COLORS = {
     successLight: '#28331A',
     error: '#F0968C',
     errorLight: '#3A1C18',
+    errorDark: '#F0968C', // dark mode: same readable tone as `error` (matches verdictDearText.dark)
     warning: '#F0CB77',
     warningLight: '#33270D',
     info: '#AFD8EF',

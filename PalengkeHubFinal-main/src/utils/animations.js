@@ -2,10 +2,11 @@
 // Reusable animation helpers for the customer side.
 // - FadeInUp: fades + slides content in when it mounts (used for screen
 //   sections, cards and list items).
-// - PressableScale: scales a pressable down slightly while pressed.
+//
+// PressableScale moved to src/components/ui/PressableScale.js in phase 2.
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, TouchableOpacity } from 'react-native';
+import { Animated, Easing } from 'react-native';
 
 export const FadeInUp = ({
   children,
@@ -44,51 +45,6 @@ export const FadeInUp = ({
       ]}
     >
       {children}
-    </Animated.View>
-  );
-};
-
-export const PressableScale = ({
-  children,
-  onPress,
-  style,
-  scaleTo = 0.96,
-  disabled = false,
-  activeOpacity = 1,
-  ...rest
-}) => {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scale, {
-      toValue: scaleTo,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 12,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 12,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <TouchableOpacity
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={activeOpacity}
-        disabled={disabled}
-        {...rest}
-      >
-        {children}
-      </TouchableOpacity>
     </Animated.View>
   );
 };

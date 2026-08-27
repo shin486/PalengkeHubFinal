@@ -7,8 +7,11 @@ import {
   Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useColors } from '../contexts/ThemeContext';
+import { RADIUS, SPACING, LAYOUT, SHADOWS } from '../theme/tokens';
 
 export const ModernCard = ({ children, onPress, style, gradient }) => {
+  const COLORS = useColors();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
@@ -45,6 +48,7 @@ export const ModernCard = ({ children, onPress, style, gradient }) => {
     <Animated.View
       style={[
         styles.card,
+        { backgroundColor: COLORS.card, borderColor: COLORS.border },
         style,
         {
           transform: [{ scale: scaleAnim }],
@@ -85,18 +89,14 @@ export const ModernCard = ({ children, onPress, style, gradient }) => {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    marginVertical: 8,
-    marginHorizontal: 16,
+    borderRadius: RADIUS.lg,
+    borderWidth: LAYOUT.borderWidth,
+    marginVertical: SPACING.sm,
+    marginHorizontal: SPACING.lg,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...SHADOWS.none,
   },
   gradient: {
-    padding: 16,
+    padding: SPACING.lg,
   },
 });

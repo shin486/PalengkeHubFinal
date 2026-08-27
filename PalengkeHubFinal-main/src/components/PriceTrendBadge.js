@@ -1,9 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useColors } from '../contexts/ThemeContext';
+import { RADIUS, SPACING, LAYOUT, TYPE } from '../theme/tokens';
 
 // Small pill showing whether a product's price went up or down compared to
 // its previous recorded price. Elderly-friendly: color + arrow + short Tagalog.
 export const PriceTrendBadge = ({ currentPrice, previousPrice }) => {
+  const COLORS = useColors();
   const cur = parseFloat(currentPrice);
   const prev = parseFloat(previousPrice);
   if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev <= 0) return null;
@@ -11,9 +14,11 @@ export const PriceTrendBadge = ({ currentPrice, previousPrice }) => {
   const abs = Math.abs(delta);
   if (abs < 0.01) return null;
 
+  // A price increase is a caution, not an error — red stays reserved for
+  // MAHAL and destructive actions, so "up" uses the warning family instead.
   const down = delta < 0;
-  const color = down ? '#16A34A' : '#B45309';
-  const bg = down ? '#DCFCE7' : '#FEF3C7';
+  const color = down ? COLORS.success : COLORS.warning;
+  const bg = down ? COLORS.successLight : COLORS.warningLight;
   const formatted = abs >= 100 ? abs.toFixed(0) : abs.toFixed(2);
 
   return (
@@ -30,14 +35,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 8,
+    borderRadius: RADIUS.full,
+    borderWidth: LAYOUT.hairlineWidth,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 3,
     marginBottom: 4,
   },
   text: {
-    fontSize: 10.5,
-    fontWeight: '700',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.semibold,
   },
 });

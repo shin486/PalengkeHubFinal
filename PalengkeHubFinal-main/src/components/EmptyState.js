@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useColors } from '../contexts/ThemeContext';
+import { SPACING, TYPE } from '../theme/tokens';
+import { Button } from './ui/Button';
 
 export const EmptyState = ({
   icon = 'cube-outline',
@@ -11,14 +13,13 @@ export const EmptyState = ({
   onAction = null,
   colors = {},
 }) => {
+  const COLORS = useColors();
   const themeColors = {
-    icon: '#9CA3AF',
-    title: '#6B7280',
-    subtitle: '#9CA3AF',
-    background: '#FFFFFF',
-    iconBg: '#F3F4F6',
-    buttonBg: '#C62828',
-    buttonText: '#FFFFFF',
+    icon: COLORS.text.tertiary,
+    title: COLORS.text.secondary,
+    subtitle: COLORS.text.tertiary,
+    background: COLORS.background,
+    iconBg: COLORS.surfaceSecondary,
     ...colors,
   };
 
@@ -32,21 +33,11 @@ export const EmptyState = ({
         <Text style={[styles.subtitle, { color: themeColors.subtitle }]}>{subtitle}</Text>
       ) : null}
       {actionLabel && onAction ? (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={onAction}
-          style={styles.buttonWrapper}
-        >
-          <LinearGradient
-            colors={['#C62828', '#E53935']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.button}
-          >
-            <Ionicons name="arrow-forward" size={16} color={themeColors.buttonText} />
-            <Text style={[styles.buttonText, { color: themeColors.buttonText }]}>{actionLabel}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        <Button variant="primary" onPress={onAction} icon={
+          <Ionicons name="arrow-forward" size={16} color={COLORS.onPrimary} />
+        }>
+          {actionLabel}
+        </Button>
       ) : null}
     </View>
   );
@@ -66,34 +57,18 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: TYPE.size.h1,
+    fontWeight: TYPE.weight.semibold,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: TYPE.size.body,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 24,
-  },
-  buttonWrapper: {
-    borderRadius: 25,
-    overflow: 'hidden',
-  },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-    gap: 8,
-  },
-  buttonText: {
-    fontSize: 15,
-    fontWeight: '600',
+    marginBottom: SPACING.xxl,
   },
 });

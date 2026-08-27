@@ -26,6 +26,10 @@ import { useColors } from '../contexts/ThemeContext';
 import { useFavorites } from '../hooks/useFavorites';
 import { speak } from '../services/voiceService';
 import { PriceTrendBadge } from './PriceTrendBadge';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { PriceText } from './ui/PriceText';
+import { RADIUS, LAYOUT } from '../theme/tokens';
 
 const IMAGE_FADE = 180;
 
@@ -93,7 +97,7 @@ export const ProductCard = ({
     <Animated.View
       style={[
         styles.cardWrapper,
-        { transform: [{ scale: scaleAnim }], backgroundColor: COLORS.surface },
+        { transform: [{ scale: scaleAnim }], backgroundColor: COLORS.card },
         style,
       ]}
     >
@@ -101,9 +105,8 @@ export const ProductCard = ({
         style={[
           styles.card,
           {
-            backgroundColor: COLORS.surface,
-            borderColor: COLORS.borderLight,
-            shadowColor: COLORS.shadow,
+            backgroundColor: COLORS.card,
+            borderColor: COLORS.border,
           },
         ]}
         onPress={onPress}
@@ -145,9 +148,7 @@ export const ProductCard = ({
 
           {/* Promotion badge */}
           {hasPromotion && discountText ? (
-            <View style={[styles.discountBadge, { backgroundColor: COLORS.primary }]}>
-              <Text style={styles.discountText}>{discountText}</Text>
-            </View>
+            <Badge tone="tomato" style={styles.discountBadge}>{discountText}</Badge>
           ) : null}
         </View>
 
@@ -168,19 +169,12 @@ export const ProductCard = ({
             )}
           </View>
 
-          <View style={styles.priceRow}>
-            {hasOriginal ? (
-              <Text style={[styles.originalPrice, { color: COLORS.text.tertiary }]}>
-                ₱{Number(originalPrice).toFixed(2)}
-              </Text>
-            ) : null}
-            <Text style={[styles.price, { color: COLORS.primary }]}>
-              ₱{safePrice.toFixed(2)}
-            </Text>
-            {product?.unit ? (
-              <Text style={[styles.unit, { color: COLORS.text.tertiary }]}>/ {product.unit}</Text>
-            ) : null}
-          </View>
+          <PriceText
+            price={safePrice}
+            unit={product?.unit}
+            originalPrice={hasOriginal ? originalPrice : null}
+            style={styles.priceRow}
+          />
 
           {priceTrend ? (
             <PriceTrendBadge currentPrice={safePrice} previousPrice={priceTrend.previous_price} />
@@ -195,13 +189,16 @@ export const ProductCard = ({
             </View>
           ) : null}
 
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: COLORS.success }]}
+          <Button
+            variant="secondary"
+            size="sm"
+            shape="square"
+            fullWidth
             onPress={onAddToCart}
-            activeOpacity={0.8}
+            style={styles.addButton}
           >
-            <Text style={styles.addButtonText}>Add to Cart</Text>
-          </TouchableOpacity>
+            Idagdag sa Kart
+          </Button>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -218,16 +215,9 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: 'rgba(0, 0, 0, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: LAYOUT.borderWidth,
   },
   imageContainer: {
     position: 'relative',
@@ -265,14 +255,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  discountText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   body: {
     padding: 10,
@@ -293,21 +275,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 5,
     marginBottom: 2,
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  originalPrice: {
-    fontSize: 12,
-    textDecorationLine: 'line-through',
-  },
-  unit: {
-    fontSize: 11,
   },
   stallRow: {
     flexDirection: 'row',
@@ -320,14 +288,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   addButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+    marginTop: 2,
   },
 });
 
