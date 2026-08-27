@@ -21,9 +21,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
+import { ProductCard } from '../../components/ProductCard';
+import { Chip } from '../../components/ui/Chip';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 
 const { width } = Dimensions.get('window');
+// D-08: 2 columns at 375px, widening on larger (web) viewports rather than
+// stretching two enormous cards.
+const numColumns = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
+const gridCardWidthPct = `${Math.floor(100 / numColumns) - 2}%`;
 
 // ============================================================
 // CATEGORY CONFIG
@@ -104,106 +112,9 @@ const StarRating = ({ rating, size = 12 }) => {
   );
 };
 
-// ============================================================
-// PRODUCT CARD COMPONENT
-// ============================================================
-const ProductCard = ({ product, stall, onPress, onAddToCart, discountText, hasPromotion }) => {
-  const COLORS = useColors();
-  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
-  const [imageError, setImageError] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const rating = getStallRating(stall?.id || 0);
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      tension: 200,
-      friction: 10,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 200,
-      friction: 10,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={[
-      styles.productCardWrapper,
-      { transform: [{ scale: scaleAnim }] }
-    ]}>
-      <TouchableOpacity
-        style={styles.productCard}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.9}
-      >
-        <View style={styles.productCardContent}>
-          {/* Image */}
-          <View style={styles.productImageContainer}>
-            {product.image_url && !imageError ? (
-              <Image 
-                source={{ uri: product.image_url }} 
-                style={styles.productImage}
-                onError={() => setImageError(true)}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.productImagePlaceholder}>
-                <Ionicons name="image-outline" size={32} color="#D1D5DB" />
-              </View>
-            )}
-            {hasPromotion && discountText && (
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>{discountText}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Info */}
-          <View style={styles.productInfo}>
-            <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-            
-            <View style={styles.priceContainer}>
-              {hasPromotion && product.originalPrice && (
-                <Text style={styles.originalPrice}>₱{product.originalPrice.toFixed(2)}</Text>
-              )}
-              <Text style={styles.productPrice}>₱{product.price.toFixed(2)}</Text>
-              <Text style={styles.productUnit}>/{product.unit}</Text>
-            </View>
-
-            <View style={styles.productMeta}>
-              <View style={styles.stallInfo}>
-                <Ionicons name="storefront-outline" size={12} color={COLORS.text.light} />
-                <Text style={styles.stallName} numberOfLines={1}>
-                  {stall?.stall_name || `Stall ${stall?.stall_number}`}
-                </Text>
-              </View>
-              <View style={styles.ratingContainer}>
-                <StarRating rating={rating} size={10} />
-                <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.addToCartButton}
-        onPress={onAddToCart}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={20} color="#FFFFFF" />
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
+// Local ProductCard duplicate removed (phase 5) — this screen now uses the
+// shared src/components/ProductCard.js primitive from phase 2, matching
+// HomeScreen.js (phase 4).
 
 // ============================================================
 // STALL GROUP CARD (for grouped view)
@@ -352,7 +263,6 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const [sortBy, setSortBy] = useState('recommended');
   const [selectedStall, setSelectedStall] = useState('all');
   const [showSortModal, setShowSortModal] = useState(false);
-  const [showStallModal, setShowStallModal] = useState(false);
   const [productCount, setProductCount] = useState(0);
   const [stallCount, setStallCount] = useState(0);
   
@@ -541,6 +451,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
         stall={stall}
         hasPromotion={hasPromotion}
         discountText={discountText}
+        style={{ width: gridCardWidthPct }}
         onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
         onAddToCart={() => handleAddToCart(item, stall)}
       />
@@ -638,20 +549,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
             <Ionicons name="chevron-down" size={14} color={COLORS.text.light} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.toolbarButton}
-            onPress={() => setShowStallModal(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="funnel-outline" size={16} color={COLORS.text.medium} />
-            <Text style={styles.toolbarButtonText}>
-              {selectedStall === 'all' ? 'All Stalls' : 
-                stalls.find(s => s.id === selectedStall)?.stall_name || 'All Stalls'}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={COLORS.text.light} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.toolbarButton, styles.viewToggle]}
             onPress={() => setViewMode(viewMode === 'list' ? 'grouped' : 'list')}
             activeOpacity={0.7}
@@ -669,28 +567,51 @@ export default function CategoryProductsScreen({ route, navigation }) {
       </View>
 
       {/* ============================================================
+          STALL FILTER — horizontal chip row, "Lahat" first (D-07)
+      ============================================================ */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.stallChipScroll}
+        contentContainerStyle={styles.stallChipRow}
+      >
+        <Chip isOn={selectedStall === 'all'} onPress={() => setSelectedStall('all')}>
+          Lahat
+        </Chip>
+        {stalls.map((stall) => (
+          <Chip
+            key={stall.id}
+            isOn={selectedStall === stall.id}
+            onPress={() => setSelectedStall(stall.id)}
+          >
+            {stall.stall_name}
+          </Chip>
+        ))}
+      </ScrollView>
+
+      {/* ============================================================
           PRODUCT LIST
       ============================================================ */}
       {sortedProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyEmoji}>{config.emoji}</Text>
-          <Text style={styles.emptyTitle}>No {categoryName} Available</Text>
+          <Text style={styles.emptyTitle}>Wala pang {categoryName} ngayon</Text>
           <Text style={styles.emptyText}>
-            Check other categories or visit again later.
+            Tingnan ang ibang kategorya o bumalik mamaya.
           </Text>
-          <TouchableOpacity 
-            style={styles.emptyButton}
-            onPress={handleBackPress}
-          >
-            <Text style={styles.emptyButtonText}>Browse Other Categories</Text>
-          </TouchableOpacity>
+          <Button variant="primary" onPress={handleBackPress}>
+            Tingnan ang lahat ng stall
+          </Button>
         </View>
       ) : viewMode === 'list' ? (
         <FlatList
           data={sortedProducts}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderProductItem}
-          contentContainerStyle={styles.listContent}
+          numColumns={numColumns}
+          key={numColumns}
+          columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
+          contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={false}
         />
       ) : (
@@ -709,7 +630,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
       <Modal
         visible={showSortModal}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowSortModal(false)}
       >
         <TouchableOpacity 
@@ -751,78 +672,6 @@ export default function CategoryProductsScreen({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* ============================================================
-          STALL FILTER MODAL
-      ============================================================ */}
-      <Modal
-        visible={showStallModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowStallModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowStallModal(false)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter by Stall</Text>
-              <TouchableOpacity onPress={() => setShowStallModal(false)}>
-                <Ionicons name="close" size={24} color={COLORS.text.dark} />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.modalOption,
-                selectedStall === 'all' && styles.modalOptionActive,
-              ]}
-              onPress={() => {
-                setSelectedStall('all');
-                setShowStallModal(false);
-              }}
-            >
-              <Text style={[
-                styles.modalOptionText,
-                selectedStall === 'all' && styles.modalOptionTextActive,
-              ]}>
-                All Stalls
-              </Text>
-              {selectedStall === 'all' && (
-                <Ionicons name="checkmark" size={20} color={COLORS.primary} />
-              )}
-            </TouchableOpacity>
-            {stalls.map((stall) => (
-              <TouchableOpacity
-                key={stall.id}
-                style={[
-                  styles.modalOption,
-                  selectedStall === stall.id && styles.modalOptionActive,
-                ]}
-                onPress={() => {
-                  setSelectedStall(stall.id);
-                  setShowStallModal(false);
-                }}
-              >
-                <View>
-                  <Text style={[
-                    styles.modalOptionText,
-                    selectedStall === stall.id && styles.modalOptionTextActive,
-                  ]}>
-                    {stall.stall_name}
-                  </Text>
-                  <Text style={styles.modalOptionSubtext}>
-                    #{stall.stall_number}
-                  </Text>
-                </View>
-                {selectedStall === stall.id && (
-                  <Ionicons name="checkmark" size={20} color={COLORS.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -906,8 +755,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   toolbar: {
     backgroundColor: COLORS.surface,
     paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderBottomWidth: LAYOUT.hairlineWidth,
+    borderBottomColor: COLORS.border,
   },
   toolbarContent: {
     paddingHorizontal: SPACING.lg,
@@ -918,31 +767,38 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.wickerSoft,
     borderRadius: RADIUS.sm,
-    borderWidth: 1,
+    borderWidth: LAYOUT.borderWidth,
     borderColor: COLORS.border,
     gap: 4,
   },
   toolbarButtonText: {
-    fontSize: 12,
-    color: COLORS.text.medium,
-    fontWeight: '500',
+    ...TEXT_STYLES.label,
+    fontWeight: TYPE.weight.medium,
+    color: COLORS.text.secondary,
   },
   viewToggle: {
-    backgroundColor: COLORS.primarySurface,
+    backgroundColor: COLORS.brandSoft,
     borderColor: COLORS.primary,
   },
   viewToggleText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '600',
+    ...TEXT_STYLES.label,
+    color: COLORS.primaryDark,
   },
 
   listContent: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     paddingBottom: 30,
+  },
+  gridContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingBottom: 30,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
   },
 
   productCardWrapper: {
@@ -1206,32 +1062,20 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text.dark,
+    ...TEXT_STYLES.h1,
+    color: COLORS.text.primary,
     marginBottom: SPACING.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: COLORS.text.light,
+    ...TEXT_STYLES.body,
+    color: COLORS.text.tertiary,
     textAlign: 'center',
     marginBottom: SPACING.xl,
-  },
-  emptyButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-  },
-  emptyButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
   },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: COLORS.overlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -1240,6 +1084,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderTopRightRadius: RADIUS.xl,
     padding: SPACING.xl,
     maxHeight: '60%',
+    ...SHADOWS.overlay,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1248,9 +1093,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text.dark,
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
   },
   modalOption: {
     flexDirection: 'row',
@@ -1259,22 +1103,34 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
     borderRadius: RADIUS.md,
+    minHeight: LAYOUT.minTapTarget,
   },
   modalOptionActive: {
-    backgroundColor: COLORS.primarySurface,
+    backgroundColor: COLORS.brandSoft,
   },
   modalOptionText: {
-    fontSize: 15,
-    color: COLORS.text.medium,
+    ...TEXT_STYLES.label,
+    fontWeight: TYPE.weight.medium,
+    color: COLORS.text.secondary,
   },
   modalOptionTextActive: {
-    color: COLORS.primary,
-    fontWeight: '600',
+    color: COLORS.primaryDark,
+    fontWeight: TYPE.weight.bold,
   },
   modalOptionSubtext: {
-    fontSize: 12,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
     marginTop: 2,
+  },
+  stallChipScroll: {
+    flexGrow: 0,
+    height: 42 + SPACING.md * 2,
+  },
+  stallChipRow: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
   },
 
   skeletonContainer: {

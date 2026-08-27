@@ -18,7 +18,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
 import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
@@ -27,6 +26,10 @@ import { useI18n } from '../../contexts/i18nContext';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
 import { MOTION, hapticSelection, hapticMedium } from '../../theme/motion';
+import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
+import { Badge } from '../../components/ui/Badge';
+import { Chip } from '../../components/ui/Chip';
+import { VerdictChip } from '../../components/ui/VerdictChip';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
@@ -225,7 +228,7 @@ function QuantityStepper({ value, onChange }) {
         disabled={value <= 1}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="remove" size={14} color={value <= 1 ? COLORS_FALLBACK.disabled : C.text.secondary} />
+        <Ionicons name="remove" size={14} color={value <= 1 ? C.text.quaternary : C.text.secondary} />
       </TouchableOpacity>
       <Animated.Text style={[styles.count, { transform: [{ scale }] }]}>
         {value}
@@ -236,16 +239,11 @@ function QuantityStepper({ value, onChange }) {
         activeOpacity={0.7}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="add" size={14} color="#FFFFFF" />
+        <Ionicons name="add" size={14} color={C.onPrimary} />
       </TouchableOpacity>
     </View>
   );
 }
-
-// Neutral tokens for the stepper (theme-independent micro control)
-const COLORS_FALLBACK = {
-  disabled: '#D1D5DB',
-};
 
 const createQtyStyles = (C) => StyleSheet.create({
   wrap: {
@@ -728,11 +726,9 @@ export default function SearchScreen({ navigation }) {
             <Text style={styles.comparisonHeaderText}>{item.name}</Text>
             <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
           </View>
-          <View style={styles.comparisonHeaderBadge}>
-            <Text style={styles.comparisonHeaderBadgeText}>
-              {productsData.filter(i => i.type === 'product' && i.data.name === item.name).length} stalls
-            </Text>
-          </View>
+          <Badge tone="brand">
+            {productsData.filter(i => i.type === 'product' && i.data.name === item.name).length} stalls
+          </Badge>
         </View>
       );
     }
@@ -740,8 +736,21 @@ export default function SearchScreen({ navigation }) {
     const product = item.data;
     const stall = product.stalls;
     const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
-    const isCheapest = groupItems.length > 0 && product.price === Math.min(...groupItems.map(i => i.data.price));
-    
+
+    // D-13: only rank a row against rows that share its own unit string. A
+    // stall selling by "bundle" never competes against one selling by "kilo".
+    const sameUnitItems = groupItems.filter(i => i.data.unit === product.unit);
+    const hasDifferentUnitSiblings = sameUnitItems.length < groupItems.length;
+    const isComparable = sameUnitItems.length > 1;
+    const minPriceInUnit = isComparable ? Math.min(...sameUnitItems.map(i => i.data.price)) : product.price;
+    const isCheapest = isComparable && product.price === minPriceInUnit;
+    const sortedSameUnit = isComparable
+      ? [...sameUnitItems].sort((a, b) => a.data.price - b.data.price)
+      : [];
+    const rank = isComparable
+      ? sortedSameUnit.findIndex(i => i.data.id === product.id) + 1
+      : 0;
+
     const stallRating = getStallRating(stall.id, stall.average_rating);
     const ratingCount = getRandomRatingCount(stall.id);
 
@@ -751,17 +760,16 @@ export default function SearchScreen({ navigation }) {
         onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
         activeOpacity={0.7}
       >
-        {isCheapest && (
-          <View style={styles.bestDealBadge}>
-            <Ionicons name="ribbon" size={12} color="#FFFFFF" />
-            <Text style={styles.bestDealText}>Best Deal</Text>
-          </View>
-        )}
-        <View style={styles.comparisonContent}>
+        <View style={styles.comparisonTopRow}>
+          {isComparable && (
+            <View style={styles.comparisonRankCol}>
+              <Text style={[styles.comparisonRank, isCheapest && styles.comparisonRankBest]}>{rank}</Text>
+            </View>
+          )}
           <View style={styles.comparisonStallInfo}>
             <View style={styles.comparisonStallHeader}>
               <Ionicons name="storefront-outline" size={14} color={COLORS.primary} />
-              <Text style={styles.comparisonStallName}>{stall.stall_name || 'Market Stall'}</Text>
+              <Text style={styles.comparisonStallName} numberOfLines={2}>{stall.stall_name || 'Market Stall'}</Text>
             </View>
             <Text style={styles.comparisonStallNumber}>Stall #{stall.stall_number}</Text>
             <Text style={styles.comparisonSection}>{stall.section}</Text>
@@ -770,12 +778,18 @@ export default function SearchScreen({ navigation }) {
               <Text style={styles.comparisonRating}> {stallRating.toFixed(1)}</Text>
               <Text style={styles.ratingCount}>({ratingCount} reviews)</Text>
             </View>
+            {isCheapest && (
+              <VerdictChip verdict="PINAKAMURA" solid style={styles.bestDealBadge} />
+            )}
+            {hasDifferentUnitSiblings && !isCheapest && (
+              <Text style={styles.differentUnitMarker}>Ibang unit</Text>
+            )}
           </View>
           <View style={styles.comparisonPriceSection}>
             {product.hasPromotion && (
               <Text style={styles.originalPrice}>₱{product.originalPrice.toFixed(2)}</Text>
             )}
-            <Text style={[styles.comparisonPrice, isCheapest && styles.comparisonPriceBest]}>
+            <Text style={styles.comparisonPrice}>
               ₱{product.price.toFixed(2)}
             </Text>
             <Text style={styles.comparisonUnit}>/ {product.unit}</Text>
@@ -784,15 +798,15 @@ export default function SearchScreen({ navigation }) {
               previousPrice={priceTrends.get(product.id)?.previous_price}
             />
             {product.hasPromotion && (
-              <View style={styles.promoMiniBadge}>
-                <Text style={styles.promoMiniText}>
-                  {product.promotion?.discount_type === 'percentage'
-                    ? `${product.promotion.discount_value}% OFF`
-                    : `₱${product.promotion.discount_value} OFF`}
-                </Text>
-              </View>
+              <Badge tone="tomato" style={styles.promoMiniBadge}>
+                {product.promotion?.discount_type === 'percentage'
+                  ? `${product.promotion.discount_value}% OFF`
+                  : `₱${product.promotion.discount_value} OFF`}
+              </Badge>
             )}
           </View>
+        </View>
+        <View style={styles.comparisonBottomRow}>
           <QuantityStepper
             value={quantities[product.id] || 1}
             onChange={(delta) => changeQty(product.id, delta)}
@@ -808,7 +822,7 @@ export default function SearchScreen({ navigation }) {
             <Ionicons
               name={addedProductId === product.id ? 'checkmark' : 'add'}
               size={16}
-              color="#FFFFFF"
+              color={COLORS.onPrimary}
             />
           </TouchableOpacity>
         </View>
@@ -958,15 +972,18 @@ export default function SearchScreen({ navigation }) {
           }}
           activeOpacity={0.7}
         >
-          <LinearGradient
-            colors={searchType === 'products' ? [COLORS.primary, COLORS.primaryLight] : ['transparent', 'transparent']}
-            style={[styles.toggleGradient, searchType === 'products' && styles.toggleGradientActive]}
+          <View
+            style={[
+              styles.toggleGradient,
+              searchType === 'products' && styles.toggleGradientActive,
+              { backgroundColor: searchType === 'products' ? COLORS.primary : 'transparent' },
+            ]}
           >
-            <Ionicons name="cube-outline" size={16} color={searchType === 'products' ? '#FFFFFF' : COLORS.text.medium} />
+            <Ionicons name="cube-outline" size={16} color={searchType === 'products' ? COLORS.onPrimary : COLORS.text.medium} />
             <Text style={[styles.toggleText, searchType === 'products' && styles.toggleTextActive]}>
               {t('search.products_tab')}
             </Text>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'stalls' && styles.toggleButtonActive]}
@@ -976,15 +993,18 @@ export default function SearchScreen({ navigation }) {
           }}
           activeOpacity={0.7}
         >
-          <LinearGradient
-            colors={searchType === 'stalls' ? [COLORS.primary, COLORS.primaryLight] : ['transparent', 'transparent']}
-            style={[styles.toggleGradient, searchType === 'stalls' && styles.toggleGradientActive]}
+          <View
+            style={[
+              styles.toggleGradient,
+              searchType === 'stalls' && styles.toggleGradientActive,
+              { backgroundColor: searchType === 'stalls' ? COLORS.primary : 'transparent' },
+            ]}
           >
-            <Ionicons name="storefront-outline" size={16} color={searchType === 'stalls' ? '#FFFFFF' : COLORS.text.medium} />
+            <Ionicons name="storefront-outline" size={16} color={searchType === 'stalls' ? COLORS.onPrimary : COLORS.text.medium} />
             <Text style={[styles.toggleText, searchType === 'stalls' && styles.toggleTextActive]}>
               {t('search.stalls_tab')}
             </Text>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -1175,7 +1195,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.medium,
   },
   toggleTextActive: {
-    color: COLORS.text.white,
+    color: COLORS.onPrimary,
   },
   scrollContent: {
     flex: 1,
@@ -1344,8 +1364,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginTop: 4,
   },
   ratingCount: {
-    fontSize: 10,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.tertiary,
     marginLeft: 2,
   },
   emptyContainer: {
@@ -1377,11 +1397,11 @@ const createStyles = (COLORS) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.primarySurface,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-    marginTop: 8,
+    backgroundColor: COLORS.brandSoft,
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+    marginTop: SPACING.sm,
     borderLeftWidth: 4,
     borderLeftColor: COLORS.primary,
   },
@@ -1389,71 +1409,63 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
   },
   comparisonHeaderText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text.dark,
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
   },
   comparisonHeaderSubtext: {
-    fontSize: 12,
-    color: COLORS.text.medium,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
-  comparisonHeaderBadge: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  comparisonHeaderBadgeText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.primary,
-  },
   comparisonCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    marginBottom: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.md,
+    padding: SPACING.lg,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
     position: 'relative',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
   },
   comparisonCardBestDeal: {
     borderColor: COLORS.success,
-    borderWidth: 1.5,
+  },
+  comparisonRankCol: {
+    marginRight: SPACING.sm,
+    minWidth: 18,
+    alignItems: 'center',
+  },
+  comparisonRank: {
+    ...TEXT_STYLES.label,
+    color: COLORS.text.tertiary,
+  },
+  comparisonRankBest: {
+    color: COLORS.verdictBestText,
   },
   bestDealBadge: {
-    position: 'absolute',
-    top: -8,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.success,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    zIndex: 1,
-    gap: 4,
+    marginTop: SPACING.xs,
   },
-  bestDealText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'white',
+  differentUnitMarker: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.tertiary,
+    marginTop: SPACING.xs,
   },
-  comparisonContent: {
+  comparisonTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
+  comparisonBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
   comparisonStallInfo: {
-    flex: 2,
+    flex: 1,
+    minWidth: 0,
+    marginRight: SPACING.sm,
   },
   comparisonStallHeader: {
     flexDirection: 'row',
@@ -1461,73 +1473,52 @@ const createStyles = (COLORS) => StyleSheet.create({
     gap: 4,
   },
   comparisonStallName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text.dark,
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
   },
   comparisonStallNumber: {
-    fontSize: 12,
-    color: COLORS.text.medium,
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   comparisonSection: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   comparisonRating: {
-    fontSize: 11,
-    color: COLORS.gold,
-    fontWeight: '500',
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
   },
   comparisonPriceSection: {
-    flex: 1,
     alignItems: 'flex-end',
-    paddingHorizontal: 8,
+    flexShrink: 0,
   },
   originalPrice: {
-    fontSize: 12,
-    color: COLORS.text.lighter,
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
     textDecorationLine: 'line-through',
     marginBottom: 2,
   },
   comparisonPrice: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  comparisonPriceBest: {
-    color: COLORS.success,
+    ...TEXT_STYLES.price,
+    color: COLORS.text.primary,
   },
   comparisonUnit: {
-    fontSize: 11,
-    color: COLORS.text.medium,
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.tertiary,
   },
   promoMiniBadge: {
-    marginTop: 4,
-    backgroundColor: COLORS.warningLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  promoMiniText: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: COLORS.primary,
+    marginTop: SPACING.xs,
   },
   addToCartButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
-    marginLeft: 8,
+    borderRadius: RADIUS.sm,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
   },
   addToCartButtonAdded: {
     backgroundColor: COLORS.success,
