@@ -1,0 +1,342 @@
+/* ============================================================
+   PALENGKEHUB DESIGN TOKENS - CSS
+   The web mirror of src/theme/tokens.js. Hand-mirrored, so if you
+   change a value here, change it there in the same commit.
+   ============================================================
+
+   Serves all three web surfaces:
+     1. web/src/index.css      the public marketing pages
+     2. web/src/admin.css      the admin dashboard
+     3. pages-deploy/          the built output of the two above
+
+   How to adopt:
+     - Import this file FIRST, before index.css and admin.css.
+       @import './tokens.css';
+     - Then delete the :root block at the top of index.css and the
+       :root block at the top of admin.css. Both are aliased below,
+       so nothing breaks while the rest of the CSS is migrated.
+     - The deployed stylesheet currently ships two :root blocks with
+       two different primaries. After this it ships one.
+
+   Rules:
+     - Never write a hex in a component rule again. If a value is
+       missing, add a token here.
+     - Orange is the only colour allowed on a primary action.
+     - Red (--tomato) is error, discount and MAHAL only.
+   ============================================================ */
+
+:root,
+[data-theme="light"] {
+
+  /* ---------- brand: the logo ring orange ---------- */
+  --brand:          #E8833A;   /* primary CTA, active states, rating stars */
+  --brand-hover:    #F0913F;   /* hover only */
+  --brand-dark:     #C96A28;   /* press offset, links, icon strokes */
+  --brand-soft:     #FBE7D4;   /* selected chip, active nav pill */
+  --brand-tint:     #FDF3E9;   /* the faintest brand surface */
+
+  /* ---------- ink: the logo outline brown ---------- */
+  --ink:            #261006;   /* all primary text */
+  --ink-2:          #5B4436;   /* secondary text */
+  --ink-3:          #8A7263;   /* tertiary text, captions */
+  --ink-4:          #A89484;   /* placeholder, disabled */
+  --inverse:        #FFFDFA;   /* text on ink and on brand-dark */
+
+  /* ---------- surfaces ---------- */
+  --paper:          #F2E7D6;   /* page canvas, carries the woven texture */
+  --card:           #FFFDFA;   /* every card and panel */
+  --card-2:         #F8F0E4;   /* nested surface */
+  --wicker:         #E2BA87;   /* strong border, bar rules */
+  --wicker-soft:    #F3E3CB;   /* input fill, chips, thumbnails */
+  --line:           #E3CFB0;   /* the default 2px border */
+  --line-soft:      #EFDFC6;   /* hairline row divider */
+
+  /* ---------- semantic ---------- */
+  --leaf:           #9EBF5C;   /* gauge fill, success accent */
+  --leaf-dark:      #61802F;   /* success text and solid fill */
+  --leaf-soft:      #EDF3DE;   /* MURA chip, success alert */
+  --tomato:         #D34638;   /* discount badge, danger fill */
+  --tomato-dark:    #9E2B20;   /* error text, MAHAL chip text */
+  --tomato-soft:    #FBE2DE;   /* error alert, MAHAL chip */
+  --fish:           #84BEE0;   /* info accent */
+  --fish-dark:      #2C6C93;   /* info text */
+  --fish-soft:      #E5F1F9;   /* info alert */
+  --gold:           #D89A17;   /* warning fill */
+  --gold-dark:      #8F6407;   /* warning text */
+  --gold-soft:      #FBEFD2;   /* warning alert */
+
+  /* ---------- third party, never restyled ---------- */
+  --gcash:          #007DFE;
+  --gcash-soft:     #E4F0FF;
+
+  /* ---------- "on" pairs: the readable text colour on each solid fill.
+       These are what let the dark theme work without a second stylesheet. */
+  --on-brand:       #261006;   /* text on --brand */
+  --ink-surface:    #261006;   /* toast, banner, code block, tooltip */
+  --ink-on:         #F5E7D5;   /* text on --ink-surface */
+  --leaf-solid:     #61802F;   /* PINAKAMURA badge, done step */
+  --leaf-on:        #F7FBEF;   /* text on --leaf-solid */
+  --tomato-on:      #FFF6F1;   /* text on --tomato */
+
+  /* ---------- overlay and texture ---------- */
+  --overlay:        rgba(38, 16, 6, .50);
+  --texture-a:      rgba(38, 16, 6, .030);
+  --texture-b:      rgba(38, 16, 6, .026);
+
+  /* ---------- the price verdict ---------- */
+  --verdict-cheap-bg:   #EDF3DE;
+  --verdict-cheap-text: #61802F;
+  --verdict-fair-bg:    #F3E3CB;
+  --verdict-fair-text:  #5B4436;
+  --verdict-dear-bg:    #FBE2DE;
+  --verdict-dear-text:  #9E2B20;
+  --verdict-best-bg:    #61802F;
+  --verdict-best-text:  #F7FBEF;
+
+  /* ---------- order status ---------- */
+  --st-pending:   #D89A17;
+  --st-accepted:  #2C6C93;
+  --st-preparing: #C96A28;
+  --st-ready:     #61802F;
+  --st-completed: #8A7263;
+  --st-cancelled: #D34638;
+  --st-expired:   #A89484;
+
+  /* ---------- spacing ---------- */
+  --s-xs:   4px;
+  --s-sm:   8px;
+  --s-md:  12px;
+  --s-lg:  16px;
+  --s-xl:  20px;
+  --s-xxl: 24px;
+  --s-xxxl:32px;
+
+  /* ---------- nav spacing, denser chrome ---------- */
+  --ns-xs:  4px;
+  --ns-sm:  6px;
+  --ns-md:  8px;
+  --ns-lg: 12px;
+  --ns-xl: 16px;
+
+  /* ---------- radius ---------- */
+  --r-xs:     6px;
+  --r-sm:    10px;
+  --r-md:    12px;
+  --r-lg:    16px;
+  --r-xl:    22px;
+  --r-pill: 999px;
+
+  /* ---------- elevation ----------
+     Cards separate from the page by contrast, not by shadow.
+     Level 0 is the default; only floating things get a shadow. */
+  --e-0:    none;
+  --e-1:    0 1px 2px rgba(38, 16, 6, .06);
+  --e-2:    0 6px 18px -10px rgba(38, 16, 6, .55);
+  --e-3:    0 14px 34px -14px rgba(38, 16, 6, .60);
+  --e-bar:  0 -4px 18px -10px rgba(38, 16, 6, .45);
+  --e-press:0 3px 0 0 var(--brand-dark);   /* the primary button offset */
+
+  /* ---------- motion. Mirrors src/theme/motion.js durations. ---------- */
+  --t-fast: .15s ease;
+  --t-base: .22s cubic-bezier(.2, 0, 0, 1);
+  --t-slow: .32s cubic-bezier(.2, 0, 0, 1);
+
+  /* ---------- type ---------- */
+  --f-display: "Baloo 2", system-ui, -apple-system, sans-serif;
+  --f-ui:      "Nunito", system-ui, -apple-system, sans-serif;
+  --f-mono:    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fs-price-hero: 38px;
+  --fs-display:    26px;
+  --fs-h1:         22px;
+  --fs-h2:         19px;
+  --fs-h3:         17px;
+  --fs-body:       16px;
+  --fs-body-sm:    15px;
+  --fs-label:      14px;
+  --fs-caption:    13px;
+  --fs-micro:      12px;
+
+  --fw-regular:  400;
+  --fw-medium:   600;
+  --fw-semibold: 700;
+  --fw-bold:     800;
+  --fw-black:    900;
+
+  --lh-tight:   1.15;
+  --lh-snug:    1.25;
+  --lh-base:    1.45;
+  --lh-relaxed: 1.6;
+
+  /* ---------- layout ---------- */
+  --tapmin:       44px;
+  --tabbar-h:     64px;
+  --border-w:     2px;
+  --hairline-w:   1px;
+  --wrap-max:   1120px;
+  --gutter:      16px;
+
+
+  /* ============================================================
+     ALIASES: admin dashboard (web/src/admin.css)
+     Re-point the admin surface without touching 2900 lines of rules.
+     Delete the :root block at the top of admin.css after importing this.
+     ============================================================ */
+  --admin-primary:        var(--brand);
+  --admin-primary-light:  var(--brand-hover);
+  --admin-primary-dark:   var(--brand-dark);
+  --admin-bg:             var(--paper);
+  --admin-surface:        var(--card);
+  --admin-text:           var(--ink);
+  --admin-text-secondary: var(--ink-2);
+  --admin-text-muted:     var(--ink-3);
+  --admin-border:         var(--line);
+  --admin-border-light:   var(--line-soft);
+  --admin-shadow:         var(--e-1);
+  --admin-shadow-md:      var(--e-2);
+  --admin-shadow-lg:      var(--e-2);
+  --admin-shadow-xl:      var(--e-3);
+  --admin-radius:         var(--r-md);
+  --admin-radius-lg:      var(--r-lg);
+  --admin-radius-sm:      var(--r-sm);
+  /* admin.css reads these two without the --admin- prefix */
+  --transition-fast:      var(--t-fast);
+  --transition-smooth:    var(--t-base);
+  --transition-bounce:    .35s cubic-bezier(.34, 1.56, .64, 1);
+
+
+  /* ============================================================
+     ALIASES: public marketing pages (web/src/index.css and the
+     legacy landingpage-website/style.css)
+     The old "Semi Red & White" scheme collapses onto the brand.
+     Migrate the rules, then delete these six lines.
+     ============================================================ */
+  --red-deep:      var(--ink);        /* was #7A1C1E */
+  --red:           var(--brand-dark); /* was #8C2023 */
+  --red-soft:      var(--brand);      /* was #A52A2D */
+  --semi-red:      var(--brand);      /* was #E63946 */
+  --semi-red-deep: var(--brand-dark); /* was #C1121F */
+  --accent:        var(--brand);      /* was #DC3545 */
+  --white:         var(--card);       /* was #FFFFFF, now warm white */
+  --light-bg:      var(--paper);      /* was #FFF5F5 */
+  --gray:          var(--ink-3);      /* was #6B7280 */
+  /* --ink and --line are defined above and intentionally take over:
+     --ink was #1A1A1A, it is now the logo brown;
+     --line was rgba(255,255,255,.14), it is now the tan hairline. */
+
+  --display: var(--f-display);  /* was Fraunces, a serif display face */
+  --body:    var(--f-ui);       /* was Manrope */
+  --mono:    var(--f-mono);     /* was IBM Plex Mono, no longer downloaded */
+  /* Space Grotesk was loaded on every page and used nowhere in web/src.
+     Remove it from the Google Fonts link when you swap the families. */
+}
+
+
+/* ============================================================
+   DARK THEME. FUTURE, NOT YET USED IN THE APP.
+   Defined so nobody has to invent a dark palette later, and so the
+   old navy (#0F0F1E / #1A1A2E / #16213E) can go in one commit.
+   In dark mode a "-dark" suffix means the READABLE tone of that
+   family, so those values get lighter, not darker.
+   Activate with <html data-theme="dark">.
+   ============================================================ */
+[data-theme="dark"] {
+  --brand:          #F0A063;
+  --brand-hover:    #F5B078;
+  --brand-dark:     #E8833A;
+  --brand-soft:     #3A2415;
+  --brand-tint:     #2B1B10;
+
+  --ink:            #F7EDE1;
+  --ink-2:          #DDC9B6;
+  --ink-3:          #AE9884;
+  --ink-4:          #8A7263;
+  --inverse:        #17100A;
+
+  --paper:          #17100A;
+  --card:           #221812;
+  --card-2:         #2E211A;
+  --wicker:         #4A362A;
+  --wicker-soft:    #2E211A;
+  --line:           #3D2C22;
+  --line-soft:      #2A1E17;
+
+  --leaf:           #A9C96C;
+  --leaf-dark:      #C3DE8E;
+  --leaf-soft:      #28331A;
+  --tomato:         #E8695C;
+  --tomato-dark:    #F0968C;
+  --tomato-soft:    #3A1C18;
+  --fish:           #8FC6E6;
+  --fish-dark:      #AFD8EF;
+  --fish-soft:      #152833;
+  --gold:           #E5B23F;
+  --gold-dark:      #F0CB77;
+  --gold-soft:      #33270D;
+
+  --gcash:          #3D9BFF;
+  --gcash-soft:     #132A42;
+
+  --on-brand:       #17100A;
+  --ink-surface:    #F7EDE1;
+  --ink-on:         #17100A;
+  --leaf-solid:     #C3DE8E;
+  --leaf-on:        #17100A;
+  --tomato-on:      #2A100C;
+
+  --overlay:        rgba(10, 6, 3, .66);
+  --texture-a:      rgba(255, 240, 224, .026);
+  --texture-b:      rgba(255, 240, 224, .020);
+
+  --verdict-cheap-bg:   #28331A;
+  --verdict-cheap-text: #C3DE8E;
+  --verdict-fair-bg:    #2E211A;
+  --verdict-fair-text:  #DDC9B6;
+  --verdict-dear-bg:    #3A1C18;
+  --verdict-dear-text:  #F0968C;
+  --verdict-best-bg:    #C3DE8E;
+  --verdict-best-text:  #17100A;
+
+  --st-pending:   #F0CB77;
+  --st-accepted:  #AFD8EF;
+  --st-preparing: #F0A063;
+  --st-ready:     #C3DE8E;
+  --st-completed: #AE9884;
+  --st-cancelled: #F0968C;
+  --st-expired:   #8A7263;
+
+  --e-1:   0 1px 2px rgba(0, 0, 0, .45);
+  --e-2:   0 6px 18px -10px rgba(0, 0, 0, .85);
+  --e-3:   0 14px 34px -14px rgba(0, 0, 0, .9);
+  --e-bar: 0 -4px 18px -10px rgba(0, 0, 0, .8);
+}
+
+
+/* ============================================================
+   OPTIONAL BASE
+   Two rules worth taking with the tokens. Everything else stays
+   in the existing stylesheets.
+   ============================================================ */
+
+/* The woven market texture. It is what makes a plain white card read
+   as a card without a drop shadow. Apply to the page body only. */
+.ph-paper {
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient( 45deg, var(--texture-a) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, var(--texture-b) 0 2px, transparent 2px 9px);
+}
+
+/* Prices line up in a column only with tabular figures. */
+.ph-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: .01ms;
+    --t-base: .01ms;
+    --t-slow: .01ms;
+  }
+}

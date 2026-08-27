@@ -2,22 +2,6 @@
    PalengkeHub — React Web App Styles
    Color Scheme: Semi Red & White (preserved)
    ============================================ */
-:root {
-  --red-deep: #7A1C1E;
-  --red: #8C2023;
-  --red-soft: #A52A2D;
-  --semi-red: #E63946;
-  --semi-red-deep: #C1121F;
-  --accent: #DC3545;
-  --white: #FFFFFF;
-  --ink: #1A1A1A;
-  --light-bg: #FFF5F5;
-  --gray: #6B7280;
-  --line: rgba(255, 255, 255, 0.14);
-  --display: 'Fraunces', serif;
-  --body: 'Manrope', sans-serif;
-  --mono: 'IBM Plex Mono', monospace;
-}
 
 * {
   margin: 0;
