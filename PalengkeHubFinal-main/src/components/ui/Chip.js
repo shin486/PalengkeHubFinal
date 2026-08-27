@@ -73,6 +73,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: TYPE.size.bodySmall,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   removeCircle: {

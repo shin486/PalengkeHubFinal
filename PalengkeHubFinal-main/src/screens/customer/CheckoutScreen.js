@@ -882,7 +882,7 @@ const handleGcashModalClose = () => {
                       color: COLORS.text.dark,
                       padding: 0,
                       cursor: 'pointer',
-                      fontFamily: 'inherit',
+                      fontFamily: 'Nunito_600SemiBold',
                     }}
                   />
                 ) : (
@@ -915,7 +915,7 @@ const handleGcashModalClose = () => {
                       color: COLORS.text.dark,
                       padding: 0,
                       cursor: 'pointer',
-                      fontFamily: 'inherit',
+                      fontFamily: 'Nunito_600SemiBold',
                     }}
                   />
                 ) : (

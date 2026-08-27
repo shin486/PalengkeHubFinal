@@ -80,18 +80,21 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     textTransform: 'uppercase',
     letterSpacing: TYPE.letterSpacing.caps,
   },
   statValue: {
     fontSize: 30,
+    fontFamily: 'Baloo2_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     marginTop: SPACING.xs,
     letterSpacing: -0.5,
   },
   statDelta: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     marginTop: 3,
   },

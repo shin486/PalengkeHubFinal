@@ -65,10 +65,12 @@ const styles = StyleSheet.create({
   },
   original: {
     fontSize: TYPE.size.bodySmall,
+    fontFamily: 'Nunito_400Regular',
     textDecorationLine: 'line-through',
   },
   unit: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     fontWeight: TYPE.weight.medium,
   },
 });

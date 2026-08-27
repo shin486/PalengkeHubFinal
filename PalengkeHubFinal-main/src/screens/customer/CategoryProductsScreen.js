@@ -507,7 +507,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
         <View style={styles.headerContent}>
           <View style={styles.headerIconContainer}>
-            <Text style={styles.headerEmoji}>{config.emoji}</Text>
+            <Ionicons name={config.icon} size={32} color={COLORS.primary} />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -594,7 +594,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
       ============================================================ */}
       {sortedProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>{config.emoji}</Text>
+          <Ionicons name={config.icon} size={72} color={COLORS.text.quaternary} style={styles.emptyEmoji} />
           <Text style={styles.emptyTitle}>Wala pang {categoryName} ngayon</Text>
           <Text style={styles.emptyText}>
             Tingnan ang ibang kategorya o bumalik mamaya.

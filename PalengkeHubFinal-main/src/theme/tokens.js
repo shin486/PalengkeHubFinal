@@ -346,20 +346,24 @@ export const PRESS_OFFSET = {
 // TYPOGRAPHY
 // ------------------------------------------------------------
 // Baloo 2 carries the brand voice: headings, stall names, prices.
-// Nunito carries everything a shopper reads quickly.
+// Nunito carries everything a shopper reads quickly. Phase 7 loads both
+// via expo-font (App.js) and activates them here.
 //
-// fontFamily activates once expo-font is added. Until then every
-// value below falls back to the platform default, which is what the
-// app already renders, so adopting TYPE.size and TYPE.weight now is
-// safe and changes nothing visually.
-//
-//   expo install expo-font @expo-google-fonts/baloo-2 @expo-google-fonts/nunito
-//   then swap the two `system` strings for 'Baloo2_700Bold' etc.
+// THE WEIGHT TRAP (07-CONTEXT.md D-11): a named font file carries its own
+// weight. `fontFamily: 'Nunito_700Bold'` plus `fontWeight: '400'` does not
+// produce regular Nunito. `TYPE.family.display`/`.ui` below are only the
+// generic fallback for code that hasn't picked a specific weight file.
+// Every TEXT_STYLES entry below instead names its own exact weight-matched
+// file — never the fallback plus a mismatched fontWeight. Only 3 Baloo 2
+// weights are loaded (600/700/800; see D-09), so anything asking for
+// weight 900 in the display role is capped at Baloo2_800ExtraBold, the
+// boldest available. Nunito loaded all 5 requested weights including 900,
+// so the UI role never needs to cap.
 export const TYPE = {
   family: {
-    display: 'system',  // Baloo 2 once expo-font is added
-    ui: 'system',       // Nunito once expo-font is added
-    mono: 'monospace',  // platform monospace, no webfont is shipped
+    display: 'Baloo2_700Bold',  // generic display fallback only — prefer a role+weight file below
+    ui: 'Nunito_700Bold',       // generic UI fallback only — prefer a role+weight file below
+    mono: 'monospace',          // platform monospace, no webfont is shipped
   },
 
   size: {
@@ -397,18 +401,20 @@ export const TYPE = {
   },
 };
 
-// Ready-made text styles, so a screen never assembles its own.
+// Ready-made text styles, so a screen never assembles its own. Prices,
+// headings and stall names are Baloo 2 (display); everything else is
+// Nunito (UI) — see the weight-trap note above TYPE.family.
 export const TEXT_STYLES = {
-  priceHero: { fontSize: TYPE.size.priceHero, fontWeight: TYPE.weight.black, letterSpacing: TYPE.letterSpacing.price },
-  price: { fontSize: TYPE.size.h2, fontWeight: TYPE.weight.black, letterSpacing: -0.3 },
-  h1: { fontSize: TYPE.size.h1, fontWeight: TYPE.weight.bold },
-  h2: { fontSize: TYPE.size.h2, fontWeight: TYPE.weight.bold },
-  h3: { fontSize: TYPE.size.h3, fontWeight: TYPE.weight.bold },
-  body: { fontSize: TYPE.size.body, fontWeight: TYPE.weight.medium },
-  bodySmall: { fontSize: TYPE.size.bodySmall, fontWeight: TYPE.weight.medium },
-  label: { fontSize: TYPE.size.label, fontWeight: TYPE.weight.bold },
-  caption: { fontSize: TYPE.size.caption, fontWeight: TYPE.weight.semibold },
-  chip: { fontSize: TYPE.size.micro, fontWeight: TYPE.weight.black, letterSpacing: TYPE.letterSpacing.caps, textTransform: 'uppercase' },
+  priceHero: { fontSize: TYPE.size.priceHero, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.black, letterSpacing: TYPE.letterSpacing.price },
+  price: { fontSize: TYPE.size.h2, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.black, letterSpacing: -0.3 },
+  h1: { fontSize: TYPE.size.h1, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
+  h2: { fontSize: TYPE.size.h2, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
+  h3: { fontSize: TYPE.size.h3, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
+  body: { fontSize: TYPE.size.body, fontFamily: 'Nunito_600SemiBold', fontWeight: TYPE.weight.medium },
+  bodySmall: { fontSize: TYPE.size.bodySmall, fontFamily: 'Nunito_600SemiBold', fontWeight: TYPE.weight.medium },
+  label: { fontSize: TYPE.size.label, fontFamily: 'Nunito_800ExtraBold', fontWeight: TYPE.weight.bold },
+  caption: { fontSize: TYPE.size.caption, fontFamily: 'Nunito_700Bold', fontWeight: TYPE.weight.semibold },
+  chip: { fontSize: TYPE.size.micro, fontFamily: 'Nunito_900Black', fontWeight: TYPE.weight.black, letterSpacing: TYPE.letterSpacing.caps, textTransform: 'uppercase' },
 };
 
 // ------------------------------------------------------------

@@ -667,7 +667,7 @@ export default function ProfileScreen({ navigation }) {
               fontWeight: '600',
               marginTop: '16px',
               marginBottom: '30px',
-              fontFamily: 'system-ui, -apple-system, sans-serif',
+              fontFamily: 'Nunito_600SemiBold',
             }}
           >
             Logout

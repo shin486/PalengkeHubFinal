@@ -45,6 +45,7 @@ export default {
       // This fixes the AsyncStorage ESM resolution error on Expo 54
       bundler: "metro",
     },
+    plugins: ["expo-font"],
     extra: {
       eas: {
         projectId: "b4b641a9-9226-46f7-9d6b-6b0c02bd3a23",

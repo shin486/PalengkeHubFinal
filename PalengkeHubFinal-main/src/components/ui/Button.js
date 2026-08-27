@@ -95,7 +95,9 @@ export const Button = ({
     <Text
       style={[
         {
-          fontFamily: TYPE.family.ui,
+          // weight-trap: black (900) needs its own file, not the
+          // TYPE.family.ui fallback (which carries weight 700)
+          fontFamily: 'Nunito_900Black',
           fontSize: dims.fontSize,
           fontWeight: TYPE.weight.black,
           color: variantColors.text,
