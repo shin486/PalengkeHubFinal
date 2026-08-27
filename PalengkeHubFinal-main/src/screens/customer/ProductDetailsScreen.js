@@ -10,12 +10,10 @@ import {
   Image,
   Vibration,
   Platform,
-  Dimensions,
   Animated,
   Modal,
   TextInput,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
@@ -28,6 +26,10 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useLastViewed } from '../../hooks/useLastViewed';
 import { chatService } from '../../services/chatService';
 import { MOTION, hapticLight, hapticMedium, hapticSuccess } from '../../theme/motion';
+import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
+import { Badge } from '../../components/ui/Badge';
+import { VerdictChip } from '../../components/ui/VerdictChip';
+import { Button } from '../../components/ui/Button';
 
 // Conditionally load Recharts only on web (it is a web-only library)
 let RechartsLineChart, RechartsResponsiveContainer, RechartsXAxis, RechartsYAxis,
@@ -86,29 +88,95 @@ const getRandomRatingCount = (stallId) => {
   return Math.floor(5 + (randomValue * 195));
 };
 
+// Presyo Check roster row — same visual language as the SearchScreen compare row (phase 5).
+const RosterRow = ({ item, rank, isCheapest, isCurrentUserStall }) => {
+  const COLORS = useColors();
+  return (
+    <View style={[rosterStyles.row, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}>
+      <Text style={[rosterStyles.rank, { color: COLORS.text.tertiary }]}>{rank}</Text>
+      <View style={rosterStyles.info}>
+        <Text style={[rosterStyles.stallName, { color: COLORS.text.primary }]} numberOfLines={1}>
+          {item.stalls?.stall_name || 'Unknown Stall'}
+        </Text>
+        <Text style={[rosterStyles.stallSub, { color: COLORS.text.tertiary }]} numberOfLines={1}>
+          {item.stalls?.section || 'N/A'} • #{item.stalls?.stall_number || 'N/A'}
+        </Text>
+      </View>
+      <View style={rosterStyles.priceCol}>
+        <Text style={[rosterStyles.price, { color: COLORS.text.primary }]}>₱{(item.price || 0).toFixed(2)}</Text>
+        {isCheapest ? (
+          <VerdictChip verdict="PINAKAMURA" solid style={rosterStyles.badge} />
+        ) : isCurrentUserStall ? (
+          <Badge tone="brand" style={rosterStyles.badge}>Ikaw</Badge>
+        ) : null}
+      </View>
+    </View>
+  );
+};
+
+const rosterStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: LAYOUT.borderWidth,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  rank: {
+    width: 20,
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    textAlign: 'center',
+  },
+  info: {
+    flex: 1,
+  },
+  stallName: {
+    fontSize: TYPE.size.h3,
+    fontWeight: TYPE.weight.bold,
+  },
+  stallSub: {
+    fontSize: TYPE.size.caption,
+    marginTop: 2,
+  },
+  priceCol: {
+    alignItems: 'flex-end',
+  },
+  price: {
+    fontSize: TYPE.size.h2,
+    fontWeight: TYPE.weight.black,
+  },
+  badge: {
+    marginTop: 4,
+  },
+});
+
 // Star Rating Component
 const StarRating = ({ rating, size = 12 }) => {
+  const COLORS = useColors();
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
-  
+
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             {[...Array(fullStars)].map((_, i) => (
-        <Ionicons key={`full-${i}`} name="star" size={size} color="#F59E0B" />
+        <Ionicons key={`full-${i}`} name="star" size={size} color={COLORS.gold} />
       ))}
       {hasHalfStar && (
-        <Text style={{ fontSize: size, color: '#F59E0B' }}>½</Text>
+        <Text style={{ fontSize: size, color: COLORS.gold }}>½</Text>
       )}
       {[...Array(emptyStars)].map((_, i) => (
-        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color="#D1D5DB" />
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color={COLORS.text.quaternary} />
       ))}
     </View>
   );
 };
 
 // Price History Chart Component (Recharts on web, fallback bar chart on native)
-const PriceHistoryChart = ({ data, darkMode, styles }) => {
+const PriceHistoryChart = ({ data, styles, COLORS }) => {
   if (!data || !Array.isArray(data) || data.length === 0) return null;
 
   const chartData = data.map(h => ({
@@ -121,37 +189,37 @@ const PriceHistoryChart = ({ data, darkMode, styles }) => {
   if (hasRecharts) {
     try {
       return (
-        <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
-          <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+        <View style={styles.chartContainer}>
+          <Text style={styles.chartTitle}>Price Trend (Last 30 Days)</Text>
           <View style={{ width: '100%', height: 200 }}>
             <RechartsResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-                <RechartsCartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
-                <RechartsXAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                <RechartsCartesianGrid strokeDasharray="3 3" stroke={COLORS.borderLight} />
+                <RechartsXAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: COLORS.text.tertiary }}
                   angle={-30}
                   textAnchor="end"
                   height={40}
                 />
-                <RechartsYAxis 
-                  tick={{ fontSize: 10, fill: darkMode ? '#9CA3AF' : '#6B7280' }}
+                <RechartsYAxis
+                  tick={{ fontSize: 10, fill: COLORS.text.tertiary }}
                   tickFormatter={(value) => `₱${value}`}
                   width={50}
                 />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: darkMode ? '#1a1a1a' : '#FFFFFF', border: '1px solid #E5E7EB' }}
-                  labelStyle={{ fontSize: 11, color: darkMode ? '#FFFFFF' : '#111827' }}
-                  itemStyle={{ fontSize: 11, color: '#DC2626' }}
+                <RechartsTooltip
+                  contentStyle={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+                  labelStyle={{ fontSize: 11, color: COLORS.text.primary }}
+                  itemStyle={{ fontSize: 11, color: COLORS.primary }}
                   formatter={(value) => [`₱${value.toFixed(2)}`, 'Price']}
                 />
-                <RechartsLine 
-                  type="monotone" 
-                  dataKey="price" 
-                  stroke="#DC2626" 
+                <RechartsLine
+                  type="monotone"
+                  dataKey="price"
+                  stroke={COLORS.primary}
                   strokeWidth={2}
-                  dot={{ r: 3, fill: '#DC2626' }}
-                  activeDot={{ r: 5, fill: '#EF4444' }}
+                  dot={{ r: 3, fill: COLORS.primary }}
+                  activeDot={{ r: 5, fill: COLORS.primaryDark }}
                 />
               </RechartsLineChart>
             </RechartsResponsiveContainer>
@@ -170,8 +238,8 @@ const PriceHistoryChart = ({ data, darkMode, styles }) => {
   const priceRange = maxPrice - minPrice || 1;
 
   return (
-    <View style={[styles.chartContainer, darkMode && styles.chartContainerDark]}>
-      <Text style={[styles.chartTitle, darkMode && styles.chartTitleDark]}>Price Trend (Last 30 Days)</Text>
+    <View style={styles.chartContainer}>
+      <Text style={styles.chartTitle}>Price Trend (Last 30 Days)</Text>
       <View style={styles.chartBars}>
         {chartData.slice(0, 8).map((point, index) => {
           const height = ((point.price - minPrice) / priceRange) * 100;
@@ -217,7 +285,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [marketProducts, setMarketProducts] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [marketLoading, setMarketLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
 
   // Related products from same stall
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -686,6 +753,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const marketAnalytics = computeMarketAnalytics();
 
+  // This product/stall is Pinakamura only when it is rank 1 among a real
+  // (more than one row) comparison. A lone stall has nothing to beat.
+  const isThisProductCheapest =
+    !!marketAnalytics &&
+    marketAnalytics.totalVendors > 1 &&
+    marketAnalytics.sorted[0]?.id === product?.id;
+
   //  Get display rating (randomized if no real rating)
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
@@ -695,7 +769,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#DC2626" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading product details...</Text>
       </View>
     );
@@ -712,6 +786,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
     );
   }
 
+  const roster = marketAnalytics?.sorted || [];
+  const hasComparison = !!marketAnalytics && marketAnalytics.totalVendors > 1;
+  const unitSuffix = getUnitSuffix(selectedUnit);
+
   return (
     <View style={styles.screenContainer}>
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -721,29 +799,29 @@ export default function ProductDetailsScreen({ route, navigation }) {
         onPress={() => navigation.goBack()}
         activeOpacity={0.7}
       >
-        <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+        <Ionicons name="arrow-back" size={22} color={COLORS.onInk} />
       </TouchableOpacity>
 
-      {/* Product Image */}
+      {/* Product Image — full bleed, bottom corners only */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
-          <Image 
-            source={{ uri: product.image_url }} 
+          <Image
+            source={{ uri: product.image_url }}
             style={styles.productImage}
             resizeMode="cover"
           />
         ) : (
           <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cart-outline" size={18} />
+            <Ionicons name="cart-outline" size={40} color={COLORS.text.quaternary} />
           </View>
         )}
       </View>
 
-      {/* Product Info */}
+      {/* Name + actions */}
       <View style={styles.productInfo}>
         <View style={styles.productTitleRow}>
-          <Text style={styles.productName}>{product.name}</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
+          <View style={styles.titleActions}>
             <TouchableOpacity
               onPress={() => shareProduct({
                 name: product.name,
@@ -756,7 +834,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
               style={styles.favBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="share-outline" size={20} color={COLORS.text.light} />
+              <Ionicons name="share-outline" size={20} color={COLORS.text.tertiary} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
@@ -774,32 +852,40 @@ export default function ProductDetailsScreen({ route, navigation }) {
                 <Ionicons
                   name={isProductFavorite(product.id) ? 'heart' : 'heart-outline'}
                   size={22}
-                  color={isProductFavorite(product.id) ? COLORS.primary : COLORS.text.light}
+                  color={isProductFavorite(product.id) ? COLORS.primary : COLORS.text.tertiary}
                 />
               </Animated.View>
             </TouchableOpacity>
           </View>
         </View>
-        
+
+        {/* Price block: price, unit, verdict chip */}
         <View style={styles.priceRow}>
           <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
-          <Text style={styles.productUnit}>/ {getUnitDisplayText(selectedUnit)}</Text>
+          <Text style={styles.productUnit}>/ {unitSuffix}</Text>
+          {isThisProductCheapest && <VerdictChip verdict="PINAKAMURA" solid style={styles.priceVerdict} />}
+        </View>
+
+        <View style={styles.priceMetaRow}>
           {promotion && (
-            <View style={styles.promoBadge}>
-              <Text style={styles.promoBadgeText}>
-                {promotion.discount_type === 'percentage' 
-                  ? `${promotion.discount_value}% OFF` 
-                  : `₱${promotion.discount_value} OFF`}
-              </Text>
-            </View>
+            <Badge tone="tomato">
+              {promotion.discount_type === 'percentage'
+                ? `${promotion.discount_value}% OFF`
+                : `₱${promotion.discount_value} OFF`}
+            </Badge>
           )}
+          <Badge tone={product.is_available ? 'leaf' : 'tomato'}>
+            {product.is_available ? 'In Stock' : 'Out of Stock'}
+          </Badge>
         </View>
 
         {priceTrend && (
-          <PriceTrendBadge
-            currentPrice={currentPrice}
-            previousPrice={priceTrend.previous_price}
-          />
+          <View style={{ marginTop: SPACING.sm }}>
+            <PriceTrendBadge
+              currentPrice={currentPrice}
+              previousPrice={priceTrend.previous_price}
+            />
+          </View>
         )}
 
         {promotion && (
@@ -810,28 +896,224 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </Text>
           </View>
         )}
-
-        {product.description ? (
-          <Text style={styles.productDescription}>{product.description}</Text>
-        ) : null}
-
-        <View style={styles.availabilityRow}>
-          <Text style={styles.availabilityLabel}>Status:</Text>
-          <View style={[
-            styles.availabilityBadge,
-            product.is_available ? styles.availableBadge : styles.unavailableBadge
-          ]}>
-            <Text style={[
-              styles.availabilityText,
-              product.is_available ? styles.availableText : styles.unavailableText
-            ]}>
-              {product.is_available ? 'In Stock' : 'Out of Stock'}
-            </Text>
-          </View>
-        </View>
       </View>
 
-      {/* Unit Selection */}
+      {/* Stall attribution */}
+      {stall ? (
+        <TouchableOpacity
+          style={styles.stallSection}
+          onPress={() => navigation.navigate('StallDetails', { stallId: stall.id })}
+          activeOpacity={0.7}
+        >
+          <View style={styles.stallCard}>
+            <View style={styles.stallHeader}>
+              <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
+              <View style={styles.ratingContainer}>
+                <StarRating rating={displayRating} size={12} />
+                <Text style={styles.stallRatingText}>{displayRating.toFixed(1)}</Text>
+                <Text style={styles.stallRatingCount}>({ratingCount} reviews)</Text>
+              </View>
+            </View>
+
+            <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
+            <Text style={styles.stallSectionText}>{stall.section}</Text>
+
+            <Text style={styles.viewStallLink}>Tingnan ang Stall →</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* ── Presyo Check ── */}
+      <View style={styles.presyoSection}>
+        <View style={styles.presyoHeaderRow}>
+          <Text style={styles.presyoHeading}>Presyo Check</Text>
+          {marketAnalytics && marketAnalytics.totalVendors > 0 && (
+            <Badge tone="brand">{marketAnalytics.totalVendors} stall{marketAnalytics.totalVendors > 1 ? 's' : ''}</Badge>
+          )}
+        </View>
+
+        {marketLoading ? (
+          <View style={styles.presyoLoading}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.presyoLoadingText}>Kinukuha ang presyo ng ibang stall...</Text>
+          </View>
+        ) : hasComparison ? (
+          <>
+            {/* Roster */}
+            {roster.map((item, index) => (
+              <RosterRow
+                key={item.id}
+                item={item}
+                rank={index + 1}
+                isCheapest={index === 0}
+                isCurrentUserStall={item.stalls?.id === stall?.id}
+              />
+            ))}
+
+            {/* KPI stat cards */}
+            <View style={styles.kpiGrid}>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: COLORS.successLight }]}>
+                  <MaterialIcons name="trending-down" size={16} color={COLORS.success} />
+                </View>
+                <Text style={styles.kpiValue}>₱{marketAnalytics.minPrice.toFixed(2)}</Text>
+                <Text style={styles.kpiLabel}>Pinakamura / {unitSuffix}</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: COLORS.errorLight }]}>
+                  <MaterialIcons name="trending-up" size={16} color={COLORS.errorDark} />
+                </View>
+                <Text style={styles.kpiValue}>₱{marketAnalytics.maxPrice.toFixed(2)}</Text>
+                <Text style={styles.kpiLabel}>Pinakamahal / {unitSuffix}</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: COLORS.infoLight }]}>
+                  <MaterialIcons name="calculate" size={16} color={COLORS.info} />
+                </View>
+                <Text style={styles.kpiValue}>₱{marketAnalytics.avgPrice.toFixed(2)}</Text>
+                <Text style={styles.kpiLabel}>Karaniwan / {unitSuffix}</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: COLORS.warningLight }]}>
+                  <MaterialIcons name="compare-arrows" size={16} color={COLORS.warning} />
+                </View>
+                <Text style={styles.kpiValue}>₱{marketAnalytics.priceDiff.toFixed(2)}</Text>
+                <Text style={styles.kpiLabel}>Agwat ng presyo</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: COLORS.brandSoft }]}>
+                  <MaterialIcons name="storefront" size={16} color={COLORS.primaryDark} />
+                </View>
+                <Text style={styles.kpiValue}>{marketAnalytics.totalVendors}</Text>
+                <Text style={styles.kpiLabel}>Bilang ng stall</Text>
+              </View>
+            </View>
+
+            {/* Cheapest & most expensive highlight */}
+            <View style={styles.vendorHighlight}>
+              <View style={[styles.vendorCard, { borderLeftColor: COLORS.success }]}>
+                <VerdictChip verdict="PINAKAMURA" solid style={styles.vendorCardBadge} />
+                <Text style={styles.vendorName} numberOfLines={1}>
+                  {marketAnalytics.cheapestVendor.stalls?.stall_name || 'Unknown Stall'}
+                </Text>
+                <Text style={styles.vendorPrice}>₱{marketAnalytics.cheapestVendor.price?.toFixed(2)}</Text>
+                <Text style={styles.vendorSub}>
+                  {marketAnalytics.cheapestVendor.stalls?.section || 'N/A'} • #{marketAnalytics.cheapestVendor.stalls?.stall_number || 'N/A'}
+                </Text>
+              </View>
+              <View style={[styles.vendorCard, { borderLeftColor: COLORS.errorDark }]}>
+                <VerdictChip verdict="MAHAL" style={styles.vendorCardBadge} />
+                <Text style={styles.vendorName} numberOfLines={1}>
+                  {marketAnalytics.mostExpensiveVendor.stalls?.stall_name || 'Unknown Stall'}
+                </Text>
+                <Text style={styles.vendorPrice}>₱{marketAnalytics.mostExpensiveVendor.price?.toFixed(2)}</Text>
+                <Text style={styles.vendorSub}>
+                  {marketAnalytics.mostExpensiveVendor.stalls?.section || 'N/A'} • #{marketAnalytics.mostExpensiveVendor.stalls?.stall_number || 'N/A'}
+                </Text>
+              </View>
+            </View>
+
+            {priceHistory.length > 0 && (
+              <PriceHistoryChart data={priceHistory} styles={styles} COLORS={COLORS} />
+            )}
+
+            {relatedProducts.length > 0 && (
+              <View style={styles.subSection}>
+                <Text style={styles.subSectionTitle}>More from {stall?.stall_name || 'this stall'}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: SPACING.md }}>
+                  {relatedProducts.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.relatedCard}
+                      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.relatedImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.relatedInfo}>
+                        <Text numberOfLines={2} style={styles.relatedName}>{item.name}</Text>
+                        <Text style={styles.relatedPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {(marketAnalytics.belowAverage.length > 0 || marketAnalytics.outdated.length > 0 || marketAnalytics.unusual.length > 0) && (
+              <View style={styles.subSection}>
+                <Text style={styles.subSectionTitle}>Presyo Insights</Text>
+
+                {marketAnalytics.belowAverage.length > 0 && (
+                  <View style={styles.insightItem}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIcon, { backgroundColor: COLORS.successLight }]}>
+                        <MaterialIcons name="trending-down" size={14} color={COLORS.success} />
+                      </View>
+                      <Text style={styles.insightTitle}>
+                        Below Market Average ({marketAnalytics.belowAverage.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={styles.insightDesc}>
+                      These vendors offer prices below the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
+                      Consider comparing quality before choosing the cheapest option.
+                    </Text>
+                  </View>
+                )}
+
+                {marketAnalytics.outdated.length > 0 && (
+                  <View style={styles.insightItem}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIcon, { backgroundColor: COLORS.warningLight }]}>
+                        <MaterialIcons name="schedule" size={14} color={COLORS.warning} />
+                      </View>
+                      <Text style={styles.insightTitle}>
+                        Outdated Prices ({marketAnalytics.outdated.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={styles.insightDesc}>
+                      These vendors haven't updated their prices in over 7 days. Prices may be stale or inaccurate.
+                    </Text>
+                  </View>
+                )}
+
+                {marketAnalytics.unusual.length > 0 && (
+                  <View style={styles.insightItem}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIcon, { backgroundColor: COLORS.errorLight }]}>
+                        <MaterialIcons name="warning" size={14} color={COLORS.errorDark} />
+                      </View>
+                      <Text style={styles.insightTitle}>
+                        Unusual Price Changes ({marketAnalytics.unusual.length} vendors)
+                      </Text>
+                    </View>
+                    <Text style={styles.insightDesc}>
+                      These vendors' prices deviate more than 20% from the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
+                      Verify pricing before purchasing.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.presyoEmpty}>
+            <MaterialIcons name="info-outline" size={28} color={COLORS.text.quaternary} />
+            <Text style={styles.presyoEmptyHeading}>Isang stall pa lang ang may nito</Text>
+            <Text style={styles.presyoEmptyBody}>
+              Wala pang maihahambing na presyo. Titingnan namin ulit bukas.
+            </Text>
+            <Button variant="outline" size="sm" onPress={() => navigation.goBack()} style={{ marginTop: SPACING.md }}>
+              Tingnan ang ibang produkto
+            </Button>
+          </View>
+        )}
+      </View>
+
+      {/* Detalye: unit, quantity, secondary actions, description */}
       {availableUnits.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Unit</Text>
@@ -849,7 +1131,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
                   ]}
                   onPress={() => handleUnitChange(unit)}
                 >
-                  <Text style={styles.unitChipIcon}>{UNIT_CONFIG[unit]?.icon || 'cube-outline'}</Text>
                   <Text style={[
                     styles.unitChipText,
                     selectedUnit === unit && styles.unitChipTextActive
@@ -875,325 +1156,67 @@ export default function ProductDetailsScreen({ route, navigation }) {
         </View>
       )}
 
-      {/* Quantity Selector */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quantity</Text>
         <View style={styles.quantityContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => setQuantity(Math.max(1, quantity - 1))}
           >
             <Text style={styles.quantityButtonText}>-</Text>
           </TouchableOpacity>
-          
+
           <Text style={styles.quantityText}>{quantity}</Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => setQuantity(quantity + 1)}
           >
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Total Price */}
-      <View style={styles.totalSection}>
-        <Text style={styles.totalLabel}>Total Amount:</Text>
-        <Text style={styles.totalPrice}>₱{totalPrice.toFixed(2)}</Text>
-      </View>
-
-      {/* Stall Info with Random Rating */}
-      {stall ? (
-        <TouchableOpacity 
-          style={styles.stallSection}
-          onPress={() => navigation.navigate('StallDetails', { stallId: stall.id })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.sectionTitle}>Sold by</Text>
-          <View style={styles.stallCard}>
-            {/*  Stall Header with Random Rating */}
-            <View style={styles.stallHeader}>
-              <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>
-              <View style={styles.ratingContainer}>
-                <StarRating rating={displayRating} size={12} />
-                <Text style={styles.stallRatingText}>
-                  {displayRating.toFixed(1)}
-                </Text>
-                <Text style={styles.stallRatingCount}>({ratingCount} reviews)</Text>
-              </View>
-            </View>
-            
-            <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
-            <Text style={styles.stallSectionText}>{stall.section}</Text>
-            
-            {stall.description ? (
-              <Text style={styles.stallDescription} numberOfLines={2}>
-                {stall.description}
-              </Text>
-            ) : null}
-            
-            <Text style={styles.viewStallLink}>View Stall Details →</Text>
-          </View>
-        </TouchableOpacity>
-      ) : null}
-
-      {/* Market Analytics Dashboard */}
-      <View style={[styles.marketSection, darkMode && styles.marketSectionDark]}>
-        <View style={styles.marketSectionHeader}>
-          <View style={styles.marketSectionTitleRow}>
-            <MaterialIcons name="insights" size={20} color={darkMode ? '#FFFFFF' : '#111827'} />
-            <Text style={[styles.marketSectionTitle, darkMode && styles.marketSectionTitleDark]}>Market Analytics</Text>
-          </View>
-          <TouchableOpacity onPress={() => setDarkMode(!darkMode)} style={styles.darkModeToggle}>
-            <MaterialIcons name={darkMode ? 'light-mode' : 'dark-mode'} size={18} color={darkMode ? '#FFFFFF' : '#6B7280'} />
-          </TouchableOpacity>
+        <View style={styles.secondaryActionsRow}>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.text.primary} />}
+            onPress={() => {
+              hapticLight();
+              setOfferPrice((currentPrice * 0.9).toFixed(2));
+              setOfferVisible(true);
+            }}
+            disabled={!product?.is_available}
+            style={{ flex: 1 }}
+          >
+            Make an Offer
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleBuyNow}
+            disabled={!product?.is_available}
+            style={{ flex: 1 }}
+          >
+            {product?.is_available ? t('products.buy_now') : 'Unavailable'}
+          </Button>
         </View>
-
-        {marketLoading ? (
-          <View style={styles.marketLoading}>
-            <ActivityIndicator size="small" color="#DC2626" />
-            <Text style={[styles.marketLoadingText, darkMode && styles.marketLoadingTextDark]}>Analyzing market data...</Text>
-          </View>
-        ) : marketAnalytics ? (
-          <>
-            {/* Market Summary KPI Cards */}
-            <View style={styles.marketKpiGrid}>
-              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
-                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
-                  <MaterialIcons name="trending-down" size={18} color="#2E7D32" />
-                </View>
-                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.minPrice.toFixed(2)}</Text>
-                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Lowest Price</Text>
-              </View>
-              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
-                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
-                  <MaterialIcons name="trending-up" size={18} color="#C62828" />
-                </View>
-                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.maxPrice.toFixed(2)}</Text>
-                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Highest Price</Text>
-              </View>
-              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
-                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(21,101,192,0.08)' }]}>
-                  <MaterialIcons name="calculate" size={18} color="#1565C0" />
-                </View>
-                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.avgPrice.toFixed(2)}</Text>
-                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Average Price</Text>
-              </View>
-              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
-                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(230,81,0,0.08)' }]}>
-                  <MaterialIcons name="compare-arrows" size={18} color="#E65100" />
-                </View>
-                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>₱{marketAnalytics.priceDiff.toFixed(2)}</Text>
-                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Price Difference</Text>
-              </View>
-              <View style={[styles.marketKpiCard, darkMode && styles.marketKpiCardDark]}>
-                <View style={[styles.marketKpiIcon, { backgroundColor: 'rgba(16,185,129,0.08)' }]}>
-                  <MaterialIcons name="storefront" size={18} color="#10B981" />
-                </View>
-                <Text style={[styles.marketKpiValue, darkMode && styles.marketKpiValueDark]}>{marketAnalytics.totalVendors}</Text>
-                <Text style={[styles.marketKpiLabel, darkMode && styles.marketKpiLabelDark]}>Total Vendors</Text>
-              </View>
-            </View>
-
-            {/* Cheapest & Most Expensive Vendor */}
-            <View style={styles.marketVendorHighlight}>
-              <View style={[styles.marketVendorCard, styles.marketCheapestCard, darkMode && styles.marketVendorCardDark]}>
-                <View style={styles.marketVendorCardHeader}>
-                  <MaterialIcons name="emoji-events" size={16} color="#2E7D32" />
-                  <Text style={[styles.marketVendorCardLabel, { color: '#2E7D32' }]}>Cheapest</Text>
-                </View>
-                <Text style={styles.marketVendorName} numberOfLines={1}>
-                  {marketAnalytics.cheapestVendor.stalls?.stall_name || 'Unknown Stall'}
-                </Text>
-                <Text style={[styles.marketVendorPrice, { color: '#2E7D32' }]}>
-                  ₱{marketAnalytics.cheapestVendor.price?.toFixed(2)}
-                </Text>
-                <Text style={styles.marketVendorSub}>
-                  {marketAnalytics.cheapestVendor.stalls?.section || 'N/A'} • #{marketAnalytics.cheapestVendor.stalls?.stall_number || 'N/A'}
-                </Text>
-              </View>
-              <View style={[styles.marketVendorCard, styles.marketExpensiveCard, darkMode && styles.marketVendorCardDark]}>
-                <View style={styles.marketVendorCardHeader}>
-                  <MaterialIcons name="attach-money" size={16} color="#C62828" />
-                  <Text style={[styles.marketVendorCardLabel, { color: '#C62828' }]}>Most Expensive</Text>
-                </View>
-                <Text style={styles.marketVendorName} numberOfLines={1}>
-                  {marketAnalytics.mostExpensiveVendor.stalls?.stall_name || 'Unknown Stall'}
-                </Text>
-                <Text style={[styles.marketVendorPrice, { color: '#C62828' }]}>
-                  ₱{marketAnalytics.mostExpensiveVendor.price?.toFixed(2)}
-                </Text>
-                <Text style={styles.marketVendorSub}>
-                  {marketAnalytics.mostExpensiveVendor.stalls?.section || 'N/A'} • #{marketAnalytics.mostExpensiveVendor.stalls?.stall_number || 'N/A'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Price History Chart */}
-            {priceHistory.length > 0 && (
-              <PriceHistoryChart data={priceHistory} darkMode={darkMode} styles={styles} />
-            )}
-
-            {/* You Might Also Like */}
-            {relatedProducts.length > 0 && (
-              <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
-                <View style={styles.marketSubSectionHeader}>
-                  <MaterialIcons name="store" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
-                  <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>
-                    More from {stall?.stall_name || 'this stall'}
-                  </Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                  {relatedProducts.map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={styles.relatedCard}
-                      onPress={() => navigation.push('ProductDetails', { productId: item.id })}
-                      activeOpacity={0.8}
-                    >
-                      <Image
-                        source={{ uri: item.image_url }}
-                        style={styles.relatedImage}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.relatedInfo}>
-                        <Text numberOfLines={2} style={styles.relatedName}>{item.name}</Text>
-                        <Text style={styles.relatedPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Vendor Comparison Table */}
-            <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
-              <View style={styles.marketSubSectionHeader}>
-                <MaterialIcons name="table-chart" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
-                <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>
-                  Price Comparison ({marketAnalytics.totalVendors} vendors)
-                </Text>
-              </View>
-              {marketAnalytics.sorted.map((item, index) => {
-                const isCheapest = index === 0;
-                const isMostExpensive = index === marketAnalytics.sorted.length - 1;
-                const isCurrentUserStall = item.stalls?.id === stall?.id;
-                return (
-                  <View 
-                    key={item.id} 
-                    style={[
-                      styles.marketComparisonRow,
-                      darkMode && styles.marketComparisonRowDark,
-                      isCheapest && styles.marketCheapestRow,
-                      isMostExpensive && styles.marketExpensiveRow,
-                      isCurrentUserStall && styles.marketCurrentUserRow,
-                    ]}
-                  >
-                    <View style={styles.marketComparisonRank}>
-                      <Text style={[styles.marketRankText, isCheapest && { color: '#2E7D32' }, isMostExpensive && { color: '#C62828' }]}>
-                        #{index + 1}
-                      </Text>
-                    </View>
-                    <View style={styles.marketComparisonVendor}>
-                      <Text style={[styles.marketComparisonVendorName, darkMode && styles.marketComparisonVendorNameDark]} numberOfLines={1}>
-                        {item.stalls?.stall_name || 'Unknown Stall'}
-                      </Text>
-                      <Text style={[styles.marketComparisonVendorSub, darkMode && styles.marketComparisonVendorSubDark]} numberOfLines={1}>
-                        {item.stalls?.section || 'N/A'} • #{item.stalls?.stall_number || 'N/A'}
-                      </Text>
-                    </View>
-                    <Text style={[styles.marketComparisonPrice, isCheapest && styles.marketCheapestPrice, isMostExpensive && styles.marketExpensivePrice]}>
-                      ₱{(item.price || 0).toFixed(2)}
-                    </Text>
-                    {isCurrentUserStall && (
-                      <View style={styles.marketCurrentUserBadge}>
-                        <Text style={styles.marketCurrentUserBadgeText}>You</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Insights Section */}
-            {(marketAnalytics.belowAverage.length > 0 || marketAnalytics.outdated.length > 0 || marketAnalytics.unusual.length > 0) && (
-              <View style={[styles.marketSubSection, darkMode && styles.marketSubSectionDark]}>
-                <View style={styles.marketSubSectionHeader}>
-                  <MaterialIcons name="lightbulb" size={16} color={darkMode ? '#FFFFFF' : '#111827'} />
-                  <Text style={[styles.marketSubSectionTitle, darkMode && styles.marketSubSectionTitleDark]}>Market Insights</Text>
-                </View>
-
-                {marketAnalytics.belowAverage.length > 0 && (
-                  <View style={styles.marketInsightItem}>
-                    <View style={styles.marketInsightHeader}>
-                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(46,125,50,0.08)' }]}>
-                        <MaterialIcons name="trending-down" size={14} color="#2E7D32" />
-                      </View>
-                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
-                        Below Market Average ({marketAnalytics.belowAverage.length} vendors)
-                      </Text>
-                    </View>
-                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
-                      These vendors offer prices below the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
-                      Consider comparing quality before choosing the cheapest option.
-                    </Text>
-                  </View>
-                )}
-
-                {marketAnalytics.outdated.length > 0 && (
-                  <View style={styles.marketInsightItem}>
-                    <View style={styles.marketInsightHeader}>
-                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(230,81,0,0.08)' }]}>
-                        <MaterialIcons name="schedule" size={14} color="#E65100" />
-                      </View>
-                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
-                        Outdated Prices ({marketAnalytics.outdated.length} vendors)
-                      </Text>
-                    </View>
-                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
-                      These vendors haven't updated their prices in over 7 days. Prices may be stale or inaccurate.
-                    </Text>
-                  </View>
-                )}
-
-                {marketAnalytics.unusual.length > 0 && (
-                  <View style={styles.marketInsightItem}>
-                    <View style={styles.marketInsightHeader}>
-                      <View style={[styles.marketInsightIcon, { backgroundColor: 'rgba(198,40,40,0.08)' }]}>
-                        <MaterialIcons name="warning" size={14} color="#C62828" />
-                      </View>
-                      <Text style={[styles.marketInsightTitle, darkMode && styles.marketInsightTitleDark]}>
-                        Unusual Price Changes ({marketAnalytics.unusual.length} vendors)
-                      </Text>
-                    </View>
-                    <Text style={[styles.marketInsightDesc, darkMode && styles.marketInsightDescDark]}>
-                      These vendors' prices deviate more than 20% from the market average of ₱{marketAnalytics.avgPrice.toFixed(2)}.
-                      Verify pricing before purchasing.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </>
-        ) : (
-          <View style={styles.marketEmpty}>
-            <MaterialIcons name="info-outline" size={32} color="#9CA3AF" />
-            <Text style={[styles.marketEmptyText, darkMode && styles.marketEmptyTextDark]}>
-              No market data available for this product
-            </Text>
-          </View>
-        )}
       </View>
+
+      {product.description ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Detalye</Text>
+          <Text style={styles.productDescription}>{product.description}</Text>
+        </View>
+      ) : null}
 
       {/* Report Button */}
       <View style={styles.reportSection}>
-
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.reportProductButton}
           onPress={handleReportProduct}
         >
-          <Ionicons name="ban-outline" size={18} />
+          <Ionicons name="ban-outline" size={18} color={COLORS.primary} />
           <Text style={styles.reportButtonText}>Report this Product</Text>
         </TouchableOpacity>
         <Text style={styles.reportNote}>
@@ -1203,52 +1226,22 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
     </ScrollView>
 
-      {/* Fixed Action Buttons - always visible while scrolling */}
-      <View style={styles.fixedFooter}>
-        <TouchableOpacity
-          style={styles.offerButton}
-          onPress={() => {
-            hapticLight();
-            setOfferPrice((currentPrice * 0.9).toFixed(2));
-            setOfferVisible(true);
-          }}
-          disabled={!product?.is_available}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.offerButtonText}>Make an Offer</Text>
-        </TouchableOpacity>
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.button, styles.addToCartButton]}
-            onPress={handleAddToCart}
-            disabled={!product?.is_available}
-          >
-            <LinearGradient
-              colors={['#DC2626', '#EF4444']}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText} numberOfLines={2}>
-                {product?.is_available ? `${t('products.add_to_cart')} (₱${totalPrice.toFixed(2)})` : t('products.out_of_stock')}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.buyNowButton]}
-            onPress={handleBuyNow}
-            disabled={!product?.is_available}
-          >
-            <LinearGradient
-              colors={['#10B981', '#059669']}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText}>
-                {product?.is_available ? t('products.buy_now') : 'Unavailable'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+      {/* Sticky action bar — replaces the tab bar, not stacked on it */}
+      <View style={styles.stickyBar}>
+        <View style={styles.stickyTotalBlock}>
+          <Text style={styles.stickyTotalLabel}>Total ({quantity} x {unitSuffix})</Text>
+          <Text style={styles.stickyTotalAmount}>₱{totalPrice.toFixed(2)}</Text>
         </View>
+        <Button
+          variant="primary"
+          size="lg"
+          shape="square"
+          onPress={handleAddToCart}
+          disabled={!product?.is_available}
+          style={styles.stickyCta}
+        >
+          {product?.is_available ? 'Idagdag sa Kart' : t('products.out_of_stock')}
+        </Button>
       </View>
 
       {/* Haggle Offer Modal */}
@@ -1292,10 +1285,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
               activeOpacity={0.85}
             >
               {sendingOffer ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={COLORS.onPrimary} />
               ) : (
                 <>
-                  <Ionicons name="send" size={16} color="#FFFFFF" />
+                  <Ionicons name="send" size={16} color={COLORS.onPrimary} />
                   <Text style={styles.offerSubmitText}>Send Offer</Text>
                 </>
               )}
@@ -1312,7 +1305,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         >
           <View style={styles.toastContent}>
             <View style={styles.toastIcon}>
-              <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+              <Ionicons name="checkmark-circle" size={22} color={COLORS.onSuccess} />
             </View>
             <View style={styles.toastTextWrap}>
               <Text style={styles.toastTitle}>{t('cart.added_to_cart')}</Text>
@@ -1335,471 +1328,390 @@ const createStyles = (COLORS) => StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: SPACING.xxxl,
   },
   backArrow: {
     position: 'absolute',
-    top: 12,
-    left: 16,
+    top: SPACING.md,
+    left: SPACING.lg,
     zIndex: 10,
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   toastContainer: {
     position: 'absolute',
     bottom: 120,
-    left: 16,
-    right: 16,
+    left: SPACING.lg,
+    right: SPACING.lg,
     zIndex: 100,
   },
   toastContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
+    backgroundColor: COLORS.inkSurface,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    ...SHADOWS.float,
   },
   toastIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: '#22C55E',
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.successSolid,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   toastTextWrap: {
     flex: 1,
   },
   toastTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    color: COLORS.onInk,
+    fontSize: TYPE.size.bodySmall,
+    fontWeight: TYPE.weight.bold,
   },
   toastSubtitle: {
-    color: '#D1D5DB',
-    fontSize: 13,
+    color: COLORS.onInk,
+    fontSize: TYPE.size.caption,
     marginTop: 2,
+    opacity: 0.8,
   },
   relatedCard: {
     width: 130,
-    marginRight: 12,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    marginRight: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.card,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: LAYOUT.borderWidth,
     borderColor: COLORS.border,
   },
   relatedImage: {
     width: '100%',
     height: 100,
-    backgroundColor: COLORS.inputBg,
+    backgroundColor: COLORS.wickerSoft,
   },
   relatedInfo: {
-    padding: 10,
+    padding: SPACING.sm + 2,
   },
   relatedName: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.medium,
     color: COLORS.text.primary,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
     lineHeight: 16,
   },
   relatedPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#C62828',
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.primary,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: SPACING.xl,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: COLORS.text.light,
+    marginTop: SPACING.md,
+    fontSize: TYPE.size.label,
+    color: COLORS.text.tertiary,
   },
   errorText: {
-    fontSize: 16,
-    color: '#EF4444',
-    marginBottom: 20,
+    fontSize: TYPE.size.body,
+    color: COLORS.errorDark,
+    marginBottom: SPACING.xl,
   },
   backButton: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: SPACING.xxl + 6,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.sm,
   },
   backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.onPrimary,
+    fontSize: TYPE.size.body,
+    fontWeight: TYPE.weight.semibold,
   },
   imageContainer: {
-    backgroundColor: COLORS.inputBg,
-    padding: 20,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    width: '100%',
+    height: 220,
+    backgroundColor: COLORS.wickerSoft,
+    borderBottomLeftRadius: RADIUS.lg,
+    borderBottomRightRadius: RADIUS.lg,
+    overflow: 'hidden',
   },
   productImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    width: '100%',
+    height: '100%',
   },
   productImagePlaceholder: {
-    width: 200,
-    height: 200,
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 20,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  productEmoji: {
-    fontSize: 60,
-  },
   productInfo: {
     backgroundColor: COLORS.surface,
-    padding: 20,
-    marginTop: 1,
+    padding: SPACING.lg,
   },
   productTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
   },
   productName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.text.dark,
+    ...TEXT_STYLES.display,
+    color: COLORS.text.primary,
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACING.md,
+  },
+  titleActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
   },
   favBtn: { padding: 6 },
-  favIcon: { fontSize: 24 },
   priceRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 15,
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   productPrice: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginRight: 8,
+    ...TEXT_STYLES.priceHero,
+    color: COLORS.text.primary,
   },
   productUnit: {
-    fontSize: 14,
-    color: COLORS.text.light,
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.tertiary,
+  },
+  priceVerdict: {
+    marginLeft: SPACING.xs,
+  },
+  priceMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   productDescription: {
-    fontSize: 14,
-    color: COLORS.text.medium,
+    fontSize: TYPE.size.body,
+    color: COLORS.text.secondary,
     lineHeight: 22,
-    marginBottom: 15,
-  },
-  availabilityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  availabilityLabel: {
-    fontSize: 14,
-    color: COLORS.text.light,
-    marginRight: 10,
-  },
-  availabilityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  availableBadge: {
-    backgroundColor: COLORS.successLight,
-  },
-  unavailableBadge: {
-    backgroundColor: COLORS.errorLight,
-  },
-  availabilityText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  availableText: {
-    color: COLORS.success,
-  },
-  unavailableText: {
-    color: COLORS.error,
   },
   section: {
     backgroundColor: COLORS.surface,
-    padding: 20,
-    marginTop: 10,
+    padding: SPACING.lg,
+    marginTop: SPACING.sm,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text.dark,
-    marginBottom: 15,
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.md,
   },
   unitsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: SPACING.md,
   },
   unitChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.borderLight,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 30,
-    gap: 8,
-    borderWidth: 1,
+    backgroundColor: COLORS.wickerSoft,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.full,
+    gap: SPACING.sm,
+    borderWidth: LAYOUT.borderWidth,
     borderColor: COLORS.border,
   },
   unitChipActive: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  unitChipIcon: {
-    fontSize: 16,
+    borderColor: COLORS.primaryDark,
   },
   unitChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text.medium,
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.semibold,
+    color: COLORS.text.secondary,
   },
   unitChipTextActive: {
-    color: 'white',
-    fontWeight: '700',
+    color: COLORS.onPrimary,
+    fontWeight: TYPE.weight.bold,
   },
   unitChipPrice: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primary,
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.primaryDark,
     marginLeft: 4,
   },
   unitChipPriceActive: {
-    color: 'white',
+    color: COLORS.onPrimary,
   },
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   quantityButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: COLORS.surface,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.full,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
   quantityButtonText: {
     fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.primary,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.primaryDark,
   },
   quantityText: {
     fontSize: 22,
-    fontWeight: '800',
-    marginHorizontal: 24,
-    minWidth: 45,
+    fontWeight: TYPE.weight.black,
+    marginHorizontal: SPACING.md,
+    minWidth: 40,
     textAlign: 'center',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
   },
-  totalSection: {
+  secondaryActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.accentSoft,
-    padding: 20,
-    marginTop: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.accentLight,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-  },
-  totalPrice: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: COLORS.primary,
+    gap: SPACING.md,
   },
   stallSection: {
-    marginTop: 16,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
   },
   stallCard: {
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    backgroundColor: COLORS.card,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
   stallHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.xs,
     flexWrap: 'wrap',
   },
   stallNumber: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '700',
+    fontSize: TYPE.size.caption,
+    color: COLORS.primaryDark,
+    fontWeight: TYPE.weight.bold,
   },
   stallName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-    marginBottom: 4,
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
+    marginBottom: 2,
   },
   stallSectionText: {
-    fontSize: 13,
-    color: COLORS.text.medium,
-    marginBottom: 4,
-  },
-  stallDescription: {
-    fontSize: 13,
-    color: COLORS.text.medium,
-    marginTop: 8,
-    lineHeight: 20,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
   },
   viewStallLink: {
-    fontSize: 14,
-    color: COLORS.primary,
-    marginTop: 10,
-    fontWeight: '600',
+    fontSize: TYPE.size.label,
+    color: COLORS.primaryDark,
+    marginTop: SPACING.sm,
+    fontWeight: TYPE.weight.semibold,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs + 2,
   },
   stallRatingText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
     color: COLORS.warning,
   },
   stallRatingCount: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.quaternary,
   },
   reportSection: {
     backgroundColor: COLORS.surface,
-    padding: 20,
-    marginTop: 16,
+    padding: SPACING.lg,
+    marginTop: SPACING.md,
     alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderRadius: RADIUS.lg,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
+    marginHorizontal: SPACING.lg,
   },
   reportProductButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.accentSoft,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: RADIUS.sm,
+    gap: SPACING.sm,
+    borderWidth: LAYOUT.borderWidth,
     borderColor: COLORS.accentLight,
     width: '100%',
   },
-  reportIcon: {
-    fontSize: 18,
-  },
   reportButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.semibold,
+    color: COLORS.primaryDark,
   },
   reportNote: {
-    fontSize: 12,
-    color: COLORS.text.lighter,
-    marginTop: 8,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.quaternary,
+    marginTop: SPACING.sm,
     textAlign: 'center',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  fixedFooter: {
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  offerButton: {
+  // ── Sticky action bar (D-18): total left, one orange CTA filling the rest ──
+  stickyBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.accentSoft,
-    marginBottom: 10,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    gap: SPACING.md,
+    borderTopWidth: LAYOUT.borderWidth,
+    borderTopColor: COLORS.border,
+    ...SHADOWS.bar,
   },
-  offerButtonText: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '700',
+  stickyTotalBlock: {
+    justifyContent: 'center',
+  },
+  stickyTotalLabel: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.semibold,
+    color: COLORS.text.tertiary,
+  },
+  stickyTotalAmount: {
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
+  },
+  stickyCta: {
+    flex: 1,
   },
   // ── Haggle offer sheet styles ──
   offerOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: COLORS.overlay,
   },
   offerSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 32,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.xxl,
+    paddingBottom: SPACING.xxxl,
+    ...SHADOWS.overlay,
   },
   offerHandle: {
     width: 40,
@@ -1807,315 +1719,231 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 2,
     backgroundColor: COLORS.border,
     alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: SPACING.lg,
   },
   offerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...TEXT_STYLES.h1,
     color: COLORS.text.primary,
     textAlign: 'center',
   },
   offerSubtitle: {
-    fontSize: 13,
-    color: COLORS.text.light,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 22,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xl,
   },
   offerLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.semibold,
     color: COLORS.text.secondary,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   offerInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: LAYOUT.borderWidth,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
     backgroundColor: COLORS.surface,
   },
   offerCurrency: {
     fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary,
-    marginRight: 8,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.primaryDark,
+    marginRight: SPACING.sm,
   },
   offerInput: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: SPACING.md,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
   },
   offerHint: {
-    fontSize: 12,
-    color: COLORS.text.light,
-    marginTop: 10,
-    marginBottom: 18,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.tertiary,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
     lineHeight: 16,
   },
   offerSubmitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 14,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md + 1,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.primary,
   },
   offerSubmitDisabled: {
     opacity: 0.5,
   },
   offerSubmitText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  button: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  buttonGradient: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '700',
-    flexShrink: 1,
-    textAlign: 'center',
-  },
-  promoBadge: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginLeft: 12,
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  promoBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'white',
+    color: COLORS.onPrimary,
+    fontSize: TYPE.size.bodySmall,
+    fontWeight: TYPE.weight.bold,
   },
   originalPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
   },
   originalPriceLabel: {
-    fontSize: 12,
-    color: COLORS.text.medium,
-    marginRight: 8,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.secondary,
+    marginRight: SPACING.sm,
   },
   originalPriceValue: {
-    fontSize: 12,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.quaternary,
     textDecorationLine: 'line-through',
   },
   unitPriceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginLeft: 8,
+    gap: SPACING.xs + 2,
+    marginLeft: SPACING.sm,
   },
   unitOriginalPrice: {
-    fontSize: 10,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.micro - 2,
+    color: COLORS.text.quaternary,
     textDecorationLine: 'line-through',
   },
   unitDiscountedPrice: {
     color: COLORS.success,
-    fontWeight: '600',
+    fontWeight: TYPE.weight.semibold,
   },
-  // Market Analytics Dashboard Styles
-  marketSection: {
-    backgroundColor: COLORS.surface,
-    margin: 16,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+  // ── Presyo Check ──
+  presyoSection: {
+    padding: SPACING.lg,
+    marginTop: SPACING.sm,
   },
-  marketSectionDark: {
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-  },
-  marketSectionHeader: {
+  presyoHeaderRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
-  marketSectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  presyoHeading: {
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
   },
-  marketSectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  marketSectionTitleDark: {
-    color: '#FFFFFF',
-  },
-  darkModeToggle: {
-    padding: 6,
-    backgroundColor: COLORS.borderLight,
-    borderRadius: 8,
-  },
-  marketLoading: {
+  presyoLoading: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 20,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xl,
   },
-  marketLoadingText: {
-    fontSize: 13,
-    color: COLORS.text.medium,
+  presyoLoadingText: {
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
   },
-  marketLoadingTextDark: {
-    color: '#9CA3AF',
-  },
-  marketKpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
-  marketKpiCard: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 12,
+  presyoEmpty: {
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    padding: SPACING.xl,
+    gap: SPACING.xs,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
-  marketKpiCardDark: {
-    backgroundColor: '#374151',
-    borderColor: '#4B5563',
-  },
-  marketKpiIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  marketKpiValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  marketKpiValueDark: {
-    color: '#FFFFFF',
-  },
-  marketKpiLabel: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
-    fontWeight: '600',
-  },
-  marketKpiLabelDark: {
-    color: '#9CA3AF',
-  },
-  marketVendorHighlight: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  marketVendorCard: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  marketVendorCardDark: {
-    backgroundColor: '#374151',
-    borderColor: '#4B5563',
-  },
-  marketCheapestCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#2E7D32',
-  },
-  marketExpensiveCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#C62828',
-  },
-  marketVendorCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  marketVendorCardLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  marketVendorName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  marketVendorPrice: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  marketVendorSub: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
-  },
-  chartContainer: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  chartContainerDark: {
-    backgroundColor: '#374151',
-    borderColor: '#4B5563',
-  },
-  chartTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 12,
+  presyoEmptyHeading: {
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
+    marginTop: SPACING.xs,
     textAlign: 'center',
   },
-  chartTitleDark: {
-    color: '#FFFFFF',
+  presyoEmptyBody: {
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  kpiCard: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
+    ...SHADOWS.none,
+  },
+  kpiIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  kpiValue: {
+    ...TEXT_STYLES.price,
+    color: COLORS.text.primary,
+  },
+  kpiLabel: {
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  vendorHighlight: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  vendorCard: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
+    borderLeftWidth: 3,
+    ...SHADOWS.none,
+  },
+  vendorCardBadge: {
+    marginBottom: SPACING.sm,
+  },
+  vendorName: {
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.primary,
+    marginBottom: 2,
+  },
+  vendorPrice: {
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
+    marginBottom: 2,
+  },
+  vendorSub: {
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.quaternary,
+  },
+  chartContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
+  },
+  chartTitle: {
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.semibold,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
   },
   chartBars: {
     flexDirection: 'row',
@@ -2123,7 +1951,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'space-between',
     height: 120,
     gap: 4,
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   chartBarContainer: {
     flex: 1,
@@ -2137,177 +1965,71 @@ const createStyles = (COLORS) => StyleSheet.create({
     minHeight: 5,
   },
   chartBarLabel: {
-    fontSize: 10,
-    color: COLORS.text.lighter,
-    fontWeight: '600',
+    fontSize: TYPE.size.micro - 2,
+    color: COLORS.text.quaternary,
+    fontWeight: TYPE.weight.semibold,
   },
   chartBarDate: {
     fontSize: 9,
-    color: COLORS.text.lighter,
+    color: COLORS.text.quaternary,
   },
   chartInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm + 2,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
   chartInfoText: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.quaternary,
   },
-  marketSubSection: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+  subSection: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
-  marketSubSectionDark: {
-    backgroundColor: '#374151',
-    borderColor: '#4B5563',
-  },
-  marketSubSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
+  subSectionTitle: {
+    ...TEXT_STYLES.h3,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: LAYOUT.hairlineWidth,
     borderBottomColor: COLORS.borderLight,
   },
-  marketSubSectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  marketSubSectionTitleDark: {
-    color: '#FFFFFF',
-  },
-  marketComparisonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    gap: 10,
-  },
-  marketComparisonRowDark: {
-    borderBottomColor: '#4B5563',
-  },
-  marketCheapestRow: {
-    backgroundColor: 'rgba(46,125,50,0.04)',
-  },
-  marketExpensiveRow: {
-    backgroundColor: 'rgba(198,40,40,0.04)',
-  },
-  marketCurrentUserRow: {
-    backgroundColor: 'rgba(21,101,192,0.04)',
-  },
-  marketComparisonRank: {
-    width: 36,
-    alignItems: 'center',
-  },
-  marketRankText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.text.medium,
-  },
-  marketComparisonVendor: {
-    flex: 1,
-  },
-  marketComparisonVendorName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  marketComparisonVendorNameDark: {
-    color: '#FFFFFF',
-  },
-  marketComparisonVendorSub: {
-    fontSize: 11,
-    color: COLORS.text.lighter,
-  },
-  marketComparisonVendorSubDark: {
-    color: '#9CA3AF',
-  },
-  marketComparisonPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.text.medium,
-    minWidth: 60,
-    textAlign: 'right',
-  },
-  marketCheapestPrice: {
-    color: '#2E7D32',
-  },
-  marketExpensivePrice: {
-    color: '#C62828',
-  },
-  marketCurrentUserBadge: {
-    backgroundColor: '#1565C0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  marketCurrentUserBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'white',
-  },
-  marketInsightItem: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+  insightItem: {
+    marginBottom: SPACING.md,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: LAYOUT.hairlineWidth,
     borderBottomColor: COLORS.borderLight,
   },
-  marketInsightItemDark: {
-    borderBottomColor: '#4B5563',
-  },
-  marketInsightHeader: {
+  insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs + 2,
   },
-  marketInsightIcon: {
+  insightIcon: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: RADIUS.full,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  marketInsightTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111827',
+  insightTitle: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.primary,
     flex: 1,
   },
-  marketInsightTitleDark: {
-    color: '#FFFFFF',
-  },
-  marketInsightDesc: {
-    fontSize: 12,
-    color: COLORS.text.medium,
+  insightDesc: {
+    fontSize: TYPE.size.micro,
+    color: COLORS.text.secondary,
     lineHeight: 18,
-  },
-  marketInsightDescDark: {
-    color: '#9CA3AF',
-  },
-  marketEmpty: {
-    alignItems: 'center',
-    padding: 30,
-    gap: 10,
-  },
-  marketEmptyText: {
-    fontSize: 14,
-    color: COLORS.text.lighter,
-    textAlign: 'center',
-  },
-  marketEmptyTextDark: {
-    color: '#9CA3AF',
   },
 });
