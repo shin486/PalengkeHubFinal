@@ -10,11 +10,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors, useTheme } from '../contexts/ThemeContext';
+import { useColors } from '../contexts/ThemeContext';
 import { hapticSelection } from '../theme/motion';
-import { NAV_SPACING } from '../theme/tokens';
+import { NAV_SPACING, LAYOUT, TYPE, SHADOWS } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -36,7 +35,6 @@ export default function BottomNavigation({
 }) {
   const insets = useSafeAreaInsets();
   const COLORS = useColors();
-  const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
   
@@ -170,27 +168,15 @@ export default function BottomNavigation({
   };
 
   return (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.container,
-        { 
+        {
           paddingBottom: insets.bottom || NAV_SPACING.sm,
           transform: [{ translateY: translateY }],
-          backgroundColor: isDark
-            ? 'rgba(26, 26, 46, 0.82)'
-            : 'rgba(255, 255, 255, 0.85)',
-          borderTopColor: isDark
-            ? 'rgba(255, 255, 255, 0.12)'
-            : 'rgba(255, 255, 255, 0.65)',
         }
       ]}
     >
-      <BlurView
-        intensity={isDark ? 50 : 40}
-        tint={isDark ? 'dark' : 'light'}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
       <View style={styles.navBar}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -227,7 +213,7 @@ export default function BottomNavigation({
                   <Ionicons
                     name={config.icon}
                     size={24}
-                    color={isFocused ? COLORS.primary : COLORS.text.lighter}
+                    color={isFocused ? COLORS.primaryDark : COLORS.text.quaternary}
                   />
                   {badgeCount > 0 && (
                     <View style={[
@@ -264,21 +250,16 @@ export default function BottomNavigation({
 const createStyles = (COLORS) => StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
+    borderTopWidth: LAYOUT.hairlineWidth,
     borderTopColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
+    ...SHADOWS.bar,
   },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: NAV_SPACING.sm,
     paddingBottom: NAV_SPACING.sm,
-    height: 68,
+    height: LAYOUT.tabBarHeight,
   },
   tabItem: {
     flex: 1,
@@ -300,19 +281,18 @@ const createStyles = (COLORS) => StyleSheet.create({
     overflow: 'visible',
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: TYPE.size.micro,
     letterSpacing: 0.2,
     textAlign: 'center',
     marginTop: 2,
   },
   tabLabelActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
+    color: COLORS.primaryDark,
+    fontWeight: TYPE.weight.bold,
   },
   tabLabelInactive: {
-    color: COLORS.text.lighter,
-    fontWeight: '500',
+    color: COLORS.text.quaternary,
+    fontWeight: TYPE.weight.medium,
   },
   activeIndicator: {
     position: 'absolute',
@@ -331,7 +311,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.error,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -345,9 +325,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 18,
   },
   badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.black,
+    color: COLORS.onError,
     textAlign: 'center',
     includeFontPadding: false,
   },

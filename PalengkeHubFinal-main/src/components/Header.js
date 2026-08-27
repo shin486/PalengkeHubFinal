@@ -10,12 +10,11 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../contexts/ThemeContext';
-import { SPACING } from '../theme/tokens';
+import { SPACING, LAYOUT, TEXT_STYLES } from '../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -37,6 +36,7 @@ export const Header = ({
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const COLORS = useColors();
+  const styles = createStyles(COLORS);
 
   const handleBack = () => {
     if (onBackPress) {
@@ -51,11 +51,8 @@ export const Header = ({
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      <LinearGradient
-        colors={[COLORS.primary, COLORS.primaryLight]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+      <View
         style={[
           styles.header,
           {
@@ -73,7 +70,7 @@ export const Header = ({
                 style={styles.backButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+                <Ionicons name="chevron-back" size={24} color={COLORS.text.primary} />
               </TouchableOpacity>
             )}
 
@@ -109,7 +106,7 @@ export const Header = ({
                   onPress={onNotificationPress}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="notifications-outline" size={22} color={COLORS.text.primary} />
                 </TouchableOpacity>
               )}
 
@@ -119,7 +116,7 @@ export const Header = ({
                   onPress={onCartPress}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="cart-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="cart-outline" size={22} color={COLORS.text.primary} />
                   {cartCount > 0 && (
                     <View style={styles.cartBadge}>
                       <Text style={styles.cartBadgeText}>
@@ -134,7 +131,7 @@ export const Header = ({
             </View>
           )}
         </View>
-      </LinearGradient>
+      </View>
     </>
   );
 };
@@ -142,35 +139,32 @@ export const Header = ({
 // ============================================================
 // STYLES
 // ============================================================
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   header: {
-    // Full width gradient - no horizontal padding to avoid white space in dark mode
-    shadowColor: 'rgba(198,40,40,0.25)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 6,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: LAYOUT.hairlineWidth,
+    borderBottomColor: COLORS.border,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 52,
+    minHeight: LAYOUT.headerMinHeight,
     paddingHorizontal: SPACING.lg,
   },
-  
+
   // ── Left Section ──
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: LAYOUT.minTapTarget,
+    height: LAYOUT.minTapTarget,
+    borderRadius: LAYOUT.minTapTarget / 2,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: COLORS.wickerSoft,
     marginRight: SPACING.sm,
   },
   logoContainer: {
@@ -184,14 +178,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.wickerSoft,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: 'rgba(198,40,40,0.3)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
   },
   logo: {
     width: 32,
@@ -206,16 +195,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
     includeFontPadding: false,
   },
   subtitle: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.8)',
+    ...TEXT_STYLES.caption,
+    color: COLORS.text.tertiary,
     marginTop: 1,
     includeFontPadding: false,
   },
@@ -227,12 +213,12 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: LAYOUT.minTapTarget,
+    height: LAYOUT.minTapTarget,
+    borderRadius: LAYOUT.minTapTarget / 2,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: COLORS.wickerSoft,
     position: 'relative',
   },
 
@@ -244,17 +230,17 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#C62828',
+    borderColor: COLORS.primary,
   },
   cartBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#C62828',
+    color: COLORS.primary,
     textAlign: 'center',
     includeFontPadding: false,
   },

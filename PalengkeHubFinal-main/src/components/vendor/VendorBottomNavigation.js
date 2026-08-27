@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../../contexts/ThemeContext';
-import { NAV_SPACING } from '../../theme/tokens';
+import { NAV_SPACING, LAYOUT, TYPE, SHADOWS } from '../../theme/tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -207,7 +207,7 @@ export default function VendorBottomNavigation({
                   <Ionicons
                     name={config.icon}
                     size={24}
-                    color={isFocused ? COLORS.primary : COLORS.text.quaternary}
+                    color={isFocused ? COLORS.primaryDark : COLORS.text.quaternary}
                   />
                   {badgeCount > 0 && (
                     <View style={[styles.badgeContainer, styles.badgeOverlay]}>
@@ -241,21 +241,16 @@ export default function VendorBottomNavigation({
 const createStyles = (COLORS) => StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
+    borderTopWidth: LAYOUT.hairlineWidth,
     borderTopColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
+    ...SHADOWS.bar,
   },
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: NAV_SPACING.sm,
     paddingBottom: NAV_SPACING.sm,
-    height: 68,
+    height: LAYOUT.tabBarHeight,
   },
   tabItem: {
     flex: 1,
@@ -276,19 +271,18 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 2,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: TYPE.size.micro,
     letterSpacing: 0.2,
     textAlign: 'center',
     marginTop: 2,
   },
   tabLabelActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
+    color: COLORS.primaryDark,
+    fontWeight: TYPE.weight.bold,
   },
   tabLabelInactive: {
     color: COLORS.text.quaternary,
-    fontWeight: '500',
+    fontWeight: TYPE.weight.medium,
   },
   activeIndicator: {
     position: 'absolute',
@@ -305,7 +299,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.error,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -319,9 +313,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 18,
   },
   badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.black,
+    color: COLORS.onError,
     textAlign: 'center',
     includeFontPadding: false,
   },
