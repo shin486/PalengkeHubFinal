@@ -1,9 +1,13 @@
 // src/components/vendor/ProductCard.js
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useColors } from '../../contexts/ThemeContext';
 
 export const ProductCard = ({ product, onToggleAvailability, onEdit, onDelete }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Product',
@@ -23,18 +27,18 @@ export const ProductCard = ({ product, onToggleAvailability, onEdit, onDelete })
           <Image source={{ uri: product.image_url }} style={styles.productImage} />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Ionicons name="cart-outline" size={30} color="#9CA3AF" />
+            <Ionicons name="cart-outline" size={30} color={COLORS.text.quaternary} />
           </View>
         )}
-        
+
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{product.name}</Text>
           <Text style={styles.productPrice}>₱{product.price} / {product.unit}</Text>
           <Text style={styles.productCategory}>{product.category}</Text>
         </View>
-        
+
         <View style={styles.actions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.statusButton, product.is_available && styles.activeStatus]}
             onPress={() => onToggleAvailability(product.id)}
           >
@@ -42,11 +46,11 @@ export const ProductCard = ({ product, onToggleAvailability, onEdit, onDelete })
  {product.is_available ? ' Available' : ' Unavailable'}
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.editButton} onPress={() => onEdit(product)}>
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
@@ -56,14 +60,14 @@ export const ProductCard = ({ product, onToggleAvailability, onEdit, onDelete })
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   card: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     marginBottom: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   cardContent: {
     flexDirection: 'row',
@@ -79,7 +83,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -93,17 +97,17 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   productPrice: {
     fontSize: 14,
-    color: '#DC2626',
+    color: COLORS.primary,
     fontWeight: '600',
     marginTop: 4,
   },
   productCategory: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   actions: {
@@ -114,33 +118,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
   },
   activeStatus: {
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.success,
   },
   statusText: {
     fontSize: 11,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   editButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: '#3B82F6',
+    backgroundColor: COLORS.info,
   },
   editText: {
     fontSize: 11,
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   deleteButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: '#EF4444',
+    backgroundColor: COLORS.error,
   },
   deleteText: {
     fontSize: 11,
-    color: 'white',
+    color: COLORS.text.inverse,
   },
 });

@@ -1,5 +1,7 @@
-// Pickup Pass — a big, simple screen the customer shows to the vendor when
-// picking up an order. Designed for elderly users: huge text, no navigation.
+// Pickup Pass — the customer shows this to the vendor when picking up an
+// order. Restyled as a paper ticket/receipt (design-system.html's Code
+// Block + Description List + Badge patterns) instead of a solid-color
+// card, while keeping the large order code and stall name for readability.
 import React, { useMemo } from 'react';
 import {
   View,
@@ -14,6 +16,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
 
+const STATUS_TONE = {
+  pending: 'warning',
+  confirmed: 'info',
+  preparing: 'info',
+  ready: 'success',
+  completed: 'success',
+  cancelled: 'error',
+};
+
 export default function PickupPassScreen({ route, navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
@@ -25,11 +36,29 @@ export default function PickupPassScreen({ route, navigation }) {
   const items = Array.isArray(order?.items) ? order.items : [];
   const status = order?.status || 'pending';
   const statusText = t(`orders.status.${status}`, t('orders.status.pending'));
-  const isReady = status === 'ready';
+  const statusTone = STATUS_TONE[status] || 'warning';
+  const isPaid = order?.payment_status === 'paid';
+  const pickupTime = order?.pickup_time
+    ? new Date(order.pickup_time).toLocaleString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })
+    : t('orders.pickup_asap', 'Ngayon');
+  const paymentMethod = order?.payment_method === 'gcash' ? 'GCash' : 'Cash';
+
+  const toneColor = {
+    success: COLORS.success,
+    warning: COLORS.warning,
+    info: COLORS.info,
+    error: COLORS.error,
+  }[statusTone];
+  const toneBg = {
+    success: COLORS.successLight,
+    warning: COLORS.warningLight,
+    info: COLORS.infoLight,
+    error: COLORS.errorLight,
+  }[statusTone];
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.primary} />
 
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -40,45 +69,68 @@ export default function PickupPassScreen({ route, navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={[styles.passCard, isReady ? styles.passCardReady : null]}>
-          <Text style={styles.passTitle}>{t('orders.pickup_title')}</Text>
-          <Ionicons name="receipt-outline" size={52} color="#FFFFFF" style={{ marginVertical: 8 }} />
-
-          <Text style={styles.orderLabel}>{t('orders.order_number')}</Text>
-          <Text style={styles.orderNumber}>{orderNumber}</Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.stallLabel}> {t('orders.stall_number_label', 'Stall')}</Text>
-          <Text style={styles.stallName}>{stallName}</Text>
-          <Text style={styles.stallNumber}>#{stallNumber}</Text>
-
-          <View style={[styles.statusBanner, isReady ? styles.statusBannerReady : null]}>
-            <Text style={styles.statusText}>{statusText}</Text>
+        {/* ── Ticket card ── */}
+        <View style={styles.ticketCard}>
+          <View style={styles.ticketHead}>
+            <View style={styles.ticketHeadLeft}>
+              <View style={styles.ticketIconBadge}>
+                <Ionicons name="receipt-outline" size={20} color={COLORS.primary} />
+              </View>
+              <View>
+                <Text style={styles.ticketTitle}>{t('orders.pickup_title')}</Text>
+                <Text style={styles.ticketSubtitle}>{t('orders.show_to_vendor', 'Ipakita ito sa vendor')}</Text>
+              </View>
+            </View>
+            <View style={[styles.paidBadge, { backgroundColor: isPaid ? COLORS.successLight : COLORS.warningLight }]}>
+              <Text style={[styles.paidBadgeText, { color: isPaid ? COLORS.success : COLORS.warning }]}>
+                {isPaid ? t('orders.paid', 'BAYAD NA') : t('orders.unpaid', 'HINDI PA BAYAD')}
+              </Text>
+            </View>
           </View>
+
+          <View style={styles.codeStrip}>
+            <Text style={styles.codeStripText}>PH-{orderNumber}</Text>
+          </View>
+
+          <View style={styles.descRow}>
+            <Text style={styles.descLabel}>{t('orders.stall_number_label', 'Stall')}</Text>
+            <Text style={styles.descValue} numberOfLines={1}>{stallName}, #{stallNumber}</Text>
+          </View>
+          <View style={styles.descRow}>
+            <Text style={styles.descLabel}>{t('orders.pickup_time', 'Oras')}</Text>
+            <Text style={styles.descValue}>{pickupTime}</Text>
+          </View>
+          <View style={styles.descRow}>
+            <Text style={styles.descLabel}>{t('orders.payment', 'Bayad')}</Text>
+            <Text style={styles.descValue}>{paymentMethod}, {isPaid ? t('orders.confirmed', 'confirmed') : t('orders.pending', 'pending')}</Text>
+          </View>
+          <View style={styles.descRow}>
+            <Text style={styles.descLabel}>{t('orders.status_label', 'Status')}</Text>
+            <View style={[styles.statusChip, { backgroundColor: toneBg }]}>
+              <Text style={[styles.statusChipText, { color: toneColor }]}>{statusText}</Text>
+            </View>
+          </View>
+
+          {items.length > 0 && (
+            <>
+              <View style={styles.dashedDivider} />
+              {items.map((item, idx) => (
+                <View key={idx} style={styles.itemRow}>
+                  <Text style={styles.itemName} numberOfLines={1}>
+                    {item.name || 'Item'} {item.quantity && item.quantity > 1 ? `x${item.quantity}` : ''}
+                  </Text>
+                  <Text style={styles.itemPrice}>₱{parseFloat(item.price ?? 0).toFixed(0)}</Text>
+                </View>
+              ))}
+              {order?.total_amount ? (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>{t('orders.total_label', 'Kabuuan')}</Text>
+                  <Text style={styles.totalValue}>₱{parseFloat(order.total_amount).toFixed(0)}</Text>
+                </View>
+              ) : null}
+            </>
+          )}
         </View>
-
-        {items.length > 0 && (
-          <View style={styles.itemsCard}>
-            <Text style={styles.itemsTitle}> {t('cart.items') || 'Items'}</Text>
-            {items.map((item, idx) => (
-              <View key={idx} style={styles.itemRow}>
-                <Text style={styles.itemName} numberOfLines={1}>
-                  {item.name || 'Item'}
-                </Text>
-                <Text style={styles.itemQty}>
-                  x{item.quantity ?? 1} — ₱{parseFloat(item.price ?? 0).toFixed(2)}
-                </Text>
-              </View>
-            ))}
-            {order?.total_amount ? (
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>{t('products.total')}:</Text>
-                <Text style={styles.totalValue}>₱{parseFloat(order.total_amount).toFixed(2)}</Text>
-              </View>
-            ) : null}
-          </View>
-        )}
 
         <View style={styles.instructionCard}>
           <Text style={styles.instructionText}>{t('orders.show_phone_to_vendor')}</Text>
@@ -120,117 +172,133 @@ const createStyles = (COLORS) => StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  passCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  passCardReady: {
-    backgroundColor: '#16A34A',
-  },
-  passTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: 3,
-  },
-  orderLabel: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  orderNumber: {
-    color: '#FFFFFF',
-    fontSize: 44,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignSelf: 'stretch',
-    marginVertical: 16,
-  },
-  stallLabel: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 15,
-  },
-  stallName: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  stallNumber: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  statusBanner: {
-    marginTop: 16,
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  statusBannerReady: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  itemsCard: {
+
+  // ── Ticket card ──
+  ticketCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 18,
-    marginTop: 16,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    shadowColor: COLORS.shadowDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  itemsTitle: {
-    fontSize: 17,
+  ticketHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  ticketHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  ticketIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ticketTitle: {
+    fontSize: 18,
     fontWeight: '800',
     color: COLORS.text.primary,
-    marginBottom: 10,
+  },
+  ticketSubtitle: {
+    fontSize: 12,
+    color: COLORS.text.tertiary,
+    marginTop: 2,
+  },
+  paidBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  paidBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  codeStrip: {
+    backgroundColor: COLORS.text.primary,
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  codeStripText: {
+    color: COLORS.text.inverse,
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 4,
+  },
+  descRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  descLabel: {
+    fontSize: 14,
+    color: COLORS.text.tertiary,
+  },
+  descValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dashedDivider: {
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.border,
+    marginVertical: 12,
   },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    paddingVertical: 5,
     gap: 10,
   },
   itemName: {
     flex: 1,
-    fontSize: 16,
-    color: COLORS.text.primary,
+    fontSize: 15,
+    color: COLORS.text.secondary,
   },
-  itemQty: {
-    fontSize: 16,
+  itemPrice: {
+    fontSize: 15,
     fontWeight: '700',
-    color: COLORS.text.medium,
+    color: COLORS.text.primary,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
   },
   totalLabel: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.text.primary,
   },
@@ -239,6 +307,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '900',
     color: COLORS.primary,
   },
+
   instructionCard: {
     backgroundColor: COLORS.warningLight,
     borderRadius: 20,

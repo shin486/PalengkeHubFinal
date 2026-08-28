@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,17 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { getPriceSuggestion, classifyPrice } from '../../services/priceSuggestion';
-import axios from 'axios';
-
-//  USE THE SAME IMGBB API KEY as chatService
-const IMGBB_API_KEY = '0f4823dff292c1d4c4a6fdcc7d0037c9';
-
-// Price-suggestion hint colors by level
-const HINT_COLORS = {
-  high: '#DC2626',   // overpriced
-  low: '#D97706',    // underpriced (amber — could be intentional)
-  fair: '#10B981',   // competitive
-};
+import { supabase } from '../../../lib/supabase';
+import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 
 // Available unit options with labels
 const UNIT_OPTIONS = [
@@ -50,9 +42,14 @@ const CATEGORY_OPTIONS = [
 ];
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
+  const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+  // Price-suggestion hint colors by level
+  const HINT_COLORS = { high: COLORS.error, low: COLORS.warning, fair: COLORS.success };
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  
+
   // Base form data
   const [formData, setFormData] = useState({
     name: '',
@@ -62,10 +59,10 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     category: '',
     image_url: '',
   });
-  
+
   // Unit prices for different options
   const [unitPrices, setUnitPrices] = useState({});
-  
+
   // Price suggestion (market-rate guidance)
   const [priceSuggestion, setPriceSuggestion] = useState(null);
 
@@ -84,7 +81,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   }, [formData.name]);
 
   const priceHint = classifyPrice(formData.price, priceSuggestion);
-  
+
   // Selected units to offer
   const [selectedUnits, setSelectedUnits] = useState(['kg', '500g', '250g']);
 
@@ -92,7 +89,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     if (editingProduct) {
       console.log(' MODAL - Editing product:', editingProduct.name);
       console.log(' MODAL - Image URL:', editingProduct.image_url);
-      
+
       setFormData({
         name: editingProduct.name || '',
         description: editingProduct.description || '',
@@ -101,13 +98,13 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
         category: editingProduct.category || '',
         image_url: editingProduct.image_url || '',
       });
-      
+
       if (editingProduct.price_options && typeof editingProduct.price_options === 'object') {
         setUnitPrices(editingProduct.price_options);
       } else {
         setUnitPrices({});
       }
-      
+
       if (editingProduct.unit_options && Array.isArray(editingProduct.unit_options)) {
         setSelectedUnits(editingProduct.unit_options);
       } else {
@@ -129,7 +126,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions to add images');
       return;
@@ -143,50 +140,38 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     });
 
     if (!result.canceled) {
-      await uploadImageToImgBB(result.assets[0].uri);
+      await uploadProductImage(result.assets[0].uri);
     }
   };
 
-  //  EXACT SAME FUNCTION as chatService.uploadChatImage
-  const uploadImageToImgBB = async (uri) => {
+  // Uploads to Supabase Storage — was previously sent to ImgBB (a
+  // third-party host with an API key hardcoded in the client bundle,
+  // no ownership tie to the vendor/product, files not under our control).
+  const uploadProductImage = async (uri) => {
     setUploadingImage(true);
     try {
-      console.log(' Uploading product image to ImgBB:', uri);
-      
-      // Fetch the image
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Convert to base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = reader.result.split(',')[1];
-          resolve(base64String);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      // Upload to ImgBB
-      const formData = new FormData();
-      formData.append('image', base64);
-      
-      const uploadResponse = await axios.post('https://api.imgbb.com/1/upload', formData, {
-        params: {
-          key: IMGBB_API_KEY
-        },
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      const imageUrl = uploadResponse.data.data.url;
-      console.log(' Product image uploaded to ImgBB:', imageUrl);
-      
-      // Update form data with the image URL
+      console.log(' Uploading product image:', uri);
+
+      const blob = await (await fetch(uri)).blob();
+      const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+      const path = `product_images/${user?.id || 'unknown'}/${Date.now()}.${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('vendor_documents')
+        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: blob.type || 'image/jpeg' });
+      if (uploadError) throw uploadError;
+
+      // vendor_documents is a private bucket — a long-lived signed URL is
+      // used since getPublicUrl() 400s for any request without an auth
+      // header (which every customer browsing products never sends).
+      const { data: urlData, error: signError } = await supabase.storage
+        .from('vendor_documents')
+        .createSignedUrl(uploadData.path, SIGNED_URL_TTL_SECONDS);
+      if (signError) throw signError;
+      const imageUrl = urlData.signedUrl;
+      console.log(' Product image uploaded:', imageUrl);
+
       setFormData(prev => ({ ...prev, image_url: imageUrl }));
-      
+
       Alert.alert('Success', 'Product image uploaded successfully!');
     } catch (error) {
       console.error('Error uploading product image:', error);
@@ -199,7 +184,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   const handleUnitPriceChange = (unitId, value) => {
     const price = parseFloat(value) || 0;
     setUnitPrices(prev => ({ ...prev, [unitId]: price }));
-    
+
     if (unitId === 'kg') {
       setFormData({ ...formData, price: value });
     }
@@ -230,7 +215,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     console.log(' SUBMITTING - Image URL:', formData.image_url);
 
     setLoading(true);
-    
+
     const priceOptions = {};
     selectedUnits.forEach(unit => {
       if (unitPrices[unit] && unitPrices[unit] > 0) {
@@ -239,7 +224,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
         priceOptions[unit] = parseFloat(formData.price);
       }
     });
-    
+
     const productData = {
       name: formData.name,
       description: formData.description,
@@ -253,7 +238,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     };
 
     console.log(' Product Data being sent:', productData);
-    
+
     await onSubmit(productData);
     setLoading(false);
     onClose();
@@ -272,15 +257,15 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             <Text style={styles.label}>Product Image</Text>
             <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
               {formData.image_url ? (
-                <Image 
-                  source={{ uri: formData.image_url }} 
+                <Image
+                  source={{ uri: formData.image_url }}
                   style={styles.productImage}
  onError={() => console.log(' Image failed to load')}
  onLoad={() => console.log(' Image loaded')}
                 />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Ionicons name="image-outline" size={44} color="#9CA3AF" />
+                  <Ionicons name="image-outline" size={44} color={COLORS.text.quaternary} />
                   <Text style={styles.imagePlaceholderText}>Tap to add image</Text>
                 </View>
               )}
@@ -298,7 +283,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               placeholder="e.g., Pork Liempo"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.quaternary}
             />
 
             {/* Description */}
@@ -308,7 +293,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               value={formData.description}
               onChangeText={(text) => setFormData({ ...formData, description: text })}
               placeholder="Describe your product..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.quaternary}
               multiline
               numberOfLines={3}
             />
@@ -325,7 +310,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   ]}
                   onPress={() => setFormData({ ...formData, category: cat.id })}
                 >
-                  <Ionicons name={cat.icon} size={16} color={formData.category === cat.id ? '#FFFFFF' : '#6B7280'} />
+                  <Ionicons name={cat.icon} size={16} color={formData.category === cat.id ? COLORS.text.inverse : COLORS.text.tertiary} />
                   <Text
                     style={[
                       styles.categoryChipText,
@@ -351,7 +336,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   ]}
                   onPress={() => toggleUnit(unit.id)}
                 >
-                  <Ionicons name={unit.icon} size={16} color={selectedUnits.includes(unit.id) ? '#FFFFFF' : '#6B7280'} />
+                  <Ionicons name={unit.icon} size={16} color={selectedUnits.includes(unit.id) ? COLORS.text.inverse : COLORS.text.tertiary} />
                   <Text style={[
                     styles.unitChipText,
                     selectedUnits.includes(unit.id) && styles.unitChipTextActive
@@ -365,11 +350,11 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {/* Unit Prices Section */}
             <Text style={styles.label}>Unit Prices</Text>
             <Text style={styles.subLabel}>Set price for each unit</Text>
-            
+
             {selectedUnits.includes('kg') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="scale-outline" size={18} color="#6B7280" />
+                  <Ionicons name="scale-outline" size={18} color={COLORS.text.tertiary} />
                   <Text style={styles.unitPriceText}>Per Kilo (kg) *</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -377,7 +362,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   <TextInput
                     style={styles.unitPriceInput}
                     placeholder="0.00"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={COLORS.text.quaternary}
                     keyboardType="decimal-pad"
                     value={formData.price}
                     onChangeText={(text) => setFormData({ ...formData, price: text })}
@@ -403,7 +388,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                         : 'checkmark-circle-outline'
                   }
                   size={15}
-                  color={priceHint ? HINT_COLORS[priceHint.level] : '#6B7280'}
+                  color={priceHint ? HINT_COLORS[priceHint.level] : COLORS.text.tertiary}
                 />
                 <Text style={styles.priceHintText}>
                   {priceSuggestion.count} stall{priceSuggestion.count !== 1 ? 's' : ''} sell{' '}
@@ -416,7 +401,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('500g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={18} color="#6B7280" />
+                  <Ionicons name="cube-outline" size={18} color={COLORS.text.tertiary} />
                   <Text style={styles.unitPriceText}>Per 500g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -424,7 +409,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   <TextInput
                     style={styles.unitPriceInput}
                     placeholder={`Auto (${parseFloat(formData.price) * 0.5 || 0})`}
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={COLORS.text.quaternary}
                     keyboardType="decimal-pad"
                     value={unitPrices['500g'] ? unitPrices['500g'].toString() : ''}
                     onChangeText={(text) => handleUnitPriceChange('500g', text)}
@@ -436,7 +421,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
             {selectedUnits.includes('250g') && (
               <View style={styles.unitPriceRow}>
                 <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={18} color="#6B7280" />
+                  <Ionicons name="cube-outline" size={18} color={COLORS.text.tertiary} />
                   <Text style={styles.unitPriceText}>Per 250g</Text>
                 </View>
                 <View style={styles.unitPriceInputContainer}>
@@ -444,7 +429,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   <TextInput
                     style={styles.unitPriceInput}
                     placeholder={`Auto (${parseFloat(formData.price) * 0.25 || 0})`}
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={COLORS.text.quaternary}
                     keyboardType="decimal-pad"
                     value={unitPrices['250g'] ? unitPrices['250g'].toString() : ''}
                     onChangeText={(text) => handleUnitPriceChange('250g', text)}
@@ -467,7 +452,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               disabled={loading || uploadingImage}
             >
               <LinearGradient
-                colors={['#DC2626', '#EF4444']}
+                colors={[COLORS.primary, COLORS.primaryLight]}
                 style={styles.submitGradient}
               >
                 <Text style={styles.submitButtonText}>
@@ -482,14 +467,14 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -498,14 +483,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 20,
     textAlign: 'center',
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.text.secondary,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -517,36 +502,36 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   priceHintHigh: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: COLORS.errorLight,
   },
   priceHintLow: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: COLORS.warningLight,
   },
   priceHintFair: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: COLORS.successLight,
   },
   priceHintText: {
     flex: 1,
     fontSize: 11.5,
-    color: '#4B5563',
+    color: COLORS.text.secondary,
     lineHeight: 15,
   },
   subLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
-    color: '#111827',
+    backgroundColor: COLORS.surface,
+    color: COLORS.text.primary,
     marginBottom: 16,
   },
   textArea: {
@@ -558,9 +543,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     borderStyle: 'dashed',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   productImage: {
     width: '100%',
@@ -571,7 +556,7 @@ const styles = StyleSheet.create({
     height: 150,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   imagePlaceholderIcon: {
     fontSize: 48,
@@ -579,7 +564,7 @@ const styles = StyleSheet.create({
   },
   imagePlaceholderText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   uploadOverlay: {
     position: 'absolute',
@@ -600,24 +585,24 @@ const styles = StyleSheet.create({
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
   categoryChipActive: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
   },
   categoryChipIcon: {
     fontSize: 14,
   },
   categoryChipText: {
     fontSize: 12,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   categoryChipTextActive: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   unitSelectorContainer: {
     flexDirection: 'row',
@@ -628,35 +613,35 @@ const styles = StyleSheet.create({
   unitChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
   },
   unitChipActive: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
   },
   unitChipIcon: {
     fontSize: 14,
   },
   unitChipText: {
     fontSize: 12,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   unitChipTextActive: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   unitPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   unitPriceLabel: {
     flexDirection: 'row',
@@ -669,27 +654,27 @@ const styles = StyleSheet.create({
   },
   unitPriceText: {
     fontSize: 14,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   unitPriceInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     paddingHorizontal: 8,
   },
   currencySymbol: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginRight: 4,
   },
   unitPriceInput: {
     width: 80,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     textAlign: 'right',
   },
   buttonContainer: {
@@ -701,13 +686,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   submitButton: {
     flex: 1,
@@ -721,6 +706,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
 });

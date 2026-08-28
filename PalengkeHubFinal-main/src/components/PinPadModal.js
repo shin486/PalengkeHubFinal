@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,13 @@ import {
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { verifyPin, getStoredCredentials } from '../services/pinService';
+import { useColors } from '../contexts/ThemeContext';
 
 // Big-button 4-digit PIN pad shown on the login screen when the user has
 // enabled PIN login. Designed for elderly users: huge keys, clear dots.
 export const PinPadModal = ({ visible, onClose, onSuccess }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [entry, setEntry] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -131,7 +134,7 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Animated.View style={[styles.card, { transform: [{ translateX: shakeAnim }] }]}>
-          <Ionicons name="lock-closed" size={40} color="#DC2626" style={styles.lockIcon} />
+          <Ionicons name="lock-closed" size={40} color={COLORS.primary} style={styles.lockIcon} />
           <Text style={styles.title}>Ipasok ang iyong PIN</Text>
           <Text style={styles.subtitle}>4-digit na PIN para makapasok agad</Text>
 
@@ -179,7 +182,7 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
 };
 
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -190,7 +193,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderRadius: 24,
     paddingVertical: 24,
     paddingHorizontal: 20,
@@ -203,11 +206,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#1F2937',
+    color: COLORS.text.primary,
   },
   subtitle: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 4,
     marginBottom: 14,
     textAlign: 'center',
@@ -222,15 +225,15 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   dotFilled: {
-    backgroundColor: '#16A34A',
-    borderColor: '#16A34A',
+    backgroundColor: COLORS.success,
+    borderColor: COLORS.success,
   },
   error: {
-    color: '#DC2626',
+    color: COLORS.error,
     fontSize: 13,
     fontWeight: '600',
     minHeight: 18,
@@ -253,19 +256,19 @@ const styles = StyleSheet.create({
     width: 76,
     height: 64,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   keyText: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   keyBackspace: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: COLORS.errorLight,
   },
   keySpacer: {
     width: 76,
@@ -273,7 +276,7 @@ const styles = StyleSheet.create({
   },
   fallback: {
     marginTop: 16,
-    color: '#2563EB',
+    color: COLORS.info,
     fontSize: 14,
     fontWeight: '600',
     textDecorationLine: 'underline',

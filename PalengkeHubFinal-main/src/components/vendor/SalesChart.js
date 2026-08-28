@@ -1,11 +1,15 @@
 // src/components/vendor/SalesChart.js
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
+import { useColors } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
 export const SalesChart = ({ data }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
   if (!data || data.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -17,9 +21,9 @@ export const SalesChart = ({ data }) => {
   const chartWidth = width - 64;
   const chartHeight = 200;
   const barWidth = (chartWidth - 40) / data.length - 4;
-  
+
   const maxSales = Math.max(...data.map(item => item.sales), 1);
-  
+
   return (
     <View style={styles.container}>
       <Svg width={chartWidth} height={chartHeight}>
@@ -29,7 +33,7 @@ export const SalesChart = ({ data }) => {
           y1="10"
           x2="30"
           y2={chartHeight - 30}
-          stroke="#E5E7EB"
+          stroke={COLORS.border}
           strokeWidth="1"
         />
         {/* X-axis line */}
@@ -38,16 +42,16 @@ export const SalesChart = ({ data }) => {
           y1={chartHeight - 30}
           x2={chartWidth - 10}
           y2={chartHeight - 30}
-          stroke="#E5E7EB"
+          stroke={COLORS.border}
           strokeWidth="1"
         />
-        
+
         {/* Bars */}
         {data.map((item, index) => {
           const barHeight = (item.sales / maxSales) * (chartHeight - 60);
           const x = 35 + index * (barWidth + 8);
           const y = chartHeight - 30 - barHeight;
-          
+
           return (
             <React.Fragment key={index}>
               <Rect
@@ -55,14 +59,14 @@ export const SalesChart = ({ data }) => {
                 y={y}
                 width={barWidth}
                 height={barHeight}
-                fill="#FF6B6B"
+                fill={COLORS.primary}
                 rx="4"
               />
               <SvgText
                 x={x + barWidth / 2}
                 y={chartHeight - 15}
                 fontSize="10"
-                fill="#6B7280"
+                fill={COLORS.text.tertiary}
                 textAnchor="middle"
               >
                 {item.date}
@@ -72,7 +76,7 @@ export const SalesChart = ({ data }) => {
                   x={x + barWidth / 2}
                   y={y - 5}
                   fontSize="10"
-                  fill="#FF6B6B"
+                  fill={COLORS.primary}
                   textAnchor="middle"
                 >
                   ₱{item.sales}
@@ -90,7 +94,7 @@ export const SalesChart = ({ data }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingVertical: 10,
@@ -101,7 +105,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   legend: {
     flexDirection: 'row',
@@ -113,11 +117,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF6B6B',
+    backgroundColor: COLORS.primary,
     marginRight: 6,
   },
   legendText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
 });

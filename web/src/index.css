@@ -324,7 +324,7 @@ nav a.active::after {
 .form-group textarea {
   width: 100%;
   padding: 14px 16px;
-  border: 2px solid rgba(230, 57, 70, 0.2);
+  border: 2px solid var(--line);
   border-radius: 12px;
   font-size: 0.95rem;
   font-family: var(--body);
@@ -336,8 +336,8 @@ nav a.active::after {
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--semi-red);
-  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.1);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
 .form-status {
@@ -375,9 +375,9 @@ nav a.active::after {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.12em;
-  color: var(--semi-red);
+  color: var(--brand-dark);
   text-transform: uppercase;
-  background: rgba(230, 57, 70, 0.1);
+  background: var(--brand-soft);
   padding: 6px 16px;
   border-radius: 20px;
   margin-bottom: 16px;
@@ -504,7 +504,9 @@ nav a.active::after {
 
 /* ========== ADMIN STYLES ========== */
 .admin-login-header {
-  background: linear-gradient(135deg, var(--red-deep) 0%, var(--semi-red-deep) 100%);
+  background:
+    linear-gradient(135deg, rgba(38, 16, 6, 0.78) 0%, rgba(201, 106, 40, 0.55) 100%),
+    url('/Lipapublicmarket.jpg') center 65% / cover no-repeat;
   color: var(--white);
 }
 
@@ -529,7 +531,7 @@ nav a.active::after {
 
 .admin-login-card {
   background: var(--white);
-  border: 1px solid rgba(230, 57, 70, 0.15);
+  border: 1px solid var(--line);
   border-radius: 20px;
   padding: 48px 40px;
   max-width: 460px;
@@ -546,7 +548,7 @@ nav a.active::after {
   width: 80px;
   margin: 0 auto 16px;
   border-radius: 16px;
-  border: 2px solid var(--semi-red);
+  border: 2px solid var(--brand-dark);
 }
 
 .admin-role-badge {
@@ -557,8 +559,8 @@ nav a.active::after {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--semi-red);
-  background: rgba(230, 57, 70, 0.1);
+  color: var(--brand-dark);
+  background: var(--brand-soft);
   padding: 6px 14px;
   border-radius: 20px;
 }
@@ -592,9 +594,9 @@ nav a.active::after {
 .admin-toggle-password {
   padding: 14px 16px;
   background: transparent;
-  border: 2px solid rgba(230, 57, 70, 0.2);
+  border: 2px solid var(--line);
   border-radius: 12px;
-  color: var(--semi-red);
+  color: var(--brand-dark);
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -609,7 +611,7 @@ nav a.active::after {
 
 .admin-forgot a {
   font-size: 0.85rem;
-  color: var(--semi-red);
+  color: var(--brand-dark);
   font-weight: 600;
 }
 
@@ -634,8 +636,8 @@ nav a.active::after {
 .admin-login-info {
   margin-top: 32px;
   padding: 20px;
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
+  background: var(--gold-soft);
+  border: 1px solid var(--gold);
   border-radius: 12px;
   text-align: center;
 }
@@ -647,7 +649,7 @@ nav a.active::after {
 
 .admin-login-info p {
   font-size: 0.85rem;
-  color: #92400E;
+  color: var(--gold-dark);
 }
 
 .admin-login-back {
@@ -662,7 +664,7 @@ nav a.active::after {
 }
 
 .admin-login-back a:hover {
-  color: var(--semi-red);
+  color: var(--brand-dark);
 }
 
 /* ========== ADMIN DASHBOARD ========== */

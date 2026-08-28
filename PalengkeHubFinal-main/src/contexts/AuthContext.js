@@ -16,6 +16,47 @@ const MAX_ACCOUNTS_PER_EMAIL = 5;
 
 const normalizeEmail = (e) => (e || '').trim().toLowerCase();
 
+// Uploads a vendor's ID/permit photo to storage and returns its public URL.
+// Must run AFTER supabase.auth.signUp() has established a session — the
+// vendor_documents bucket's RLS requires an authenticated uploader, and
+// this function used to be called from SignUpScreen.js before any account
+// existed, so every real vendor application's documents ended up empty
+// (every upload failed with "new row violates row-level security policy",
+// silently swallowed by the caller's own try/catch).
+// vendor_documents is a private bucket — getPublicUrl() builds a URL that
+// only resolves for an authenticated request, so it 400s for anyone (any
+// admin, any <Image> tag, any plain link click) that isn't attaching a
+// bearer token, which a browser navigation or RN <Image> never does. A
+// long-lived signed URL is a real URL that works with zero auth headers,
+// same as a genuinely public one — 10 years is effectively permanent for
+// documents/photos that should stay viewable indefinitely.
+export const SIGNED_URL_TTL_SECONDS = 10 * 365 * 24 * 60 * 60;
+
+export const uploadVendorDocument = async (file, folder) => {
+  if (!file) return null;
+  try {
+    const response = await fetch(file.uri);
+    const blob = await response.blob();
+    const contentType = file.mimeType || file.type || 'image/jpeg';
+    const { data, error } = await supabase.storage
+      .from('vendor_documents')
+      .upload(`${folder}/${Date.now()}_${file.name}`, blob, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType,
+      });
+    if (error) throw error;
+    const { data: urlData, error: signError } = await supabase.storage
+      .from('vendor_documents')
+      .createSignedUrl(data.path, SIGNED_URL_TTL_SECONDS);
+    if (signError) throw signError;
+    return urlData.signedUrl;
+  } catch (error) {
+    console.error('Vendor document upload error:', error);
+    return null;
+  }
+};
+
 // Generates a deterministic auth email for the nth account using a real email.
 // Account #1 uses the real email; accounts #2–#5 use RFC 5233 "+" aliases that
 // still deliver to the same inbox (e.g. juan@gmail.com  juan+ph2@gmail.com).
@@ -138,17 +179,21 @@ export const AuthProvider = ({ children }) => {
 
     const data = await response.json();
     console.log(' iProg response status:', response.status, '| has code:', !!data?.verification_code);
-    if (!response.ok) {
-      throw new Error(data?.error || 'Failed to send authenticator SMS.');
-    }
 
+    // The proxy can return a non-2xx status (e.g. carrier/provider hiccup)
+    // while still generating and returning a usable verification_code in
+    // the same body — checking response.ok first threw that code away, so
+    // the OTP modal would open with no code that could ever pass, leaving
+    // signup permanently stuck with no recovery path. Use the code if it's
+    // there regardless of status; only fail hard if there's truly none.
     if (!data?.verification_code) {
-      throw new Error('Invalid response from authenticator SMS service.');
+      throw new Error(data?.error || 'Failed to send authenticator SMS.');
     }
 
     return {
       verification_code: data.verification_code,
       expires_in_minutes: data.expires_in_minutes,
+      deliveryWarning: !response.ok ? (data?.error || 'The SMS may not have been delivered.') : null,
     };
   }, [authProxyUrl]);
 
@@ -172,17 +217,19 @@ export const AuthProvider = ({ children }) => {
 
     const data = await response.json();
     console.log(' Resend response status:', response.status, '| has code:', !!data?.verification_code);
-    if (!response.ok) {
-      throw new Error(data?.error || 'Failed to send verification email.');
-    }
 
+    // Same fix as sendAuthenticatorSms above — the proxy can return a
+    // non-2xx status (email provider down/rejected the address) while
+    // still generating a usable verification_code. Discarding it here
+    // made every delivery hiccup a dead end with no way to ever verify.
     if (!data?.verification_code) {
-      throw new Error('Invalid response from email verification service.');
+      throw new Error(data?.error || 'Failed to send verification email.');
     }
 
     return {
       verification_code: data.verification_code,
       expires_in_minutes: data.expires_in_minutes,
+      deliveryWarning: !response.ok ? (data?.error || 'The email may not have been delivered.') : null,
     };
   }, [authProxyUrl]);
 
@@ -438,17 +485,26 @@ export const AuthProvider = ({ children }) => {
           console.error(' Stall creation error:', stallError);
         }
         
+        // The session from supabase.auth.signUp() above is live at this
+        // point (signOut() hasn't run yet) — this is the only window in
+        // the whole flow where the vendor_documents bucket's RLS will
+        // actually accept these uploads.
+        const [validIdUrl, businessPermitUrl] = await Promise.all([
+          uploadVendorDocument(metadata.validIdFile, `valid_ids/${data.user.id}`),
+          uploadVendorDocument(metadata.businessPermitFile, `business_permits/${data.user.id}`),
+        ]);
+
         const documents = [];
-        if (metadata.valid_id_url) {
-          documents.push({ type: 'valid_id', url: metadata.valid_id_url });
+        if (validIdUrl) {
+          documents.push({ type: 'valid_id', url: validIdUrl });
         }
-        if (metadata.business_permit_url) {
-          documents.push({ type: 'business_permit', url: metadata.business_permit_url });
+        if (businessPermitUrl) {
+          documents.push({ type: 'business_permit', url: businessPermitUrl });
         }
         if (metadata.barangay_clearance_url) {
           documents.push({ type: 'barangay_clearance', url: metadata.barangay_clearance_url });
         }
-        
+
         const { error: appError } = await supabase
           .from('vendor_applications')
           .insert({

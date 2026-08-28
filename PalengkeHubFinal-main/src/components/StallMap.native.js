@@ -1,22 +1,26 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+import { useColors } from '../contexts/ThemeContext';
 
-export default function StallMap({ 
-  latitude, 
-  longitude, 
-  stallName, 
-  stallNumber, 
-  section, 
+export default function StallMap({
+  latitude,
+  longitude,
+  stallName,
+  stallNumber,
+  section,
   height = 200,
-  interactive = true 
+  interactive = true
 }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
   //  If no valid coordinates, show placeholder
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
-        <Ionicons name="location-outline" size={28} color="#9CA3AF" />
+        <Ionicons name="location-outline" size={28} color={COLORS.text.quaternary} />
         <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>
@@ -48,7 +52,7 @@ export default function StallMap({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     width: '100%',
     borderRadius: 12,
@@ -60,7 +64,7 @@ const styles = StyleSheet.create({
   },
   placeholderContainer: {
     width: '100%',
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -69,11 +73,11 @@ const styles = StyleSheet.create({
   placeholderText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: COLORS.primary,
     marginBottom: 4,
   },
   placeholderSubtext: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
 });

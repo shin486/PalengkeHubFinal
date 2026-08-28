@@ -433,7 +433,7 @@ export const LoginScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.textInput}
                 placeholder="you@example.com"
-                placeholderTextColor="#BEB0A4"
+                placeholderTextColor="#A89484"
                 value={email}
                 onChangeText={validateEmail}
                 keyboardType="email-address"
@@ -443,7 +443,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                 onBlur={() => setEmailFocused(false)}
               />
               {emailValid && email.length > 0 && (
-                <Ionicons name="checkmark" size={18} color="#10B981" />
+                <Ionicons name="checkmark" size={18} color="#61802F" />
               )}
             </View>
             {email.length > 0 && !emailValid && (
@@ -459,7 +459,7 @@ export const LoginScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.textInput}
                 placeholder="Your password"
-                placeholderTextColor="#BEB0A4"
+                placeholderTextColor="#A89484"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -507,7 +507,7 @@ export const LoginScreen = ({ setIsGuest }) => {
               activeOpacity={0.88}
             >
               <LinearGradient
-                colors={loginSuccess ? ['#2E8B57', '#3AA86B'] : ['#B5342A', '#D9503F']}
+                colors={loginSuccess ? ['#61802F', '#9EBF5C'] : ['#C96A28', '#E8833A']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.signInGrad}
@@ -604,7 +604,7 @@ export const LoginScreen = ({ setIsGuest }) => {
 
             {pickerLoading ? (
               <View style={styles.pickerLoadingWrap}>
-                <ActivityIndicator color="#B5342A" />
+                <ActivityIndicator color="#C96A28" />
                 <Text style={styles.pickerLoadingText}>Signing you in...</Text>
               </View>
             ) : null}
@@ -643,7 +643,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                   <TextInput
                     style={styles.textInput}
                     placeholder="your@email.com"
-                    placeholderTextColor="#BEB0A4"
+                    placeholderTextColor="#A89484"
                     value={resetEmail}
                     onChangeText={setResetEmail}
                     keyboardType="email-address"
@@ -658,7 +658,7 @@ export const LoginScreen = ({ setIsGuest }) => {
                   activeOpacity={0.88}
                 >
                   <LinearGradient
-                    colors={['#B5342A', '#D9503F']}
+                    colors={['#C96A28', '#E8833A']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.signInGrad}
@@ -699,27 +699,31 @@ export const LoginScreen = ({ setIsGuest }) => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: 'transparent', // Transparent so image shows through
+    backgroundColor: '#F2E7D6', // paper — shows below the hero photo band
   },
 
-  // FULL SCREEN BACKGROUND
+  // Hero photo band, sized to the source photo's own aspect ratio (it's a
+  // landscape 4:3 shot) instead of stretching full-bleed across a portrait
+  // screen — that stretch is what was cropping it into an extreme, "too
+  // zoomed in" close-up. This shows the whole photo, uncropped.
   fullScreenBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
     width: '100%',
-    height: '100%',
+    aspectRatio: 3552 / 2664,
   },
 
-  // Dark overlay for better text contrast
+  // Dark overlay, same band as the photo — not the full screen, so the
+  // paper background below it isn't needlessly darkened too.
   overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    width: '100%',
+    aspectRatio: 3552 / 2664,
     backgroundColor: 'rgba(0, 0, 0, 0.45)', // Darkens background for better readability
   },
 
@@ -758,15 +762,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderTopLeftRadius: 14,
     borderBottomRightRadius: 14,
-    backgroundColor: '#D9503F',
+    backgroundColor: '#D34638',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
-  bannerBadgeSuccess: { backgroundColor: '#2E8B57' },
+  bannerBadgeSuccess: { backgroundColor: '#61802F' },
   bannerBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   bannerText: { flex: 1, fontSize: 13.5, color: '#6E2518', fontWeight: '500', lineHeight: 18 },
-  bannerTextSuccess: { color: '#1A6640' },
+  bannerTextSuccess: { color: '#61802F' },
   bannerCloseText: { fontSize: 12, color: '#A84030', fontWeight: '600' },
 
   // ── Scroll ────────────────────────────────────────────────────────────────────
@@ -853,11 +857,11 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: Math.min(23, width * 0.059),
     fontWeight: '700',
-    color: '#1E1008',
+    color: '#261006',
   },
   sub: {
     fontSize: 13.5,
-    color: '#9E8070',
+    color: '#8A7263',
     marginBottom: 22,
     marginTop: 2,
   },
@@ -868,7 +872,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#8A6558',
+    color: '#5B4436',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 9,
@@ -890,28 +894,28 @@ const styles = StyleSheet.create({
   },
 
   inputFocused: {
-    borderColor: '#B5342A',
-    backgroundColor: '#FDF6F0',
-    shadowColor: '#B5342A',
+    borderColor: '#C96A28',
+    backgroundColor: '#FDF3E9',
+    shadowColor: '#C96A28',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.16,
     shadowRadius: 6,
     elevation: 2,
   },
   inputError: {
-    borderColor: '#D9503F',
-    backgroundColor: '#FFF3F1',
+    borderColor: '#D34638',
+    backgroundColor: '#FBE2DE',
   },
   inputValid: {
     borderColor: '#4A9E72',
     backgroundColor: '#F2FAF6',
   },
 
-  fieldIcon:  { fontSize: 15, marginRight: 10, color: '#B5342A' },
-  textInput:  { flex: 1, fontSize: 14.5, color: '#1E1008', paddingVertical: 13 },
+  fieldIcon:  { fontSize: 15, marginRight: 10, color: '#C96A28' },
+  textInput:  { flex: 1, fontSize: 14.5, color: '#261006', paddingVertical: 13 },
   validIcon:  { fontSize: 15, color: '#4A9E72', fontWeight: '700', marginLeft: 6 },
-  eyeToggle:  { fontSize: 12.5, color: '#B5342A', fontWeight: '600', paddingLeft: 8 },
-  fieldError: { fontSize: 11.5, color: '#C0392B', marginTop: 5, marginLeft: 3 },
+  eyeToggle:  { fontSize: 12.5, color: '#C96A28', fontWeight: '600', paddingLeft: 8 },
+  fieldError: { fontSize: 11.5, color: '#9E2B20', marginTop: 5, marginLeft: 3 },
 
   // ── Options Row ──────────────────────────────────────────────────────────────
   optionsRow: {
@@ -929,14 +933,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 10,
     borderBottomRightRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#B5342A',
+    borderColor: '#C96A28',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkboxOn: { backgroundColor: '#B5342A' },
+  checkboxOn: { backgroundColor: '#C96A28' },
   checkmark:  { color: '#fff', fontSize: 11, fontWeight: '700' },
-  rememberLabel: { fontSize: 13, color: '#b53535' },
-  forgotLink:    { fontSize: 13, color: '#B5342A', fontWeight: '600' },
+  rememberLabel: { fontSize: 13, color: '#5B4436' },
+  forgotLink:    { fontSize: 13, color: '#C96A28', fontWeight: '600' },
 
   // ── Sign In Button ────────────────────────────────────────────────────────────
   signInBtn: {
@@ -945,7 +949,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 11,
     overflow: 'hidden',
     marginBottom: 18,
-    shadowColor: '#B5342A',
+    shadowColor: '#C96A28',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.24,
     shadowRadius: 12,
@@ -965,7 +969,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     gap: 8,
   },
-  dividerLabel: { fontSize: 12, color: '#BEB0A4', fontWeight: '500', paddingHorizontal: 2 },
+  dividerLabel: { fontSize: 12, color: '#A89484', fontWeight: '500', paddingHorizontal: 2 },
 
   // ── Guest Button ──────────────────────────────────────────────────────────────
   guestBtn: {
@@ -988,12 +992,12 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   guestTitle: { fontSize: 14.5, fontWeight: '600', color: '#2A1610', textAlign: 'center' },
-  guestSub:   { fontSize: 11.5, color: '#9E8070', marginTop: 2, textAlign: 'center' },
+  guestSub:   { fontSize: 11.5, color: '#8A7263', marginTop: 2, textAlign: 'center' },
 
   // ── Sign Up ───────────────────────────────────────────────────────────────────
   signupRow:    { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  signupPrompt: { fontSize: 13.5, color: '#9E8070' },
-  signupLink:   { fontSize: 13.5, color: '#B5342A', fontWeight: '700' },
+  signupPrompt: { fontSize: 13.5, color: '#8A7263' },
+  signupLink:   { fontSize: 13.5, color: '#C96A28', fontWeight: '700' },
 
   // ── Bottom Sheet ──────────────────────────────────────────────────────────────
   sheetOverlay: {
@@ -1017,15 +1021,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 22,
   },
-  sheetTitle: { fontSize: 21, fontWeight: '700', color: '#1E1008', marginBottom: 7 },
-  sheetSub:   { fontSize: 13.5, color: '#8A6558', marginBottom: 22, lineHeight: 19 },
+  sheetTitle: { fontSize: 21, fontWeight: '700', color: '#261006', marginBottom: 7 },
+  sheetSub:   { fontSize: 13.5, color: '#5B4436', marginBottom: 22, lineHeight: 19 },
 
   sentBox: { alignItems: 'center', paddingTop: 20, paddingBottom: 24, gap: 11 },
   sentIcon: { fontSize: 38 },
-  sentText: { fontSize: 15.5, color: '#2E8B57', fontWeight: '600', textAlign: 'center' },
+  sentText: { fontSize: 15.5, color: '#61802F', fontWeight: '600', textAlign: 'center' },
 
   cancelBtn:  { paddingTop: 16, paddingBottom: 12, alignItems: 'center' },
-  cancelText: { fontSize: 13.5, color: '#9E8070', fontWeight: '500' },
+  cancelText: { fontSize: 13.5, color: '#8A7263', fontWeight: '500' },
 
   // ── Multi-Account Picker ─────────────────────────────────────────────────────
   pickerRoot: {
@@ -1039,7 +1043,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 60 : 24,
     paddingBottom: 16,
-    backgroundColor: '#B5342A',
+    backgroundColor: '#C96A28',
   },
   pickerTitle: {
     fontSize: 20,
@@ -1058,7 +1062,7 @@ const styles = StyleSheet.create({
   },
   pickerSubtitle: {
     fontSize: 14,
-    color: '#8A6558',
+    color: '#5B4436',
     lineHeight: 20,
     marginBottom: 18,
   },
@@ -1083,7 +1087,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#B5342A',
+    backgroundColor: '#C96A28',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
@@ -1099,22 +1103,22 @@ const styles = StyleSheet.create({
   pickerAccountName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1E1008',
+    color: '#261006',
     marginBottom: 3,
   },
   pickerAccountMeta: {
     fontSize: 12.5,
-    color: '#9E8070',
+    color: '#8A7263',
   },
   pickerArrow: {
     fontSize: 24,
-    color: '#B5342A',
+    color: '#C96A28',
     fontWeight: '600',
   },
   pickerError: {
     marginTop: 14,
     fontSize: 13,
-    color: '#C0392B',
+    color: '#9E2B20',
     textAlign: 'center',
   },
   pickerLoadingWrap: {
@@ -1126,7 +1130,7 @@ const styles = StyleSheet.create({
   },
   pickerLoadingText: {
     fontSize: 14,
-    color: '#8A6558',
+    color: '#5B4436',
   },
   pickerCancel: {
     marginTop: 18,
@@ -1138,7 +1142,7 @@ const styles = StyleSheet.create({
   },
   pickerCancelText: {
     fontSize: 14,
-    color: '#9E8070',
+    color: '#8A7263',
     fontWeight: '500',
   },
 });

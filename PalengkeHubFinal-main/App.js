@@ -30,8 +30,10 @@ import { CartProvider } from './src/contexts/CartContext';
 import { I18nProvider } from './src/contexts/i18nContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { registerPushToken, setupNotificationListeners } from './src/services/notificationService';
-import { Header } from './src/components/Header'; 
+import { Header } from './src/components/Header';
 import { LoadingSpinner } from './src/components/LoadingSpinner';
+import { BiometricLockScreen } from './src/components/BiometricLockScreen';
+import { useBiometricLock } from './src/hooks/useBiometricLock';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignUpScreen } from './src/screens/auth/SignUpScreen';
 import NotificationScreen from './src/screens/customer/NotificationScreen';
@@ -42,8 +44,10 @@ import AdminStallDetailsScreen from './src/screens/admin/AdminStallDetailsScreen
 import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
 import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
 import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
+import AdminStallLocationsScreen from './src/screens/admin/AdminStallLocationsScreen';
 import HelpSupportScreen from './src/screens/shared/HelpSupportScreen';
 import PrivacyPolicyScreen from './src/screens/shared/PrivacyPolicyScreen';
+import VendorApplicationStatusScreen from './src/screens/customer/VendorApplicationStatusScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -373,7 +377,7 @@ function AppStack({ isGuest }) {
       } else if (data.type === 'promotion' && data.stallId) {
         navigation.navigate('StallDetails', { stallId: data.stallId });
       } else if (data.type === 'chat') {
-        navigation.navigate('ChatList');
+        navigation.navigate('Chats');
       }
     });
 
@@ -393,6 +397,14 @@ function AppStack({ isGuest }) {
       'ProductDetails',
       'Search',
       'CategoryProducts',
+      // These three render their own header (with their own back button) —
+      // leaving them off this list stacked a second, generic global header
+      // on top of it (Notifications had none of its own outside a loading
+      // flash; PrivacyPolicy/HelpSupport rendered a correct one but still
+      // got a duplicate "PalengkeHub" header above it from the default case).
+      'Notifications',
+      'PrivacyPolicy',
+      'HelpSupport',
     ];
     
     const isHeaderHidden = hiddenScreens.includes(routeName);
@@ -482,6 +494,7 @@ function AppStack({ isGuest }) {
                 <Stack.Screen name="Favorites" component={FavoritesScreen} />
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
       </Stack.Navigator>
     </View>
   );
@@ -529,6 +542,11 @@ function RootNavigator() {
 
   console.log(' RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
 
+  // Session re-entry gate, not a sign-in method — the user is already
+  // authenticated; this only decides whether to show that session again
+  // right away after the app comes back from the background.
+  const { locked, unlock } = useBiometricLock(!!user);
+
   useEffect(() => {
     if (isGuest && global.navigationRef) {
       console.log(' Guest mode activated - navigating to App');
@@ -571,16 +589,20 @@ function RootNavigator() {
     initialRoute = 'App';
   }
 
+  if (locked) {
+    return <BiometricLockScreen onUnlock={unlock} />;
+  }
+
   return (
-    <NavigationContainer 
+    <NavigationContainer
       ref={(ref) => {
         global.navigationRef = ref;
         navigationContainerRef = ref;
         console.log(' NavigationContainer ref set');
       }}
     >
-      <Stack.Navigator 
-        screenOptions={{ headerShown: false }} 
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
         initialRouteName={initialRoute}
       >
         {/* Auth screens */}
@@ -596,6 +618,7 @@ function RootNavigator() {
         <Stack.Screen name="VendorOrderDetail" component={VendorOrderDetailScreen} />
         <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
         <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
+        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
         <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
 
@@ -615,6 +638,7 @@ function RootNavigator() {
         <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
         <Stack.Screen name="AdminAuditTrail" component={AdminAuditTrailScreen} />
         <Stack.Screen name="AdminPriceMonitoring" component={AdminPriceMonitoringScreen} />
+        <Stack.Screen name="AdminStallLocations" component={AdminStallLocationsScreen} />
         
         {/* Customer / Guest App */}
         <Stack.Screen name="App">

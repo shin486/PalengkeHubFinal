@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  useWindowDimensions,
   StatusBar,
   Alert,
   Image,
@@ -16,6 +17,7 @@ import {
   Animated,
   Vibration,
   AccessibilityInfo,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +26,7 @@ import { useCart } from '../../hooks/useCart';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
+import { notificationService } from '../../services/notificationService';
 import { useI18n } from '../../contexts/i18nContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SkeletonList } from '../../components/SkeletonCard';
@@ -34,22 +37,66 @@ import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme
 import { ProductCard } from '../../components/ProductCard';
 import { Badge } from '../../components/ui/Badge';
 import { Chip } from '../../components/ui/Chip';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.44;
+import { VerdictChip } from '../../components/ui/VerdictChip';
+import { PriceText } from '../../components/ui/PriceText';
+import { WovenBackground } from '../../components/WovenBackground';
 
 // Tagalog first, English underneath — that is how the market is spoken.
 // `categoryName` must stay the exact English string: CategoryProductsScreen
 // filters `.eq('category', categoryName)` against it. Matches
 // CATEGORY_CONFIG in CategoryProductsScreen.js exactly.
+// `tone` picks the icon circle's tint from the same semantic tokens the
+// rest of the app already uses (tokens.js: success/warning/info), not new
+// colors — 'neutral' keeps the existing wicker/orange treatment. `image`
+// is the reference design system's own illustration for that category
+// (design-directions/assets/generated/illustrations); 'Other' has no
+// illustration there either, so it keeps the Ionicons fallback.
+// No 'Fish' chip: it isn't a real value in CategoryProductsScreen's
+// CATEGORY_CONFIG, so navigating to it would silently return zero
+// products — the icon existing upstream doesn't make the category real.
 const CATEGORY_CHIPS = [
-  { categoryName: 'Vegetables', tagalog: 'Gulay', english: 'Vegetables', icon: 'leaf' },
-  { categoryName: 'Meat', tagalog: 'Karne', english: 'Meat', icon: 'restaurant' },
-  { categoryName: 'Fruits', tagalog: 'Prutas', english: 'Fruits', icon: 'basket' },
-  { categoryName: 'Poultry', tagalog: 'Manok', english: 'Poultry', icon: 'egg' },
-  { categoryName: 'Rice', tagalog: 'Bigas', english: 'Rice', icon: 'cafe' },
-  { categoryName: 'Other', tagalog: 'Iba pa', english: 'Other', icon: 'apps' },
+  { categoryName: 'Vegetables', tagalog: 'Gulay', english: 'Vegetables', icon: 'leaf', tone: 'success', image: require('../../../src/assets/categories/ill-cat-vegetables.png') },
+  { categoryName: 'Meat', tagalog: 'Karne', english: 'Meat', icon: 'restaurant', tone: 'neutral', image: require('../../../src/assets/categories/ill-cat-meat.png') },
+  { categoryName: 'Fruits', tagalog: 'Prutas', english: 'Fruits', icon: 'basket', tone: 'warning', image: require('../../../src/assets/categories/ill-cat-fruits.png') },
+  { categoryName: 'Poultry', tagalog: 'Manok', english: 'Poultry', icon: 'egg', tone: 'info', image: require('../../../src/assets/categories/ill-cat-poultry.png') },
+  { categoryName: 'Rice', tagalog: 'Bigas', english: 'Rice', icon: 'cafe', tone: 'neutral', image: require('../../../src/assets/categories/ill-cat-rice.png') },
+  { categoryName: 'Other', tagalog: 'Iba pa', english: 'Other', icon: 'apps', tone: 'neutral', image: null },
 ];
+
+const CATEGORY_TONES = {
+  neutral: { bg: (c) => c.wickerSoft, icon: (c) => c.primaryDark },
+  success: { bg: (c) => c.successLight, icon: (c) => c.success },
+  warning: { bg: (c) => c.warningLight, icon: (c) => c.warning },
+  info: { bg: (c) => c.infoLight, icon: (c) => c.info },
+};
+
+// Same rule SearchScreen.js already uses for its own price comparison
+// (D-14): the reference unit for a product-name group is whichever unit
+// most of that group's stalls actually sell in. Rows in a different unit
+// never enter the comparison — this is what phase 6-02 fixed elsewhere,
+// and Presyo Check must not reintroduce it here.
+const getReferenceUnit = (items) => {
+  const counts = {};
+  items.forEach((i) => {
+    counts[i.unit] = (counts[i.unit] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+};
+
+// Local time gates, not server state — no query, no new dependency.
+// 5:00 AM to 7:00 PM matches the hours already printed everywhere else
+// in the app (Login screen, landing page, HelpSupportScreen).
+const isMarketOpenNow = () => {
+  const hour = new Date().getHours();
+  return hour >= 5 && hour < 19;
+};
+
+const getGreetingKey = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'good_morning';
+  if (hour < 18) return 'good_afternoon';
+  return 'good_evening';
+};
 
 // ============================================================
 // TYPEWRITER PLACEHOLDER
@@ -165,16 +212,19 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 // STALL CARD COMPONENT
 // ============================================================
-const StallCard = ({ stall, onPress, isClosed = false }) => {
+const StallCard = ({ stall, onPress, isClosed = false, isFavorite = false, onToggleFavorite }) => {
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
   const displayRating = stall.average_rating || 3.5 + (stall.id % 3) * 0.5;
   const ratingCount = 20 + (stall.id % 80);
+  // Market-hours open/closed, same local time gate as the header —
+  // stall-level "temporarily closed" (isClosed) always wins over it.
+  const openNow = !isClosed && isMarketOpenNow();
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[styles.stallCard, isClosed && styles.stallCardClosed]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -182,8 +232,8 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
       <View style={styles.stallCardContent}>
         <View style={styles.stallImageContainer}>
           {stall.image_url && !imageError ? (
-            <Image 
-              source={{ uri: stall.image_url }} 
+            <Image
+              source={{ uri: stall.image_url }}
               style={styles.stallImage}
               onError={() => setImageError(true)}
               resizeMode="cover"
@@ -198,11 +248,28 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
               <Text style={styles.stallClosedText}>{t('common.closed')}</Text>
             </View>
           )}
+          {onToggleFavorite && (
+            <TouchableOpacity
+              style={styles.stallFavoriteButton}
+              onPress={(e) => { e.stopPropagation?.(); hapticLight(); onToggleFavorite(stall); }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={13}
+                color={isFavorite ? colors.error : colors.onInk}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.stallInfo}>
-          <Text style={styles.stallName} numberOfLines={1}>{stall.stall_name || 'Market Stall'}</Text>
-          
+          <View style={styles.stallNameRow}>
+            <View style={[styles.stallOpenDot, openNow ? styles.stallOpenDotOpen : styles.stallOpenDotClosed]} />
+            <Text style={styles.stallName} numberOfLines={1}>{stall.stall_name || 'Market Stall'}</Text>
+          </View>
+
           <View style={styles.stallMetaRow}>
             <Text style={styles.stallNumber}>#{stall.stall_number}</Text>
             <View style={styles.stallMetaDot} />
@@ -219,6 +286,129 @@ const StallCard = ({ stall, onPress, isClosed = false }) => {
         <View style={styles.stallArrow}>
           <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ============================================================
+// TOP STALL CARD — photo-forward card for the Top-Rated Stalls rail
+// only; the dense "Market Stalls" list keeps the compact StallCard row.
+// priceRange comes from the same unit-safe per-stall computation as
+// Presyo Check (fetchProductComparisons) — never a raw min/max across
+// mixed units.
+// ============================================================
+const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [imageError, setImageError] = useState(false);
+  const displayRating = stall.average_rating || 3.5 + (stall.id % 3) * 0.5;
+  const ratingCount = stall.total_ratings || (20 + (stall.id % 80));
+  const isClosed = stall.is_temporarily_closed;
+  const openNow = !isClosed && isMarketOpenNow();
+
+  return (
+    <TouchableOpacity style={styles.topStallCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.topStallImageWrap}>
+        {stall.image_url && !imageError ? (
+          <Image
+            source={{ uri: stall.image_url }}
+            style={styles.topStallImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <View style={styles.topStallImagePlaceholder}>
+            <Ionicons name="storefront-outline" size={32} color={colors.text.quaternary} />
+          </View>
+        )}
+        <View style={[styles.topStallStatusBadge, openNow ? styles.topStallStatusOpen : styles.topStallStatusClosed]}>
+          <Text style={[styles.topStallStatusText, openNow ? styles.topStallStatusTextOpen : styles.topStallStatusTextClosed]}>
+            {openNow ? 'Bukas' : 'Sarado'}
+          </Text>
+        </View>
+        {onToggleFavorite && (
+          <TouchableOpacity
+            style={styles.topStallFavoriteButton}
+            onPress={(e) => { e.stopPropagation?.(); hapticLight(); onToggleFavorite(stall); }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={16}
+              color={isFavorite ? colors.error : colors.text.tertiary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.topStallBody}>
+        <Text style={styles.topStallName} numberOfLines={1}>{stall.stall_name || 'Market Stall'}</Text>
+        <View style={styles.topStallMetaRow}>
+          <Ionicons name="star" size={12} color={colors.gold} />
+          <Text style={styles.topStallRating}>{displayRating.toFixed(1)}</Text>
+          <Text style={styles.topStallRatingCount}>({ratingCount})</Text>
+          <Text style={styles.topStallMetaDivider}>|</Text>
+          <Text style={styles.topStallSection} numberOfLines={1}>
+            {stall.section} · #{stall.stall_number}
+          </Text>
+        </View>
+        {priceRange && (
+          <View style={styles.topStallPriceRow}>
+            <Text style={styles.topStallPriceRange} numberOfLines={1}>
+              ₱{priceRange.min.toFixed(0)} - ₱{priceRange.max.toFixed(0)} / {priceRange.unit}
+            </Text>
+            <View style={styles.topStallRangeBadge}>
+              <Text style={styles.topStallRangeBadgeText}>PRESYO RANGE</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ============================================================
+// PROMO BANNER CARD — second card in the market banner carousel, same
+// photo+overlay+badge treatment as the hours card. Only ever built from
+// a real active promo (real product photo, real discount, real stall) —
+// never a stock "harvest" photo standing in for content that isn't live.
+// ============================================================
+const PromoBannerCard = ({ promo, width, styles, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const { colors } = useTheme();
+  const product = promo.product;
+  const stall = promo.stall;
+  const discountText = promo.discount_type === 'percentage'
+    ? `${promo.discount_value}% OFF`
+    : `₱${promo.discount_value} OFF`;
+
+  return (
+    <TouchableOpacity style={[styles.hoursBanner, { width }]} activeOpacity={0.9} onPress={onPress}>
+      {product?.image_url && !imageError ? (
+        <Image
+          source={{ uri: product.image_url }}
+          style={styles.hoursBannerImage}
+          resizeMode="cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <View style={[styles.hoursBannerImage, styles.hoursBannerImagePlaceholder]}>
+          <Ionicons name="pricetag-outline" size={28} color={colors.text.quaternary} />
+        </View>
+      )}
+      <View style={styles.hoursBannerOverlay} />
+      <View style={styles.hoursBannerContent}>
+        <View style={styles.hoursBannerTag}>
+          <Text style={styles.hoursBannerTagText}>May Diskwento</Text>
+        </View>
+        <Text style={styles.hoursBannerTitle} numberOfLines={1}>
+          {discountText} — {product?.name}
+        </Text>
+        <Text style={styles.hoursBannerText} numberOfLines={1}>
+          sa {stall?.stall_name || 'stall'}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -272,22 +462,95 @@ const PriceDropItem = ({ item, onPress }) => {
 };
 
 // ============================================================
+// CATEGORY CHIP — illustration when it loads, Ionicons+tone if it fails
+// ============================================================
+const CategoryChip = ({ cat, styles, colors, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const tone = CATEGORY_TONES[cat.tone] || CATEGORY_TONES.neutral;
+  const showImage = cat.image && !imageError;
+
+  return (
+    <TouchableOpacity style={styles.categoryChip} onPress={onPress} activeOpacity={0.8}>
+      <View style={[styles.categoryChipIconCircle, { backgroundColor: tone.bg(colors) }]}>
+        {showImage ? (
+          <Image
+            source={cat.image}
+            style={styles.categoryChipImage}
+            resizeMode="contain"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <Ionicons name={cat.icon} size={24} color={tone.icon(colors)} />
+        )}
+      </View>
+      <Text style={styles.categoryChipLabel} numberOfLines={1}>{cat.tagalog}</Text>
+      <Text style={styles.categoryChipSubLabel} numberOfLines={1}>{cat.english}</Text>
+    </TouchableOpacity>
+  );
+};
+
+// ============================================================
 // MAIN COMPONENT
 // ============================================================
 export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [promoProducts, setPromoProducts] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [selectedSection, setSelectedSection] = useState('All');
+  // Market Stalls (bottom section) reveals more of the already-fetched
+  // `stalls` list as the user scrolls near the end of the page, instead of
+  // hard-capping at 6 with no way to see the rest.
+  const STALL_PAGE_SIZE = 6;
+  const [visibleStallCount, setVisibleStallCount] = useState(STALL_PAGE_SIZE);
+  const [loadingMoreStalls, setLoadingMoreStalls] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
   const [priceTrends, setPriceTrends] = useState(new Map());
   const [topRatedStalls, setTopRatedStalls] = useState([]);
-  const { isProductFavorite, toggleProductFavorite } = useFavorites();
+  const [presyoCheckItems, setPresyoCheckItems] = useState([]);
+  const [stallPriceRanges, setStallPriceRanges] = useState({});
+  const [stallRatings, setStallRatings] = useState({});
+  const [productCompareCounts, setProductCompareCounts] = useState({});
+  const { isProductFavorite, toggleProductFavorite, isStallFavorite, toggleStallFavorite } = useFavorites();
   const [homeAnnouncement, setHomeAnnouncement] = useState(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showAllBuyAgain, setShowAllBuyAgain] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(isMarketOpenNow());
+
+  useEffect(() => {
+    const interval = setInterval(() => setMarketOpen(isMarketOpenNow()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Switching the section filter chip should start the reveal over —
+  // otherwise a count built up under "All" could hide stalls that are
+  // actually near the top of a newly-selected, shorter filtered list.
+  useEffect(() => {
+    setVisibleStallCount(STALL_PAGE_SIZE);
+  }, [selectedSection]);
+
+  // Reveals more of the already-fetched `stalls` list as the user
+  // approaches the bottom of the Home page. All stalls are already in
+  // memory (fetchData has no limit on the stalls query), so this is a
+  // client-side reveal — the small delay + spinner is just so scrolling
+  // down doesn't feel like content is teleporting in.
+  const handleHomeScroll = useCallback((e) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    const distanceToBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    if (distanceToBottom > 300) return;
+    if (loadingMoreStalls) return;
+
+    const filteredCount = selectedSection === 'All'
+      ? stalls.length
+      : stalls.filter(s => s.section === selectedSection).length;
+    if (visibleStallCount >= filteredCount) return;
+
+    setLoadingMoreStalls(true);
+    setTimeout(() => {
+      setVisibleStallCount(prev => Math.min(prev + STALL_PAGE_SIZE, filteredCount));
+      setLoadingMoreStalls(false);
+    }, 400);
+  }, [loadingMoreStalls, selectedSection, stalls, visibleStallCount]);
 
   const loadPriceTrends = async (products) => {
     const ids = (products || []).map(p => p.id).filter(Boolean);
@@ -316,6 +579,14 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         stats.set(r.stall_id, s);
       }
 
+      // Every stall's real rating, not just the top 5 — Today's Deals cards
+      // need this for whichever stall happens to be running a promo.
+      const allRatings = {};
+      for (const [stallId, s] of stats.entries()) {
+        allRatings[stallId] = { average: Math.round((s.sum / s.count) * 10) / 10, count: s.count };
+      }
+      setStallRatings(allRatings);
+
       const topIds = [...stats.entries()]
         .sort((a, b) => (b[1].count - a[1].count) || ((b[1].sum / b[1].count) - (a[1].sum / a[1].count)))
         .slice(0, 5)
@@ -339,15 +610,133 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
       console.warn('fetchTopRatedStalls failed:', e);
     }
   };
-  
+
+  // One products fetch feeds two things: Presyo Check (cheapest-per-unit
+  // across stalls for a product name) and each stall's own price range
+  // (min–max within that stall's own most-common unit). Both reuse the
+  // same reference-unit rule already used on ProductDetails/Search, so
+  // none of these numbers can ever disagree with those screens, and
+  // neither computation needs its own round trip to the database.
+  const fetchProductComparisons = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, price, unit, image_url, stall_id')
+        .eq('is_available', true)
+        .limit(500);
+      if (!data || data.length === 0) return;
+
+      // ---- Presyo Check: group by product name ----
+      const byName = {};
+      data.forEach((p) => {
+        if (!byName[p.name]) byName[p.name] = [];
+        byName[p.name].push(p);
+      });
+
+      const comparisons = [];
+      const compareCounts = {};
+      for (const [name, variants] of Object.entries(byName)) {
+        const referenceUnit = getReferenceUnit(variants);
+        const sameUnit = variants.filter((v) => v.unit === referenceUnit);
+        const stallIds = new Set(sameUnit.map((v) => v.stall_id));
+        if (stallIds.size < 2) continue; // nothing to compare against
+        compareCounts[name] = stallIds.size;
+
+        const prices = sameUnit.map((v) => v.price || 0).filter((p) => p > 0);
+        if (prices.length === 0) continue;
+
+        // A card with no real photo anywhere in the group is a worse
+        // result than a comparison we just don't feature — skip it
+        // rather than show an empty placeholder tile.
+        const withPhoto = sameUnit.find((v) => v.image_url);
+        if (!withPhoto) continue;
+
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const avgPrice = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+        const cheapest = sameUnit.find((v) => v.price === minPrice);
+
+        comparisons.push({
+          name,
+          unit: referenceUnit,
+          minPrice,
+          maxPrice,
+          avgPrice,
+          stallCount: stallIds.size,
+          image_url: withPhoto.image_url,
+          productId: cheapest?.id,
+        });
+      }
+
+      // Widest gap between cheapest and average first — that is the
+      // comparison most worth a buyer's attention.
+      comparisons.sort((a, b) => (b.avgPrice - b.minPrice) - (a.avgPrice - a.minPrice));
+      setPresyoCheckItems(comparisons.slice(0, 3));
+      setProductCompareCounts(compareCounts);
+
+      // ---- Per-stall price range, same unit-safety rule ----
+      const byStall = {};
+      data.forEach((p) => {
+        if (!byStall[p.stall_id]) byStall[p.stall_id] = [];
+        byStall[p.stall_id].push(p);
+      });
+
+      const ranges = {};
+      for (const [stallId, items] of Object.entries(byStall)) {
+        const referenceUnit = getReferenceUnit(items);
+        const sameUnit = items.filter((v) => v.unit === referenceUnit);
+        const prices = sameUnit.map((v) => v.price || 0).filter((p) => p > 0);
+        if (prices.length === 0) continue;
+        ranges[stallId] = {
+          min: Math.min(...prices),
+          max: Math.max(...prices),
+          unit: referenceUnit,
+        };
+      }
+      setStallPriceRanges(ranges);
+    } catch (e) {
+      console.warn('fetchProductComparisons failed:', e);
+    }
+  }, []);
+
   const { user } = useAuth();
   const { addToCart } = useCart();
   const { setIsGuest } = route?.params || {};
-  const { unreadCount } = useNotifications();
+  // useNotifications() never actually returned an `unreadCount` (it only
+  // exposes push-token/permission state) — destructuring it here silently
+  // gave `undefined` forever, so the bell badge could never show a real
+  // number, only the announcement dot below. Fetch the real count instead.
+  useNotifications();
+  const [unreadCount, setUnreadCount] = useState(0);
   const { t } = useI18n();
   const { colors, isDark } = useTheme();
   const { items: lastViewedItems } = useLastViewed();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  // Computed fresh here (not a module-level snapshot at import time) so
+  // it can't go stale relative to the real viewport — that staleness is
+  // exactly what blew card widths up to ~4x on first web-preview load.
+  const { width: winWidth } = useWindowDimensions();
+  const CARD_WIDTH = winWidth * 0.44;
+  const BANNER_CARD_WIDTH = winWidth * 0.78;
+  const styles = useMemo(() => createStyles(colors, CARD_WIDTH), [colors, CARD_WIDTH]);
+
+  // Best live promo for the second banner card — highest real discount
+  // among promos that actually have a product photo, so the card never
+  // falls back to a placeholder. Same effective-percent comparison Presyo
+  // Check uses, so a fixed-peso discount and a percentage discount are
+  // never compared on raw numbers.
+  const bestPromo = useMemo(() => {
+    const withPhoto = promoProducts.filter((p) => p.product?.image_url);
+    if (withPhoto.length === 0) return null;
+    const scored = withPhoto.map((promo) => {
+      const original = promo.product?.price || promo.original_price || 0;
+      const pct = promo.discount_type === 'percentage'
+        ? promo.discount_value
+        : (original > 0 ? (promo.discount_value / original) * 100 : 0);
+      return { promo, pct };
+    });
+    scored.sort((a, b) => b.pct - a.pct);
+    return scored[0].promo;
+  }, [promoProducts]);
 
   // Add-to-cart toast animation
   const [toastVisible, setToastVisible] = useState(false);
@@ -388,7 +777,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .select(`
           *,
           product:product_id (id, name, unit, is_available, image_url, price),
-          stall:stall_id (id, stall_number, stall_name, section)
+          stall:stall_id (id, stall_number, stall_name, section, gcash_qr_url, gcash_number)
         `)
         .eq('is_active', true)
         .gte('end_date', now)
@@ -431,7 +820,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             if (!itemsMap.has(item.id) && itemsMap.size < 5) {
               const { data: currentProduct, error: prodErr } = await supabase
                 .from('products')
-                .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number)')
+                .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number, gcash_qr_url, gcash_number)')
                 .eq('id', item.id)
                 .single();
               
@@ -514,7 +903,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
       for (const [productId, history] of lastPaidMap.entries()) {
         const { data: product, error: prodErr } = await supabase
           .from('products')
-          .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number)')
+          .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number, gcash_qr_url, gcash_number)')
           .eq('id', productId)
           .single();
         if (prodErr || !product) continue;
@@ -572,7 +961,23 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
   }, [user]);
 
+  // ── Bell badge unread count ──
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user?.id) { setUnreadCount(0); return; }
+    try {
+      const count = await notificationService.getUnreadCount(user.id);
+      setUnreadCount(count);
+    } catch (e) {
+      console.warn('Error loading unread notification count:', e?.message);
+    }
+  }, [user]);
+
   // ── Latest customer-facing announcement for the home banner ──
+  // homeAnnouncement here only drives the bell dot, so it should reflect
+  // "unread", not just "exists" — otherwise mark-all-read on the
+  // Notifications screen has no way to ever clear this dot (see
+  // notificationService.getReadAnnouncementIds for how "read" is tracked
+  // for announcements, which have no per-user row of their own).
   const fetchHomeAnnouncement = useCallback(async () => {
     try {
       const nowIso = new Date().toISOString();
@@ -583,11 +988,31 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .or(`expires_at.is.null,expires_at.gte.${nowIso}`)
         .order('created_at', { ascending: false })
         .limit(1);
-      setHomeAnnouncement(data?.[0] || null);
+      const latest = data?.[0] || null;
+      if (latest && user?.id) {
+        const readIds = await notificationService.getReadAnnouncementIds(user.id);
+        if (readIds.includes(latest.id)) {
+          setHomeAnnouncement(null);
+          return;
+        }
+      }
+      setHomeAnnouncement(latest);
     } catch (e) {
       console.warn('Error loading home announcement:', e?.message);
     }
-  }, []);
+  }, [user]);
+
+  // Refresh on focus so returning from the Notifications screen (after
+  // reading/marking-all-read there) updates the badge and dot immediately.
+  useEffect(() => {
+    fetchUnreadCount();
+    fetchHomeAnnouncement();
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchUnreadCount();
+      fetchHomeAnnouncement();
+    });
+    return unsubscribe;
+  }, [navigation, fetchUnreadCount, fetchHomeAnnouncement]);
 
   //  Fixed: Only fetch once using ref to prevent infinite loop
   useEffect(() => {
@@ -595,6 +1020,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
       hasFetched.current = true;
       fetchData();
       fetchHomeAnnouncement();
+      fetchProductComparisons();
       if (user && !isGuest) {
         fetchRecentOrders();
         fetchPriceDrops();
@@ -666,6 +1092,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     setRefreshing(true);
     fetchData();
     fetchHomeAnnouncement();
+    fetchProductComparisons();
     if (user && !isGuest) {
       fetchRecentOrders();
       fetchPriceDrops();
@@ -679,6 +1106,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   if (loading) {
     return (
       <View style={styles.container}>
+        <WovenBackground isDark={isDark} />
         <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={colors.surface} />
         <View style={[styles.searchHeader, { paddingTop: Platform.OS === 'ios' ? 44 : 28, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }]}>
           <View style={{ height: 44 }} />
@@ -693,11 +1121,81 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
   return (
     <View style={styles.container}>
+      <WovenBackground isDark={isDark} />
       <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={colors.surface} />
 
-      {/*  Search Header with Notification Bell */}
+      {/*  Brand Header: logo/wordmark, market status, notification bell */}
       <View style={styles.searchHeader}>
+        <WovenBackground isDark={isDark} />
         <View style={styles.searchHeaderContent}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandLeft}>
+              <Image
+                source={require('../../../src/assets/palengkehublogo.jpg')}
+                style={styles.brandLogo}
+                resizeMode="cover"
+              />
+              <Text style={styles.brandWordmark}>
+                Palengke<Text style={styles.brandWordmarkAccent}>Hub</Text>
+              </Text>
+            </View>
+
+            <View style={styles.brandRight}>
+              <View
+                style={[
+                  styles.marketStatusPill,
+                  marketOpen ? styles.marketStatusPillOpen : styles.marketStatusPillClosed,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.marketStatusDot,
+                    marketOpen ? styles.marketStatusDotOpen : styles.marketStatusDotClosed,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.marketStatusText,
+                    marketOpen ? styles.marketStatusTextOpen : styles.marketStatusTextClosed,
+                  ]}
+                >
+                  {marketOpen ? t('home.market_open') : t('home.market_closed')}
+                </Text>
+              </View>
+
+              {/*  Notification Bell */}
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => navigation.navigate('Notifications')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="notifications-outline" size={22} color={colors.text.primary} />
+                {unreadCount > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Text>
+                  </View>
+                ) : homeAnnouncement ? (
+                  // No unread notifications, but there's an active admin
+                  // announcement — the Notifications screen already lists
+                  // it (see NotificationScreen.js), this dot just says
+                  // "something's there" instead of a banner blocking Home.
+                  <View style={styles.notificationDot} />
+                ) : null}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.marketRow}>
+            <View style={styles.marketNameGroup}>
+              <Ionicons name="location-sharp" size={13} color={colors.primary} />
+              <Text style={styles.marketName} numberOfLines={1}>Lipa City Public Market</Text>
+            </View>
+            <Ionicons name="chevron-down" size={14} color={colors.text.tertiary} />
+          </View>
+          <Text style={styles.marketSubtitle} numberOfLines={1}>Lipa, Batangas 4217 · Pickup only</Text>
+
           <View style={styles.searchHeaderRow}>
             <TouchableOpacity
               style={styles.searchBar}
@@ -713,38 +1211,32 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               />
               <Ionicons name="scan-outline" size={22} color={colors.text.tertiary} />
             </TouchableOpacity>
-
-            {/*  Notification Bell */}
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => navigation.navigate('Notifications')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="notifications-outline" size={24} color={colors.text.primary} />
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        onScroll={handleHomeScroll}
+        scrollEventThrottle={100}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            colors={[colors.primary]} 
-            tintColor={colors.primary} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
       >
+        {/* ============================================================
+            GREETING — time-of-day, existing i18n keys only
+        ============================================================ */}
+        <View style={[styles.section, styles.greetingSection]}>
+          <Text style={styles.greetingText}>{t(`home.${getGreetingKey()}`)}, Ka-Palengke</Text>
+          <Text style={styles.greetingSubtitle}>{t('home.order_now_pickup')}</Text>
+        </View>
+
         {/* ============================================================
             SHOP BY CATEGORY — the round chip row
         ============================================================ */}
@@ -756,46 +1248,145 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             contentContainerStyle={styles.categoryChipRow}
           >
             {CATEGORY_CHIPS.map((cat) => (
-              <TouchableOpacity
+              <CategoryChip
                 key={cat.categoryName}
-                style={styles.categoryChip}
+                cat={cat}
+                styles={styles}
+                colors={colors}
                 onPress={() => navigation.navigate('CategoryProducts', { categoryName: cat.categoryName })}
-                activeOpacity={0.8}
-              >
-                <View style={styles.categoryChipIconCircle}>
-                  <Ionicons name={cat.icon} size={24} color={colors.primaryDark} />
-                </View>
-                <Text style={styles.categoryChipLabel} numberOfLines={1}>{cat.tagalog}</Text>
-                <Text style={styles.categoryChipSubLabel} numberOfLines={1}>{cat.english}</Text>
-              </TouchableOpacity>
+              />
             ))}
           </ScrollView>
         </View>
 
         {/* ============================================================
-            ANNOUNCEMENT BANNER — latest customer announcement
+            MARKET BANNER CAROUSEL — hours card (always) + best live promo
+            card (only when a real one exists), same photo+overlay+badge
+            treatment as the landing page's own banner cards.
         ============================================================ */}
-        {homeAnnouncement && !bannerDismissed && (
-          <View style={styles.announcementBanner}>
-            <View style={styles.announcementBannerIcon}>
-              <Ionicons name="megaphone" size={18} color={colors.primary} />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.bannerScrollContent}
+        >
+          <View style={[styles.hoursBanner, { width: BANNER_CARD_WIDTH }]}>
+            <Image
+              source={require('../../../src/assets/Lipapublicmarket.jpg')}
+              style={styles.hoursBannerImage}
+              resizeMode="cover"
+            />
+            <View style={styles.hoursBannerOverlay} />
+            <View style={styles.hoursBannerContent}>
+              <View style={styles.hoursBannerTag}>
+                <Text style={styles.hoursBannerTagText}>
+                  {marketOpen ? t('home.market_open') : t('home.market_closed')}
+                </Text>
+              </View>
+              <Text style={styles.hoursBannerTitle}>5:00 AM to 7:00 PM, araw-araw</Text>
+              <Text style={styles.hoursBannerText}>Pickup sa mismong stall. Walang delivery fee.</Text>
             </View>
-            <View style={styles.announcementBannerBody}>
-              <Text style={styles.announcementBannerTitle} numberOfLines={1}>
-                {homeAnnouncement.title}
-              </Text>
-              <Text style={styles.announcementBannerText} numberOfLines={2}>
-                {homeAnnouncement.content}
-              </Text>
+          </View>
+
+          <View style={[styles.hoursBanner, { width: BANNER_CARD_WIDTH }]}>
+            <Image
+              source={require('../../assets/banner-fresh-harvest.png')}
+              style={styles.hoursBannerImage}
+              resizeMode="cover"
+            />
+            <View style={styles.hoursBannerOverlay} />
+            <View style={styles.hoursBannerContent}>
+              <View style={styles.hoursBannerTag}>
+                <Text style={styles.hoursBannerTagText}>Bagong Ani</Text>
+              </View>
+              <Text style={styles.hoursBannerTitle}>Sariwang gulay at prutas araw-araw</Text>
+              <Text style={styles.hoursBannerText}>Direkta mula sa mga stall sa palengke.</Text>
             </View>
-            <TouchableOpacity
-              style={styles.announcementBannerClose}
-              onPress={() => { hapticLight(); setBannerDismissed(true); }}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          </View>
+
+          {bestPromo && (
+            <PromoBannerCard
+              promo={bestPromo}
+              width={BANNER_CARD_WIDTH}
+              styles={styles}
+              onPress={() => navigation.navigate('ProductDetails', { productId: bestPromo.product.id })}
+            />
+          )}
+        </ScrollView>
+
+        {/* ============================================================
+            PRESYO CHECK — cheapest-per-unit across stalls, real query,
+            same reference-unit rule as ProductDetails/Search (no fake data)
+        ============================================================ */}
+        {presyoCheckItems.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Presyo Check</Text>
+                <Text style={styles.sectionSubtitle}>Pinakamura kada kilo ngayon</Text>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+                <Text style={styles.sectionLink}>Tingnan Lahat</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
             >
-              <Ionicons name="close" size={16} color={colors.text.lighter} />
-            </TouchableOpacity>
+              {presyoCheckItems.map((item) => {
+                const goTo = () => item.productId
+                  ? navigation.navigate('ProductDetails', { productId: item.productId })
+                  : navigation.navigate('Search');
+                const fillPct = item.maxPrice > 0 ? Math.min(100, (item.minPrice / item.maxPrice) * 100) : 0;
+                const tickPct = item.maxPrice > 0 ? Math.min(100, (item.avgPrice / item.maxPrice) * 100) : 0;
+                return (
+                  <TouchableOpacity
+                    key={item.name}
+                    style={styles.presyoCard}
+                    activeOpacity={0.85}
+                    onPress={goTo}
+                  >
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.presyoImage} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.presyoImagePlaceholder}>
+                        <Ionicons name="pricetag-outline" size={26} color={colors.text.quaternary} />
+                      </View>
+                    )}
+                    <View style={styles.presyoDetails}>
+                      <Text style={styles.presyoName} numberOfLines={1}>{item.name}</Text>
+                      <View style={styles.presyoPriceRow}>
+                        <PriceText price={item.minPrice} unit={item.unit} />
+                        <VerdictChip verdict="PINAKAMURA" solid />
+                      </View>
+
+                      <View style={styles.presyoBarTrack}>
+                        <View style={[styles.presyoBarFill, { width: `${fillPct}%` }]} />
+                        <View style={[styles.presyoBarTick, { left: `${tickPct}%` }]} />
+                      </View>
+                      <View style={styles.presyoBarLabels}>
+                        <Text style={styles.presyoBarLabel}>₱{item.minPrice.toFixed(0)} pinakamura</Text>
+                        <Text style={styles.presyoBarLabel}>avg ₱{item.avgPrice.toFixed(0)}</Text>
+                      </View>
+
+                      <View style={styles.presyoFooterRow}>
+                        <View style={styles.presyoStallCountRow}>
+                          <Ionicons name="storefront-outline" size={13} color={colors.text.tertiary} />
+                          <Text style={styles.presyoStallCount}>{item.stallCount} na stalls</Text>
+                        </View>
+                        <TouchableOpacity onPress={goTo} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <View style={styles.presyoCompareRow}>
+                            <Text style={styles.presyoCompareText}>Ikumpara</Text>
+                            <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -832,14 +1423,29 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 const stall = promo.stall;
                 const isPercentage = promo.discount_type === 'percentage';
                 const discountText = isPercentage ? `${promo.discount_value}% OFF` : `₱${promo.discount_value} OFF`;
-                
+                const stallRating = stall?.id ? stallRatings[stall.id] : null;
+                const compareCount = product?.name ? productCompareCounts[product.name] : undefined;
+
                 return (
                   <ProductCard
                     key={promo.id}
+                    // ProductCard's default width ('48%') is meant for a
+                    // 2-column wrapped grid — inside this horizontal
+                    // ScrollView it resolves against no stable base and
+                    // renders ~110px wide, clipping the price and cramming
+                    // the button text. Match the app's established
+                    // horizontal-card width instead (same value Presyo
+                    // Check derives its own card width from).
+                    style={{ width: CARD_WIDTH }}
                     product={{ ...product, price: promo.discounted_price, original_price: promo.original_price }}
                     stall={stall}
                     discountText={discountText}
                     hasPromotion={true}
+                    verdict="MURA"
+                    rating={stallRating?.average}
+                    ratingCount={stallRating?.count}
+                    compareCount={compareCount}
+                    onComparePress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                     priceTrend={priceTrends.get(product.id)}
                     onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                     onAddToCart={() => handleAddToCart({ ...product, price: promo.discounted_price }, stall)}
@@ -934,6 +1540,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 {recentOrderItems.map(item => (
                   <ProductCard
                     key={item.id}
+                    style={{ width: CARD_WIDTH }}
                     product={item}
                     stall={item.stall}
                     discountText={item.hasPromotion ? 
@@ -994,26 +1601,30 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 <Text style={styles.sectionTitle}> {t('home.top_rated_stalls')}</Text>
                 <Text style={styles.sectionSubtitle}>{t('home.top_rated_subtitle')}</Text>
               </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+                <Text style={styles.sectionLink}>Tingnan Lahat</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalListWithMargin}
+              contentContainerStyle={styles.horizontalList}
             >
               {topRatedStalls.map(stall => (
-                <View key={stall.id} style={{ width: CARD_WIDTH + 40 }}>
-                  <StallCard
-                    stall={stall}
-                    isClosed={stall.is_temporarily_closed}
-                    onPress={() => {
-                      if (stall.is_temporarily_closed) {
-                        Alert.alert(t('stalls.temporarily_closed'), t('stalls.temporarily_closed_msg'));
-                        return;
-                      }
-                      navigation.navigate('StallDetails', { stallId: stall.id });
-                    }}
-                  />
-                </View>
+                <TopStallCard
+                  key={stall.id}
+                  stall={stall}
+                  priceRange={stallPriceRanges[stall.id]}
+                  isFavorite={isStallFavorite(stall.id)}
+                  onToggleFavorite={toggleStallFavorite}
+                  onPress={() => {
+                    if (stall.is_temporarily_closed) {
+                      Alert.alert(t('stalls.temporarily_closed'), t('stalls.temporarily_closed_msg'));
+                      return;
+                    }
+                    navigation.navigate('StallDetails', { stallId: stall.id });
+                  }}
+                />
               ))}
             </ScrollView>
           </View>
@@ -1047,11 +1658,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           </ScrollView>
 
           <View style={styles.stallsContainer}>
-            {filteredStalls.slice(0, 6).map(stall => (
+            {filteredStalls.slice(0, visibleStallCount).map(stall => (
               <StallCard
                 key={stall.id}
                 stall={stall}
                 isClosed={stall.is_temporarily_closed}
+                isFavorite={isStallFavorite(stall.id)}
+                onToggleFavorite={toggleStallFavorite}
                 onPress={() => {
                   if (stall.is_temporarily_closed) {
                     Alert.alert(t('stalls.temporarily_closed'), t('stalls.temporarily_closed_msg'));
@@ -1062,6 +1675,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               />
             ))}
           </View>
+
+          {loadingMoreStalls && (
+            <View style={styles.loadMoreStallsRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadMoreStallsText}>Naglo-load pa ng mga stall...</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -1088,7 +1708,12 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 // ============================================================
 // STYLES
 // ============================================================
-const createStyles = (colors) => StyleSheet.create({
+// cardWidth defaults to a fresh (not stale) Dimensions read for the three
+// call sites (TypewriterPlaceholder, StallCard, PriceDropItem) that don't
+// have a live useWindowDimensions() value to pass in — a JS default
+// parameter evaluates at call time, so this still self-corrects instead
+// of freezing at whatever the window was when the module first loaded.
+const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1164,6 +1789,96 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: SPACING.lg,
   },
   searchHeaderContent: {},
+
+  // ── Brand Row: logo, wordmark, market status, bell ──
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  brandLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.full,
+  },
+  brandWordmark: {
+    ...TEXT_STYLES.h2,
+    color: colors.text.primary,
+  },
+  brandWordmarkAccent: {
+    color: colors.primary,
+  },
+  brandRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  marketStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: SPACING.sm,
+    height: 26,
+    borderRadius: RADIUS.full,
+  },
+  marketStatusPillOpen: {
+    backgroundColor: colors.successLight,
+  },
+  marketStatusPillClosed: {
+    backgroundColor: colors.errorLight,
+  },
+  marketStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  marketStatusDotOpen: {
+    backgroundColor: colors.success,
+  },
+  marketStatusDotClosed: {
+    backgroundColor: colors.error,
+  },
+  marketStatusText: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
+  },
+  marketStatusTextOpen: {
+    color: colors.success,
+  },
+  marketStatusTextClosed: {
+    color: colors.errorDark,
+  },
+
+  // ── Market Row: pin + name on the left, chevron pinned far right ──
+  marketRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  marketNameGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1,
+    marginRight: SPACING.sm,
+  },
+  marketName: {
+    ...TEXT_STYLES.label,
+    color: colors.text.primary,
+  },
+  marketSubtitle: {
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
+    marginBottom: SPACING.md,
+  },
+
   searchHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1225,49 +1940,22 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.onError,
     includeFontPadding: false,
   },
+  notificationDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
 
   // ── Sections ──
   section: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xxxl,
-  },
-  announcementBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    padding: SPACING.md,
-    backgroundColor: colors.accentSoft,
-    borderRadius: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.primary,
-  },
-  announcementBannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  announcementBannerBody: {
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  announcementBannerTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text.primary,
-    marginBottom: 2,
-  },
-  announcementBannerText: {
-    fontSize: 12.5,
-    color: colors.text.secondary,
-    lineHeight: 17,
-  },
-  announcementBannerClose: {
-    padding: SPACING.xs,
   },
   buyAgainGrid: {
     flexDirection: 'row',
@@ -1298,6 +1986,93 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.primaryDark,
   },
 
+  // ── Greeting ──
+  greetingSection: {
+    paddingTop: SPACING.xl,
+    paddingBottom: 0,
+  },
+  greetingText: {
+    ...TEXT_STYLES.h1,
+    color: colors.text.primary,
+  },
+  greetingSubtitle: {
+    ...TEXT_STYLES.bodySmall,
+    color: colors.text.tertiary,
+    marginTop: 2,
+  },
+
+  // ── Market Banner Carousel ──
+  bannerScrollContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    gap: SPACING.md,
+  },
+  hoursBanner: {
+    // Closer to the source photo's own aspect ratio (3552x2664, ~1.33)
+    // than the old fixed 140 — that was cropping tighter than it needed
+    // to, into a "too zoomed in" close-up of the building.
+    height: 190,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.inkSurface,
+  },
+  hoursBannerImage: {
+    ...StyleSheet.absoluteFillObject,
+    // absoluteFillObject alone (position:absolute + inset:0) doesn't
+    // reliably stretch an <img> on React Native Web — same "replaced
+    // element" quirk as WovenBackground's SVG. Without this, the photo
+    // rendered at its native 3552x2664 size inside the clipped card, so
+    // any horizontal drag over it panned across the full-res image
+    // instead of showing the cover-cropped shot.
+    width: '100%',
+    height: '100%',
+  },
+  hoursBannerImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSecondary,
+  },
+  hoursBannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    // colors.overlay (not inkSurface) — inkSurface/onInk flips to a light
+    // card in dark mode (it's the toast/badge pairing), which washed this
+    // photo out. overlay is a fixed dark scrim in both themes, same token
+    // stallClosedBadge already uses to darken a photo underneath text.
+    backgroundColor: colors.overlay,
+  },
+  hoursBannerContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: SPACING.lg,
+  },
+  hoursBannerTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    marginBottom: SPACING.sm,
+  },
+  hoursBannerTagText: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.black,
+    color: colors.onPrimary,
+    letterSpacing: 0.5,
+  },
+  hoursBannerTitle: {
+    ...TEXT_STYLES.h3,
+    // Fixed white, not a theme token: this sits on a photo behind a
+    // permanently-dark scrim (colors.overlay) in both light and dark mode,
+    // so it must not flip dark the way body text does in light mode.
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  hoursBannerText: {
+    fontSize: TYPE.size.caption,
+    color: '#FFFFFF',
+    opacity: 0.85,
+  },
+
   // ── Category Chips ──
   categorySection: {
     paddingTop: SPACING.lg,
@@ -1320,6 +2095,11 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.xs,
+    overflow: 'hidden',
+  },
+  categoryChipImage: {
+    width: 40,
+    height: 40,
   },
   categoryChipLabel: {
     ...TEXT_STYLES.label,
@@ -1353,7 +2133,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.border,
     marginBottom: SPACING.md,
     position: 'relative',
-    width: CARD_WIDTH,
+    width: cardWidth,
   },
   productImage: {
     width: '100%',
@@ -1381,7 +2161,7 @@ const createStyles = (colors) => StyleSheet.create({
 
   // ── Price Drop Cards ──
   priceDropCard: {
-    width: CARD_WIDTH,
+    width: cardWidth,
     backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
@@ -1442,6 +2222,98 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.text.tertiary,
   },
 
+  // ── Presyo Check Cards ──
+  presyoCard: {
+    width: cardWidth * 1.25,
+    backgroundColor: colors.card,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
+  },
+  presyoImage: {
+    width: '100%',
+    height: 90,
+    backgroundColor: colors.inputBg,
+  },
+  presyoImagePlaceholder: {
+    width: '100%',
+    height: 90,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.inputBg,
+  },
+  presyoDetails: {
+    padding: SPACING.md,
+  },
+  presyoName: {
+    ...TEXT_STYLES.bodySmall,
+    color: colors.text.primary,
+    marginBottom: 6,
+  },
+  presyoPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  presyoBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.wickerSoft,
+    overflow: 'visible',
+    position: 'relative',
+  },
+  presyoBarFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+  },
+  presyoBarTick: {
+    position: 'absolute',
+    top: -2,
+    width: 2,
+    height: 10,
+    backgroundColor: colors.text.primary,
+    marginLeft: -1,
+  },
+  presyoBarLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  presyoBarLabel: {
+    fontSize: TYPE.size.micro,
+    color: colors.text.tertiary,
+  },
+  presyoFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: LAYOUT.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  presyoStallCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  presyoStallCount: {
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
+  },
+  presyoCompareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  presyoCompareText: {
+    ...TEXT_STYLES.label,
+    color: colors.primaryDark,
+  },
+
   // ── Filter Chips ──
   filterContainer: {
     paddingRight: SPACING.lg,
@@ -1452,6 +2324,17 @@ const createStyles = (colors) => StyleSheet.create({
   // ── Stall Cards ──
   stallsContainer: {
     gap: SPACING.md,
+  },
+  loadMoreStallsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.lg,
+  },
+  loadMoreStallsText: {
+    fontSize: 13,
+    color: colors.text.tertiary,
   },
   stallCard: {
     backgroundColor: colors.card,
@@ -1503,14 +2386,43 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.onInk,
     letterSpacing: 0.5,
   },
+  stallFavoriteButton: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.inkSurface,
+    opacity: 0.85,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   stallInfo: {
     flex: 1,
+  },
+  stallNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  stallOpenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  stallOpenDotOpen: {
+    backgroundColor: colors.success,
+  },
+  stallOpenDotClosed: {
+    backgroundColor: colors.error,
   },
   stallName: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.text.primary,
-    marginBottom: 2,
+    flexShrink: 1,
   },
   stallMetaRow: {
     flexDirection: 'row',
@@ -1554,6 +2466,127 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // ── Top Stall Card (Top-Rated Stalls rail) ──
+  topStallCard: {
+    width: cardWidth * 1.7,
+    backgroundColor: colors.card,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
+  },
+  topStallImageWrap: {
+    position: 'relative',
+  },
+  topStallImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: colors.inputBg,
+  },
+  topStallImagePlaceholder: {
+    width: '100%',
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.inputBg,
+  },
+  topStallStatusBadge: {
+    position: 'absolute',
+    top: SPACING.sm,
+    left: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  topStallStatusOpen: {
+    backgroundColor: colors.successLight,
+  },
+  topStallStatusClosed: {
+    backgroundColor: colors.errorLight,
+  },
+  topStallStatusText: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.black,
+  },
+  topStallStatusTextOpen: {
+    color: colors.success,
+  },
+  topStallStatusTextClosed: {
+    color: colors.errorDark,
+  },
+  topStallFavoriteButton: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topStallBody: {
+    padding: SPACING.md,
+  },
+  topStallName: {
+    ...TEXT_STYLES.bodySmall,
+    fontWeight: TYPE.weight.bold,
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  topStallMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: SPACING.sm,
+  },
+  topStallRating: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: colors.text.primary,
+  },
+  topStallRatingCount: {
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
+  },
+  topStallMetaDivider: {
+    fontSize: TYPE.size.caption,
+    color: colors.border,
+    marginHorizontal: 2,
+  },
+  topStallSection: {
+    fontSize: TYPE.size.caption,
+    color: colors.text.tertiary,
+    flexShrink: 1,
+  },
+  topStallPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: SPACING.sm,
+    borderTopWidth: LAYOUT.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  topStallPriceRange: {
+    ...TEXT_STYLES.label,
+    fontWeight: TYPE.weight.bold,
+    color: colors.text.primary,
+    flexShrink: 1,
+    marginRight: SPACING.xs,
+  },
+  topStallRangeBadge: {
+    backgroundColor: colors.successLight,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  topStallRangeBadgeText: {
+    fontSize: 9,
+    fontWeight: TYPE.weight.black,
+    color: colors.success,
+    letterSpacing: 0.3,
   },
 
   // ── Empty States ──

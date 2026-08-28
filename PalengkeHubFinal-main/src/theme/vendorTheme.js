@@ -102,30 +102,35 @@ export const vendorBorderRadius = {
   full: RADIUS.full,
 };
 
-//  Theme-aware vendor typography
+//  Theme-aware vendor typography — same Baloo 2 (display) / Nunito (UI)
+// families and weight-matched font files as tokens.js's TEXT_STYLES, so
+// vendor screens stop rendering in the system default font. See the
+// "weight trap" note in tokens.js: a named font file carries its own
+// weight, so `fontWeight` here must match the file, never guess a value
+// the loaded font doesn't have.
 export const useVendorTypography = () => {
   const COLORS = useColors();
   return {
-    h1: { fontSize: 28, fontWeight: 'bold', color: COLORS.text.dark },
-    h2: { fontSize: 22, fontWeight: 'bold', color: COLORS.text.dark },
-    h3: { fontSize: 18, fontWeight: 'bold', color: COLORS.text.dark },
-    h4: { fontSize: 16, fontWeight: '600', color: COLORS.text.dark },
-    body: { fontSize: 14, color: COLORS.text.dark },
-    bodySmall: { fontSize: 12, color: COLORS.text.medium },
-    caption: { fontSize: 11, color: COLORS.text.lighter },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.text.dark, marginBottom: 8 },
+    h1: { fontSize: 28, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: COLORS.text.dark },
+    h2: { fontSize: 22, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: COLORS.text.dark },
+    h3: { fontSize: 18, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: COLORS.text.dark },
+    h4: { fontSize: 16, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: COLORS.text.dark },
+    body: { fontSize: 14, fontFamily: 'Nunito_600SemiBold', fontWeight: '600', color: COLORS.text.dark },
+    bodySmall: { fontSize: 12, fontFamily: 'Nunito_600SemiBold', fontWeight: '600', color: COLORS.text.medium },
+    caption: { fontSize: 11, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: COLORS.text.lighter },
+    label: { fontSize: 14, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: COLORS.text.dark, marginBottom: 8 },
   };
 };
 
 export const vendorTypography = {
-  h1: { fontSize: 28, fontWeight: 'bold', color: vendorColors.text.primary },
-  h2: { fontSize: 22, fontWeight: 'bold', color: vendorColors.text.primary },
-  h3: { fontSize: 18, fontWeight: 'bold', color: vendorColors.text.primary },
-  h4: { fontSize: 16, fontWeight: '600', color: vendorColors.text.primary },
-  body: { fontSize: 14, color: vendorColors.text.primary },
-  bodySmall: { fontSize: 12, color: vendorColors.text.secondary },
-  caption: { fontSize: 11, color: vendorColors.text.tertiary },
-  label: { fontSize: 14, fontWeight: '600', color: vendorColors.text.primary, marginBottom: 8 },
+  h1: { fontSize: 28, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: vendorColors.text.primary },
+  h2: { fontSize: 22, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: vendorColors.text.primary },
+  h3: { fontSize: 18, fontFamily: 'Baloo2_800ExtraBold', fontWeight: '800', color: vendorColors.text.primary },
+  h4: { fontSize: 16, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: vendorColors.text.primary },
+  body: { fontSize: 14, fontFamily: 'Nunito_600SemiBold', fontWeight: '600', color: vendorColors.text.primary },
+  bodySmall: { fontSize: 12, fontFamily: 'Nunito_600SemiBold', fontWeight: '600', color: vendorColors.text.secondary },
+  caption: { fontSize: 11, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: vendorColors.text.tertiary },
+  label: { fontSize: 14, fontFamily: 'Nunito_700Bold', fontWeight: '700', color: vendorColors.text.primary, marginBottom: 8 },
 };
 
 export const vendorShadows = {
@@ -154,14 +159,18 @@ export const vendorShadows = {
 
 // Gradient pairs matching customer module
 export const vendorGradients = {
-  primary: ['#DC2626', '#EF4444'],
+  // Was hardcoded red — the brand's actual primary color is orange
+  // (tokens.js: red is reserved for error/danger states only). Unused by
+  // any live screen today, but was a landmine for the next one that
+  // reached for "the vendor primary gradient".
+  primary: [vendorColors.primary, vendorColors.primaryLight],
   success: ['#10B981', '#059669'],
   warning: ['#F59E0B', '#D97706'],
   info: ['#3B82F6', '#2563EB'],
   purple: ['#8B5CF6', '#7C3AED'],
   danger: ['#EF4444', '#DC2626'],
   map: ['#4CAF50', '#45A049'],
-  directions: ['#DC2626', '#EF4444'],
+  directions: [vendorColors.primary, vendorColors.primaryLight],
 };
 
 //  Theme-aware status color helpers, from tokens.js's ORDER_STATUS.

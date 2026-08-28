@@ -13,6 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
+import { notificationService } from '../../services/notificationService';
 import {
   vendorColors,
   vendorSpacing,
@@ -31,6 +32,7 @@ const getNotificationIcon = (type) => {
     case 'review': return 'star-outline';
     case 'announcement':
     case 'system': return 'megaphone-outline';
+    case 'vendor_resubmission': return 'document-text-outline';
     default: return 'notifications-outline';
   }
 };
@@ -44,6 +46,7 @@ const getNotificationColor = (type) => {
     case 'review': return vendorColors.warning;
     case 'announcement':
     case 'system': return vendorColors.primary;
+    case 'vendor_resubmission': return vendorColors.warning;
     default: return vendorColors.text.secondary;
   }
 };
@@ -98,13 +101,19 @@ export default function VendorNotificationsScreen({ navigation }) {
       if (notifRes.error) throw notifRes.error;
       if (annRes.error) throw annRes.error;
 
+      // Announcements have no per-user row — "read" is tracked locally on
+      // device (see notificationService.getReadAnnouncementIds), same
+      // mechanism the customer app uses, so mark-all-read here actually
+      // sticks instead of the announcement reappearing unread every fetch.
+      const readAnnouncementIds = await notificationService.getReadAnnouncementIds(user.id);
+
       // Convert announcements to notification-like items
       const announcementItems = (annRes.data || []).map(ann => ({
         id: `ann-${ann.id}`,
         title: ann.title,
         message: ann.content,
         type: 'announcement',
-        is_read: false,
+        is_read: readAnnouncementIds.includes(ann.id),
         created_at: ann.created_at,
         is_announcement: true,
       }));
@@ -132,12 +141,19 @@ export default function VendorNotificationsScreen({ navigation }) {
   };
 
   const markAsRead = async (notification) => {
-    if (notification.is_read || notification.is_announcement) return;
+    if (notification.is_read) return;
     try {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', notification.id);
+      if (notification.is_announcement) {
+        const realId = Number(String(notification.id).slice(4));
+        if (user?.id && Number.isFinite(realId)) {
+          await notificationService.markAnnouncementsReadLocally(user.id, [realId]);
+        }
+      } else {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('id', notification.id);
+      }
 
       setNotifications(prev =>
         prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
@@ -145,6 +161,13 @@ export default function VendorNotificationsScreen({ navigation }) {
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification read:', error);
+    }
+  };
+
+  const handleNotificationPress = (notification) => {
+    markAsRead(notification);
+    if (notification.type === 'vendor_resubmission') {
+      navigation.navigate('VendorApplicationStatus', { applicationId: notification.data?.vendor_application_id });
     }
   };
 
@@ -156,7 +179,15 @@ export default function VendorNotificationsScreen({ navigation }) {
         .eq('user_id', user.id)
         .eq('is_read', false);
 
-      setNotifications(prev => prev.map(n => n.is_announcement ? n : { ...n, is_read: true }));
+      const unreadAnnouncementIds = notifications
+        .filter(n => n.is_announcement && !n.is_read)
+        .map(n => Number(String(n.id).slice(4)))
+        .filter(Number.isFinite);
+      if (user?.id && unreadAnnouncementIds.length) {
+        await notificationService.markAnnouncementsReadLocally(user.id, unreadAnnouncementIds);
+      }
+
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch (error) {
       console.error('Error marking all read:', error);
@@ -170,7 +201,7 @@ export default function VendorNotificationsScreen({ navigation }) {
     return (
       <TouchableOpacity
         style={[styles.notificationCard, !item.is_read && styles.notificationUnread]}
-        onPress={() => markAsRead(item)}
+        onPress={() => handleNotificationPress(item)}
         activeOpacity={0.7}
       >
         <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
@@ -195,12 +226,16 @@ export default function VendorNotificationsScreen({ navigation }) {
       <Header
         title="Notifications"
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+        showBack
+        onBackPress={() => navigation.goBack()}
         rightComponent={
-          unreadCount > 0 ? (
-            <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
-              <Text style={styles.markAllText}>Mark all read</Text>
-            </TouchableOpacity>
-          ) : undefined
+          <TouchableOpacity
+            onPress={markAllAsRead}
+            disabled={unreadCount === 0}
+            style={[styles.markAllButton, unreadCount === 0 && styles.markAllButtonDisabled]}
+          >
+            <Text style={styles.markAllText}>{unreadCount === 0 ? 'All caught up' : 'Mark all read'}</Text>
+          </TouchableOpacity>
         }
       />
 
@@ -289,8 +324,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   markAllButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: vendorBorderRadius.full || 20,
+    backgroundColor: vendorColors.primary,
+  },
+  markAllButtonDisabled: {
+    backgroundColor: vendorColors.text.tertiary,
+    opacity: 0.6,
   },
   markAllText: {
     color: '#FFF',

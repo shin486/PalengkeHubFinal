@@ -96,8 +96,6 @@ export default function CheckoutScreen({ navigation, route }) {
   
   const [gcashModalVisible, setGcashModalVisible] = useState(false);
   const [gcashPayments, setGcashPayments] = useState([]);
-  const [gcashOrderIds, setGcashOrderIds] = useState([]);
-  const [gcashSubmitting, setGcashSubmitting] = useState(false);
   const [gcashReceiptUploading, setGcashReceiptUploading] = useState(false);
   const [gcashScanStatus, setGcashScanStatus] = useState(null);
   const [gcashScanError, setGcashScanError] = useState(null);
@@ -106,19 +104,25 @@ export default function CheckoutScreen({ navigation, route }) {
   const [allPaymentsCompleted, setAllPaymentsCompleted] = useState(false);
   const gcashTimerRef = useRef(null);
 
-  // Check cart
+  // Guard against landing on Checkout with nothing to check out — checked
+  // once, on arrival, not reactively. `cart` was in this effect's deps
+  // before, so it re-fired the instant placeOrder()'s own clearCart()
+  // emptied the cart on a SUCCESSFUL order: the customer got an "empty
+  // cart" alert and got bounced straight back to Cart before ever seeing
+  // the GCash payment modal, for every order — not just multi-vendor ones.
   useEffect(() => {
     if (!user) {
-      Alert.alert('Login Required', 'Please login to checkout');
+      Alert.alert(t('auth.login_required'), t('checkout.login_required_body'));
       navigation.goBack();
       return;
     }
     if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Add items to your cart first');
+      Alert.alert(t('checkout.empty_cart_title'), t('checkout.empty_cart_body'));
       navigation.goBack();
       return;
     }
-  }, [user, cart, navigation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Clean up timer on unmount
   useEffect(() => {
@@ -141,8 +145,8 @@ export default function CheckoutScreen({ navigation, route }) {
  // Handle GCash modal close - Stay on Checkout, order remains pending
 const handleGcashModalClose = () => {
   Alert.alert(
-    'Payment Pending',
-    'Your order has been placed but payment is not yet complete. You can complete the payment now or view your order later in the Orders screen.',
+    t('checkout.payment_pending_title'),
+    t('checkout.payment_pending_body'),
     [
       { 
         text: 'Continue Payment', 
@@ -192,7 +196,7 @@ const handleGcashModalClose = () => {
     const coords = getStallCoordinates(stall.section, stall.stall_number);
     const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}&travelmode=walking`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open maps');
+      Alert.alert(t('common.error'), t('checkout.maps_error'));
     });
   };
 
@@ -307,7 +311,6 @@ const handleGcashModalClose = () => {
         });
       }
       clearCart();
-      setGcashOrderIds(ordersPlaced.map(o => o.id));
       setGcashPayments(payments);
       setCurrentStallIndex(0);
       setAllPaymentsCompleted(false);
@@ -326,7 +329,7 @@ const handleGcashModalClose = () => {
       }, 1000);
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
+      Alert.alert(t('common.error'), t('checkout.place_order_error'));
     } finally {
       setLoading(false);
     }
@@ -342,9 +345,9 @@ const handleGcashModalClose = () => {
       if (error) console.error('Error cancelling expired orders:', error);
       setGcashModalVisible(false);
       Alert.alert(
-        '⏰ Payment Time Expired',
-        'Your payment window of 10 minutes has expired. Your order has been cancelled. Please place a new order if you still want to proceed.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
+        `⏰ ${t('checkout.payment_expired_title')}`,
+        t('checkout.payment_expired_body'),
+        [{ text: t('common.ok'), onPress: () => navigation.navigate('Home') }]
       );
     } catch (error) {
       console.error('GCash timeout error:', error);
@@ -371,7 +374,7 @@ const handleGcashModalClose = () => {
       // Web fallback: browser camera picker.
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
+        Alert.alert(t('checkout.camera_permission_title'), t('checkout.camera_permission_body'));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -409,7 +412,7 @@ const handleGcashModalClose = () => {
       }
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+        Alert.alert(t('checkout.gallery_permission_title'), t('checkout.gallery_permission_body'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -425,7 +428,7 @@ const handleGcashModalClose = () => {
       }
     } catch (error) {
       console.error('Error picking receipt:', error);
-      Alert.alert('Error', 'Failed to select receipt image.');
+      Alert.alert(t('common.error'), t('checkout.receipt_select_error'));
     }
   };
 
@@ -456,7 +459,7 @@ const handleGcashModalClose = () => {
         return await imageToCompressedDataUri(uri);
       } catch (e) {
         console.error('Error compressing receipt:', e);
-        Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
+        Alert.alert(t('checkout.upload_error_title'), t('checkout.upload_error_body'));
         return null;
       }
     } finally {
@@ -470,11 +473,11 @@ const handleGcashModalClose = () => {
   const payment = gcashPayments[index];
   const referenceDigits = normalizeReference(payment.referenceNumber);
   if (!isValidGcashReference(referenceDigits)) {
-    Alert.alert('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
+    Alert.alert(t('checkout.invalid_reference_title'), t('checkout.invalid_reference_body'));
     return;
   }
   if (!payment.receiptUri) {
-    Alert.alert('Missing Receipt', 'Please take a photo of your GCash receipt.');
+    Alert.alert(t('checkout.missing_receipt_title'), t('checkout.missing_receipt_body'));
     return;
   }
   if (payment.isProcessing) return;
@@ -563,11 +566,8 @@ const handleGcashModalClose = () => {
       .neq('id', payment.orderId)
       .maybeSingle();
     if (duplicateRef) {
-      setGcashScanError('This GCash reference number was already used on another order. Every payment must have a unique reference number.');
-      Alert.alert(
-        'Reference Already Used',
-        'This GCash reference number was already used on another order. Every payment must have a unique reference number.'
-      );
+      setGcashScanError(t('checkout.duplicate_reference_body'));
+      Alert.alert(t('checkout.duplicate_reference_title'), t('checkout.duplicate_reference_body'));
       return;
     }
 
@@ -582,11 +582,8 @@ const handleGcashModalClose = () => {
           .neq('id', payment.orderId)
           .maybeSingle();
         if (duplicateImage) {
-          setGcashScanError('This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.');
-          Alert.alert(
-            'Duplicate Receipt Detected',
-            'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'
-          );
+          setGcashScanError(t('checkout.duplicate_receipt_body'));
+          Alert.alert(t('checkout.duplicate_receipt_title'), t('checkout.duplicate_receipt_body'));
           return;
         }
       } catch (hashCheckError) {
@@ -627,16 +624,16 @@ const handleGcashModalClose = () => {
       setTimeout(() => {
         setGcashModalVisible(false);
         Alert.alert(
- ' All Payments Submitted! ',
-          'Your GCash payments have been submitted successfully. The vendors will verify your payments and confirm your orders.',
+          t('checkout.all_payments_submitted_title'),
+          t('checkout.all_payments_submitted_body'),
           [
-            { 
-              text: 'View Orders', 
- onPress: () => navigation.replace('Orders') // Replace
+            {
+              text: t('checkout.view_orders'),
+              onPress: () => navigation.replace('Orders')
             },
-            { 
-              text: 'Continue Shopping', 
- onPress: () => navigation.replace('Home') // Replace
+            {
+              text: t('checkout.continue_shopping'),
+              onPress: () => navigation.replace('Home')
             }
           ]
         );
@@ -645,15 +642,15 @@ const handleGcashModalClose = () => {
       const nextIndex = index + 1;
       setCurrentStallIndex(nextIndex);
       Alert.alert(
- ' Payment Submitted!',
-        `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`,
-        [{ text: 'Continue' }]
+        t('checkout.payment_submitted'),
+        t('checkout.payment_submitted_for_vendor').replace('{{stallName}}', payment.stallName),
+        [{ text: t('common.continue') }]
       );
     }
   } catch (error) {
     console.error('Error submitting payment:', error);
-    setGcashScanError('Failed to submit payment. Please try again.');
-    Alert.alert('Error', 'Failed to submit payment. Please try again.');
+    setGcashScanError(t('checkout.submit_payment_error'));
+    Alert.alert(t('common.error'), t('checkout.submit_payment_error'));
   } finally {
     const resetPayments = [...gcashPayments];
     resetPayments[index].isProcessing = false;
@@ -676,8 +673,8 @@ const handleGcashModalClose = () => {
       const bumped = new Date(Date.now() + 30 * 60 * 1000);
       setPickupTime(bumped);
       Alert.alert(
-        'Pickup Time Adjusted',
-        'Pickup must be at least 15 minutes from now. We set it to 30 minutes from now — feel free to change it.'
+        t('checkout.pickup_adjusted_title'),
+        t('checkout.pickup_adjusted_body')
       );
       return;
     }
@@ -729,7 +726,7 @@ const handleGcashModalClose = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
       
       <ScrollView 
         style={styles.container} 

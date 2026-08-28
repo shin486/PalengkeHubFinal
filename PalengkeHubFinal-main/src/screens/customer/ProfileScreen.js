@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
 import { useTheme, useColors } from '../../contexts/ThemeContext';
 import { useFavorites } from '../../hooks/useFavorites';
@@ -26,6 +26,12 @@ import { Header } from '../../components/Header';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
+import {
+  isBiometricHardwareAvailable,
+  getBiometricUnlockPreference,
+  setBiometricUnlockPreference,
+  authenticateWithBiometrics,
+} from '../../services/biometricAuth';
 
 export default function ProfileScreen({ navigation }) {
   const COLORS = useColors();
@@ -41,6 +47,39 @@ export default function ProfileScreen({ navigation }) {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
+  const [vendorApplication, setVendorApplication] = useState(null);
+
+  // ── Biometric Unlock state ──
+  const [biometricHardwareAvailable, setBiometricHardwareAvailable] = useState(false);
+  const [biometricUnlockEnabled, setBiometricUnlockEnabled] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const available = await isBiometricHardwareAvailable();
+      setBiometricHardwareAvailable(available);
+      if (available) {
+        setBiometricUnlockEnabled(await getBiometricUnlockPreference());
+      }
+    })();
+  }, []);
+
+  const toggleBiometricUnlock = async () => {
+    if (biometricUnlockEnabled) {
+      await setBiometricUnlockPreference(false);
+      setBiometricUnlockEnabled(false);
+      return;
+    }
+    // Confirm the device can actually authenticate before turning this on —
+    // otherwise a misconfigured sensor could lock someone out of their own
+    // already-active session.
+    const verified = await authenticateWithBiometrics('Confirm to turn on biometric unlock');
+    if (verified) {
+      await setBiometricUnlockPreference(true);
+      setBiometricUnlockEnabled(true);
+    } else {
+      Alert.alert(t('common.error'), 'Could not verify. Biometric unlock was not enabled.');
+    }
+  };
 
   // ── PIN Login state ──
   const [showPinModal, setShowPinModal] = useState(false);
@@ -58,8 +97,29 @@ export default function ProfileScreen({ navigation }) {
     checkSavedPin();
     if (user) {
       fetchUserStats();
+      fetchVendorApplication();
     }
   }, [user]);
+
+  // A customer who applied to become a vendor but hasn't been approved yet
+  // (or was asked to resubmit documents) has no other way to check status —
+  // there's no notification-tap-only path, since a dismissed notification
+  // would otherwise leave them stuck.
+  const fetchVendorApplication = async () => {
+    if (profile?.role === 'vendor') { setVendorApplication(null); return; }
+    try {
+      const { data } = await supabase
+        .from('vendor_applications')
+        .select('id, status, resubmission_status')
+        .eq('applicant_id', user.id)
+        .order('application_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setVendorApplication(data || null);
+    } catch (err) {
+      console.warn('Error fetching vendor application:', err);
+    }
+  };
 
   const checkSavedPin = async () => {
     setHasPin(await hasSavedPin());
@@ -173,29 +233,32 @@ export default function ProfileScreen({ navigation }) {
       try {
         const asset = result.assets[0];
         const uri = asset.uri;
-        
+
         // Determine file extension
         const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
         const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
-        
-        // Upload to uguu.se (free permanent image host — no API key needed)
-        const formData = new FormData();
-        // On web, asset.file is a File; on native, use the uri object
-        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
-        
-        const uploadResponse = await fetch('https://uguu.se/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        const uploadResult = await uploadResponse.json();
-        if (!uploadResult.success || !uploadResult.files?.length) {
-          throw new Error('Image host rejected the upload');
-        }
-        
-        const avatarUrl = uploadResult.files[0].url;
+        const contentType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
+
+        // Uploads to Supabase Storage (was previously sent to an anonymous
+        // third-party host — no auth, no ownership, files could vanish at
+        // any time and silently break the profile picture for good).
+        // vendor_documents is a private bucket, so a signed URL (long
+        // expiry — effectively permanent) is used instead of getPublicUrl,
+        // which 400s for any request that isn't sending an auth header.
+        const blob = await (await fetch(uri)).blob();
+        const path = `avatars/${user.id}/${Date.now()}_${fileName}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('vendor_documents')
+          .upload(path, blob, { cacheControl: '3600', upsert: true, contentType });
+        if (uploadError) throw uploadError;
+
+        const { data: urlData, error: signError } = await supabase.storage
+          .from('vendor_documents')
+          .createSignedUrl(uploadData.path, SIGNED_URL_TTL_SECONDS);
+        if (signError) throw signError;
+        const avatarUrl = urlData.signedUrl;
         console.log(' Avatar uploaded:', avatarUrl);
-        
+
         const { error } = await supabase
           .from('profiles')
           .update({ avatar_url: avatarUrl })
@@ -350,29 +413,29 @@ export default function ProfileScreen({ navigation }) {
           {/* Guest Avatar Section */}
           <View style={styles.avatarSection}>
             <LinearGradient
-              colors={['#DC2626', '#EF4444', '#F87171']}
+              colors={[COLORS.primary, COLORS.primaryLight, COLORS.accent]}
               style={styles.avatarGradient}
             >
               <Ionicons name="person" size={44} color="#FFFFFF" />
             </LinearGradient>
-            <Text style={styles.guestName}>Guest User</Text>
-            <Text style={styles.guestEmail}>browsing without account</Text>
+            <Text style={styles.guestName}>{t('profile.guest_title')}</Text>
+            <Text style={styles.guestEmail}>{t('profile.guest_subtitle')}</Text>
             <View style={styles.guestBadge}>
-              <Text style={styles.guestBadgeText}>Guest Mode</Text>
+              <Text style={styles.guestBadgeText}>{t('profile.guest_mode_label')}</Text>
             </View>
           </View>
 
           {/* Benefits Section */}
           <View style={styles.benefitsCard}>
-            <Text style={styles.benefitsTitle}>Sign in to unlock</Text>
-            
+            <Text style={styles.benefitsTitle}>{t('profile.sign_in_unlock')}</Text>
+
             <View style={styles.benefitItem}>
               <View style={styles.benefitIconContainer}>
                 <Ionicons name="cart" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
-                <Text style={styles.benefitText}>Save your cart items</Text>
-                <Text style={styles.benefitSubtext}>Items stay even after closing the app</Text>
+                <Text style={styles.benefitText}>{t('profile.save_cart')}</Text>
+                <Text style={styles.benefitSubtext}>{t('profile.save_cart_desc')}</Text>
               </View>
             </View>
 
@@ -381,8 +444,8 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="cube" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
-                <Text style={styles.benefitText}>Place orders</Text>
-                <Text style={styles.benefitSubtext}>Order from any stall in the market</Text>
+                <Text style={styles.benefitText}>{t('profile.place_orders')}</Text>
+                <Text style={styles.benefitSubtext}>{t('profile.place_orders_desc')}</Text>
               </View>
             </View>
 
@@ -391,8 +454,8 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="clipboard" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
-                <Text style={styles.benefitText}>View order history</Text>
-                <Text style={styles.benefitSubtext}>Track all your past purchases</Text>
+                <Text style={styles.benefitText}>{t('profile.view_history')}</Text>
+                <Text style={styles.benefitSubtext}>{t('profile.view_history_desc')}</Text>
               </View>
             </View>
 
@@ -401,8 +464,8 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="star" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
-                <Text style={styles.benefitText}>Rate stalls</Text>
-                <Text style={styles.benefitSubtext}>Share your experience with others</Text>
+                <Text style={styles.benefitText}>{t('profile.rate_stalls')}</Text>
+                <Text style={styles.benefitSubtext}>{t('profile.rate_stalls_desc')}</Text>
               </View>
             </View>
 
@@ -411,35 +474,35 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="heart" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.benefitContent}>
-                <Text style={styles.benefitText}>Save favorite stalls</Text>
-                <Text style={styles.benefitSubtext}>Quick access to your preferred vendors</Text>
+                <Text style={styles.benefitText}>{t('profile.save_favorites')}</Text>
+                <Text style={styles.benefitSubtext}>{t('profile.save_favorites_desc')}</Text>
               </View>
             </View>
           </View>
 
           {/* Action Buttons */}
           <View style={styles.actionSection}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.signInButton}
               onPress={handleSignIn}
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#DC2626', '#EF4444']}
+                colors={[COLORS.primary, COLORS.primaryLight]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.signInGradient}
               >
-                <Text style={styles.signInButtonText}>Sign In</Text>
+                <Text style={styles.signInButtonText}>{t('auth.sign_in')}</Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.signUpButton}
               onPress={handleSignUp}
               activeOpacity={0.7}
             >
-              <Text style={styles.signUpButtonText}>Create Account</Text>
+              <Text style={styles.signUpButtonText}>{t('auth.create_account')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -472,7 +535,7 @@ export default function ProfileScreen({ navigation }) {
               />
             ) : (
               <LinearGradient
-                colors={['#DC2626', '#EF4444', '#F87171']}
+                colors={[COLORS.primary, COLORS.primaryLight, COLORS.accent]}
                 style={styles.avatarGradient}
               >
                 <Text style={styles.avatarEmoji}>
@@ -557,17 +620,34 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Vendor Application Status (only shown while an application exists and isn't approved yet) */}
+        {vendorApplication && (
+          <TouchableOpacity
+            style={styles.menuSection}
+            onPress={() => navigation.navigate('VendorApplicationStatus', { applicationId: vendorApplication.id })}
+          >
+            <View style={styles.menuItem}>
+              <Ionicons name="document-text" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
+              <Text style={styles.menuItemText}>Vendor Application</Text>
+              {vendorApplication.resubmission_status === 'requested' ? (
+                <View style={styles.actionNeededBadge}>
+                  <Text style={styles.actionNeededBadgeText}>Action Needed</Text>
+                </View>
+              ) : (
+                <Text style={[styles.languageValue, { textTransform: 'capitalize' }]}>
+                  {vendorApplication.status === 'rejected' ? 'Not Approved' : vendorApplication.status}
+                </Text>
+              )}
+              <Text style={styles.chevron}>›</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Menu Items */}
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
             <Ionicons name="heart" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('favorites.title')}</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
-            <Ionicons name="clipboard" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>{t('orders.title')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
@@ -597,13 +677,21 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="location" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>Saved Addresses</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+          {/* Biometric Unlock — re-locks the app after backgrounding, gated
+              behind the device's own Face ID/fingerprint/passcode. Separate
+              from PIN Login above: that one signs back in from scratch with
+              stored credentials, this one just re-guards a session that's
+              already active. */}
+          {biometricHardwareAvailable && (
+            <TouchableOpacity style={styles.menuItem} onPress={toggleBiometricUnlock}>
+              <Ionicons name="finger-print" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
+              <Text style={styles.menuItemText}>Biometric Unlock</Text>
+              <Text style={styles.languageValue}>{biometricUnlockEnabled ? 'Naka-on' : 'Naka-off'}</Text>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+          )}
 
-                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport', { role: 'customer' })}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport', { role: 'customer' })}>
             <Ionicons name="help-circle" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>Help & Support</Text>
             <Text style={styles.chevron}>›</Text>
@@ -623,7 +711,7 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('VendorDashboard')}
           >
             <LinearGradient
-              colors={['#DC2626', '#EF4444']}
+              colors={[COLORS.primary, COLORS.primaryLight]}
               style={styles.vendorGradient}
             >
               <Text style={styles.vendorButtonText}>Open Vendor Dashboard →</Text>
@@ -879,9 +967,9 @@ const createStyles = (COLORS) => StyleSheet.create({
   avatarContainer: { position: 'relative', marginBottom: 16 },
   avatarGradient: {
     width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#DC2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
-  avatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#DC2626' },
+  avatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: COLORS.primary },
   avatarEmoji: { fontSize: 48 },
   editAvatarBadge: {
     position: 'absolute',
@@ -1032,6 +1120,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: COLORS.text.dark },
   languageValue: { fontSize: 13, color: COLORS.success, fontWeight: '600', marginRight: 8 },
   chevron: { fontSize: 20, color: COLORS.text.lighter },
+  actionNeededBadge: { backgroundColor: COLORS.errorLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginRight: 8 },
+  actionNeededBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.error },
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },

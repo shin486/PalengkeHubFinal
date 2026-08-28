@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useColors } from '../../contexts/ThemeContext';
 
 const QUICK_REASONS = [
   { id: 'unavailable', label: 'Product not available' },
@@ -22,6 +23,8 @@ const QUICK_REASONS = [
 ];
 
 export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment, onProposeChange }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedReasonId, setSelectedReasonId] = useState(null);
   const [customMessage, setCustomMessage] = useState('');
@@ -29,13 +32,13 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return '#F59E0B';
-      case 'confirmed': return '#3B82F6';
+      case 'pending': return COLORS.warning;
+      case 'confirmed': return COLORS.info;
       case 'preparing': return '#8B5CF6';
-      case 'ready': return '#10B981';
-      case 'completed': return '#6B7280';
-      case 'cancelled': return '#EF4444';
-      default: return '#6B7280';
+      case 'ready': return COLORS.success;
+      case 'completed': return COLORS.text.tertiary;
+      case 'cancelled': return COLORS.error;
+      default: return COLORS.text.tertiary;
     }
   };
 
@@ -113,12 +116,12 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
 
         <View style={styles.customerInfo}>
           <View style={styles.customerRow}>
-          <Ionicons name="person-outline" size={16} color="#6B7280" />
+          <Ionicons name="person-outline" size={16} color={COLORS.text.tertiary} />
           <Text style={styles.customerName}>{order.profiles?.full_name || 'Customer'}</Text>
         </View>
         {order.profiles?.phone && (
           <View style={styles.phoneRow}>
-            <Ionicons name="call-outline" size={14} color="#6B7280" />
+            <Ionicons name="call-outline" size={14} color={COLORS.text.tertiary} />
             <Text style={styles.customerPhone}>{order.profiles.phone}</Text>
           </View>
         )}
@@ -157,7 +160,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
             {/* Propose Change button - for pending orders */}
             {canProposeChange && onProposeChange && (
               <TouchableOpacity style={styles.proposeButton} onPress={() => onProposeChange(order)}>
-                <LinearGradient colors={['#3B82F6', '#2563EB']} style={styles.proposeGradient}>
+                <LinearGradient colors={[COLORS.info, COLORS.info]} style={styles.proposeGradient}>
                   <Text style={styles.proposeButtonText}>Propose Change</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -166,23 +169,23 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
             {/* Request Payment button - for confirmed orders */}
             {canRequestPayment && onRequestPayment && (
               <TouchableOpacity style={styles.requestPaymentButton} onPress={() => onRequestPayment(order)}>
-                <LinearGradient colors={['#3B82F6', '#2563EB']} style={styles.requestPaymentGradient}>
+                <LinearGradient colors={[COLORS.info, COLORS.info]} style={styles.requestPaymentGradient}>
                   <Text style={styles.requestPaymentText}>Request Payment</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
-            
+
             {canReject && (
               <TouchableOpacity style={styles.rejectButton} onPress={() => setShowRejectModal(true)}>
-                <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.rejectGradient}>
+                <LinearGradient colors={[COLORS.error, COLORS.errorDark]} style={styles.rejectGradient}>
                   <Text style={styles.rejectButtonText}>Reject Order</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
-            
+
             {canUpdate && (
               <TouchableOpacity style={styles.updateButton} onPress={() => onUpdateStatus(order.id, nextStep.status)}>
-                <LinearGradient colors={['#10B981', '#059669']} style={styles.updateGradient}>
+                <LinearGradient colors={[COLORS.success, COLORS.success]} style={styles.updateGradient}>
                   <Text style={styles.updateText}>{nextStep.label}</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -220,7 +223,7 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
                 <TextInput
                   style={styles.customInput}
                   placeholder="Type your reason here..."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={COLORS.text.quaternary}
                   value={customMessage}
                   onChangeText={setCustomMessage}
                   multiline
@@ -238,8 +241,8 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
                 onPress={handleRejectConfirm}
                 disabled={!selectedReasonId || rejecting}
               >
-                <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.confirmGradient}>
-                  {rejecting ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.confirmModalText}>Confirm Reject</Text>}
+                <LinearGradient colors={[COLORS.error, COLORS.errorDark]} style={styles.confirmGradient}>
+                  {rejecting ? <ActivityIndicator size="small" color={COLORS.text.inverse} /> : <Text style={styles.confirmModalText}>Confirm Reject</Text>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -250,14 +253,14 @@ export const OrderCard = ({ order, onUpdateStatus, onRejectOrder, onRequestPayme
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   card: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     marginBottom: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -273,11 +276,11 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   orderTime: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   statusBadge: {
@@ -288,10 +291,10 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   customerInfo: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     padding: 10,
     borderRadius: 10,
     marginBottom: 12,
@@ -299,11 +302,11 @@ const styles = StyleSheet.create({
   customerName: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   customerPhone: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   itemsContainer: {
@@ -314,20 +317,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.borderLight,
   },
   itemName: {
     fontSize: 13,
-    color: '#374151',
+    color: COLORS.text.secondary,
     flex: 2,
   },
   itemPrice: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#FF6B6B',
+    color: COLORS.primary,
   },
   instructionsContainer: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     padding: 10,
     borderRadius: 10,
     marginBottom: 12,
@@ -335,12 +338,12 @@ const styles = StyleSheet.create({
   instructionsLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: COLORS.primary,
     marginBottom: 4,
   },
   instructionsText: {
     fontSize: 12,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   pickupContainer: {
     flexDirection: 'row',
@@ -349,21 +352,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   pickupLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   pickupTime: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: COLORS.primary,
   },
   footer: {
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   totalContainer: {
     flexDirection: 'row',
@@ -373,12 +376,12 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   totalAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: COLORS.primary,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -398,7 +401,7 @@ const styles = StyleSheet.create({
   proposeButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   requestPaymentButton: {
     borderRadius: 8,
@@ -412,7 +415,7 @@ const styles = StyleSheet.create({
   requestPaymentText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   rejectButton: {
     borderRadius: 8,
@@ -426,7 +429,7 @@ const styles = StyleSheet.create({
   rejectButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   updateButton: {
     borderRadius: 8,
@@ -440,10 +443,10 @@ const styles = StyleSheet.create({
   updateText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   cancelledBadge: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.errorLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -452,7 +455,7 @@ const styles = StyleSheet.create({
   },
   cancelledText: {
     fontSize: 12,
-    color: '#EF4444',
+    color: COLORS.error,
     fontWeight: '500',
   },
   modalOverlay: {
@@ -462,7 +465,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 20,
     width: '85%',
@@ -471,12 +474,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 16,
   },
   reasonsList: {
@@ -487,28 +490,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     marginBottom: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
   },
   reasonOptionSelected: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: COLORS.error,
   },
   reasonText: {
     fontSize: 14,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   reasonTextSelected: {
-    color: '#DC2626',
+    color: COLORS.error,
     fontWeight: '500',
   },
   customInput: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     textAlignVertical: 'top',
     marginTop: 8,
     marginBottom: 12,
@@ -521,7 +524,7 @@ const styles = StyleSheet.create({
   },
   cancelModalButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -529,7 +532,7 @@ const styles = StyleSheet.create({
   cancelModalText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   confirmModalButton: {
     flex: 1,
@@ -546,6 +549,6 @@ const styles = StyleSheet.create({
   confirmModalText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
 });

@@ -1431,8 +1431,52 @@ input[type="checkbox"], input[type="radio"] {
 /* ========== ACTION BUTTONS ========== */
 .action-buttons {
   display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* Actions is always the last column in every admin table — give it room to
+   lay its buttons out on one evenly-spaced line instead of wrapping into a
+   ragged two-line stack. admin-table-wrap already scrolls horizontally, so
+   a narrow viewport degrades to a scrollbar rather than cramped buttons. */
+.admin-table td:last-child,
+.admin-table th:last-child {
+  white-space: nowrap;
+}
+
+/* Opt-in fixed layout: pairs with an explicit <colgroup> so a long name or
+   email can't balloon its column and push Actions off the visible edge —
+   it truncates with an ellipsis (full value still in the title attribute)
+   instead. Regular .admin-table usage elsewhere keeps its auto layout. */
+.admin-table-fixed {
+  table-layout: fixed;
+}
+
+.admin-table-fixed .cell-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coords-map-trigger {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--admin-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.coords-map-trigger:hover {
+  color: var(--admin-primary-dark);
+  text-decoration: underline;
 }
 
 /* ========== MODAL ========== */

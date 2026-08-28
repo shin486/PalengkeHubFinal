@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 import { Header } from '../../components/Header';
 
 export default function VendorReportsListScreen({ navigation }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,7 +45,7 @@ export default function VendorReportsListScreen({ navigation }) {
 
       if (error) throw error;
       setReports(data || []);
-      
+
       // Calculate stats
       setStats({
         total: data?.length || 0,
@@ -65,11 +68,11 @@ export default function VendorReportsListScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return '#F59E0B';
-      case 'reviewing': return '#3B82F6';
-      case 'resolved': return '#10B981';
-      case 'dismissed': return '#6B7280';
-      default: return '#6B7280';
+      case 'pending': return COLORS.warning;
+      case 'reviewing': return COLORS.info;
+      case 'resolved': return COLORS.success;
+      case 'dismissed': return COLORS.text.tertiary;
+      default: return COLORS.text.tertiary;
     }
   };
 
@@ -108,7 +111,7 @@ export default function VendorReportsListScreen({ navigation }) {
     const now = new Date();
     const diffTime = Math.abs(now - d);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
@@ -118,8 +121,8 @@ export default function VendorReportsListScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={styles.centerContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
-        <ActivityIndicator size="large" color="#DC2626" />
+        <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading reports...</Text>
       </SafeAreaView>
     );
@@ -127,17 +130,19 @@ export default function VendorReportsListScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
-      
-      <Header 
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
+
+      <Header
         title="Customer Reports"
         subtitle="Track your reported issues"
+        showBack
+        onBackPress={() => navigation.goBack()}
       />
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
         }
       >
         {/* Stats Cards */}
@@ -146,16 +151,16 @@ export default function VendorReportsListScreen({ navigation }) {
             <Text style={styles.statNumber}>{stats.total}</Text>
             <Text style={styles.statLabel}>Total Reports</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}>
-            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{stats.pending}</Text>
+          <View style={[styles.statCard, { backgroundColor: COLORS.warningLight }]}>
+            <Text style={[styles.statNumber, { color: COLORS.warning }]}>{stats.pending}</Text>
             <Text style={styles.statLabel}>Pending</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#DBEAFE' }]}>
-            <Text style={[styles.statNumber, { color: '#3B82F6' }]}>{stats.reviewing}</Text>
+          <View style={[styles.statCard, { backgroundColor: COLORS.infoLight }]}>
+            <Text style={[styles.statNumber, { color: COLORS.info }]}>{stats.reviewing}</Text>
             <Text style={styles.statLabel}>Reviewing</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#D1FAE5' }]}>
-            <Text style={[styles.statNumber, { color: '#10B981' }]}>{stats.resolved}</Text>
+          <View style={[styles.statCard, { backgroundColor: COLORS.successLight }]}>
+            <Text style={[styles.statNumber, { color: COLORS.success }]}>{stats.resolved}</Text>
             <Text style={styles.statLabel}>Resolved</Text>
           </View>
         </View>
@@ -166,12 +171,12 @@ export default function VendorReportsListScreen({ navigation }) {
           onPress={() => navigation.navigate('VendorReportIssue')}
         >
           <LinearGradient
-            colors={['#DC2626', '#EF4444']}
+            colors={[COLORS.primary, COLORS.primaryLight]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.newButtonGradient}
           >
-            <Ionicons name="flag" size={16} color="#FFFFFF" style={styles.newButtonIcon} />
+            <Ionicons name="flag" size={16} color={COLORS.text.inverse} style={styles.newButtonIcon} />
             <Text style={styles.newButtonText}>Report New Issue</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -179,10 +184,10 @@ export default function VendorReportsListScreen({ navigation }) {
         {/* Reports List */}
         <View style={styles.reportsSection}>
           <Text style={styles.sectionTitle}>All Reports</Text>
-          
+
           {reports.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="mail-open-outline" size={48} color="#9CA3AF" />
+              <Ionicons name="mail-open-outline" size={48} color={COLORS.text.quaternary} />
               <Text style={styles.emptyTitle}>No Reports Yet</Text>
               <Text style={styles.emptyText}>
                 You haven't submitted any customer reports. Tap the button above to report an issue.
@@ -211,7 +216,7 @@ export default function VendorReportsListScreen({ navigation }) {
                     <Text style={styles.detailValue}>{report.customer_name}</Text>
                   </View>
                 )}
-                
+
                 {report.order_id && (
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Order ID:</Text>
@@ -220,7 +225,7 @@ export default function VendorReportsListScreen({ navigation }) {
                 )}
 
                 <Text style={styles.reportDescription}>{report.description}</Text>
-                
+
                 <View style={styles.reportFooter}>
                   <Text style={styles.reportDate}>
                     Submitted {formatDate(report.created_at)}
@@ -253,21 +258,21 @@ export default function VendorReportsListScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   scrollView: {
     flex: 1,
@@ -281,7 +286,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: '22%',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -294,11 +299,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   statLabel: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 4,
   },
   newButton: {
@@ -321,10 +326,10 @@ const styles = StyleSheet.create({
   },
   newButtonIcon: {
     fontSize: 18,
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   newButtonText: {
-    color: 'white',
+    color: COLORS.text.inverse,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -335,11 +340,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 16,
   },
   emptyState: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 40,
     borderRadius: 16,
     alignItems: 'center',
@@ -356,17 +361,17 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
   reportCard: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -388,7 +393,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -399,7 +404,7 @@ const styles = StyleSheet.create({
   reportType: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -419,19 +424,19 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   detailValue: {
     fontSize: 13,
-    color: '#111827',
+    color: COLORS.text.primary,
     fontWeight: '500',
   },
   reportDescription: {
     fontSize: 14,
-    color: '#374151',
+    color: COLORS.text.secondary,
     lineHeight: 20,
     marginBottom: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     padding: 12,
     borderRadius: 8,
   },
@@ -442,29 +447,29 @@ const styles = StyleSheet.create({
   },
   reportDate: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   adminNote: {
     marginTop: 8,
     padding: 12,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: COLORS.successLight,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#10B981',
+    borderLeftColor: COLORS.success,
   },
   adminNoteLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#065F46',
+    color: COLORS.success,
     marginBottom: 4,
   },
   adminNoteText: {
     fontSize: 13,
-    color: '#065F46',
+    color: COLORS.success,
     lineHeight: 18,
   },
   infoSection: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     marginHorizontal: 16,
     marginBottom: 32,
     padding: 16,
@@ -473,12 +478,12 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#92400E',
+    color: COLORS.warning,
     marginBottom: 8,
   },
   infoText: {
     fontSize: 12,
-    color: '#92400E',
+    color: COLORS.warning,
     lineHeight: 18,
   },
 });

@@ -30,7 +30,9 @@ export const useOrders = () => {
             stall_name,
             section,
             description,
-            location_notes
+            location_notes,
+            gcash_qr_url,
+            gcash_number
           )
         `)
         .eq('consumer_id', user.id)

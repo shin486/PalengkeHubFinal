@@ -17,18 +17,99 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
+import { WovenBackground } from '../../components/WovenBackground';
+import StallLocationCapture from '../../components/vendor/StallLocationCapture';
+import { fetchCurrentStallLocation } from '../../services/stallLocationService';
 import { useAuth } from '../../contexts/AuthContext';
-import { useColors } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
 // ============================================================
 
+// ============================================================
+// SUKI BUYER CARD COMPONENT - WITH IMAGES (FIXED BLINKING)
+// ============================================================
+// Must live at module scope, not inside VendorDashboardScreen. A component
+// defined inside another component's function body gets a brand-new
+// function identity every time the parent re-renders, which means the
+// memo() wrapper below was previously wrapping a *different* component on
+// every render — React treated each render's cards as a totally different
+// component type and remounted them (and their <Image>s) from scratch,
+// which is what actually caused the blink. Hoisting it here lets memo()
+// do its job: the same consumer prop now really does skip re-rendering.
+const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.charAt(0).toUpperCase();
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Use a stable image key to prevent reloading
+  const imageKey = consumer.id;
+
+  return (
+    <View style={styles.sukiCard}>
+      <View style={styles.sukiLeft}>
+        <View style={styles.sukiAvatarContainer}>
+          {consumer.avatar_url && !imageError ? (
+            <Image
+              key={imageKey}
+              source={{ uri: consumer.avatar_url }}
+              style={styles.sukiAvatar}
+              onError={() => setImageError(true)}
+              onLoad={() => setImageLoaded(true)}
+              progressiveRenderingEnabled={true}
+              fadeDuration={0}
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={styles.sukiAvatarFallback}>
+              <Text style={styles.sukiAvatarText}>{getInitials(consumer.full_name)}</Text>
+            </View>
+          )}
+          <View style={styles.sukiRankBadge}>
+            <Text style={styles.sukiRankText}>{consumer.orderCount}</Text>
+          </View>
+        </View>
+        <View style={styles.sukiInfo}>
+          <Text style={styles.sukiName} numberOfLines={1}>{consumer.full_name}</Text>
+          <Text style={styles.sukiOrders}>{consumer.orderCount} orders</Text>
+          <Text style={styles.sukiLastOrder}>Last order • {formatDate(consumer.lastOrderDate)}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.sukiChatButton}
+        onPress={() => onChatPress(consumer)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+        <Text style={styles.sukiChatText}>Chat</Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
 export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();
-  const COLORS = useColors();
+  const { colors: COLORS, isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +120,8 @@ export default function VendorDashboardScreen({ navigation }) {
   const [sukiBuyers, setSukiBuyers] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
   const [sukiLoading, setSukiLoading] = useState(false);
+  const [stallLocation, setStallLocation] = useState(null);
+  const [showLocationCapture, setShowLocationCapture] = useState(false);
   const dataFetchedRef = useRef(false);
 
   const [stats, setStats] = useState({
@@ -61,7 +144,14 @@ export default function VendorDashboardScreen({ navigation }) {
         .single();
       if (error && error.code !== 'PGRST116') throw error;
       setStall(data);
-      if (data) setIsPaused(data.is_temporarily_closed || false);
+      if (data) {
+        setIsPaused(data.is_temporarily_closed || false);
+        try {
+          setStallLocation(await fetchCurrentStallLocation(data.id));
+        } catch (locError) {
+          console.warn('Error fetching stall location:', locError.message);
+        }
+      }
     } catch (error) {
       console.error('Error fetching stall:', error);
     } finally {
@@ -375,80 +465,19 @@ export default function VendorDashboardScreen({ navigation }) {
     );
   };
 
-  // ============================================================
-  // SUKI BUYER CARD COMPONENT - WITH IMAGES (FIXED BLINKING)
-  // ============================================================
-  const SukiBuyerCard = memo(({ consumer }) => {
-    const [imageError, setImageError] = useState(false);
-    const [imageLoaded, setImageLoaded] = useState(false);
-    
-    const getInitials = (name) => {
-      if (!name) return '?';
-      return name.charAt(0).toUpperCase();
-    };
-
-    const formatDate = (dateStr) => {
-      if (!dateStr) return 'N/A';
-      const date = new Date(dateStr);
-      const now = new Date();
-      const diff = now - date;
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      
-      if (days === 0) return 'Today';
-      if (days === 1) return 'Yesterday';
-      if (days < 7) return `${days} days ago`;
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    };
-
-    // Use a stable image key to prevent reloading
-    const imageKey = consumer.id;
-
-    return (
-      <View style={styles.sukiCard}>
-        <View style={styles.sukiLeft}>
-          <View style={styles.sukiAvatarContainer}>
-            {consumer.avatar_url && !imageError ? (
-              <Image 
-                key={imageKey}
-                source={{ uri: consumer.avatar_url }}
-                style={styles.sukiAvatar}
-                onError={() => setImageError(true)}
-                onLoad={() => setImageLoaded(true)}
-                progressiveRenderingEnabled={true}
-                fadeDuration={0}
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <View style={styles.sukiAvatarFallback}>
-                <Text style={styles.sukiAvatarText}>{getInitials(consumer.full_name)}</Text>
-              </View>
-            )}
-            <View style={styles.sukiRankBadge}>
-              <Text style={styles.sukiRankText}>{consumer.orderCount}</Text>
-            </View>
-          </View>
-          <View style={styles.sukiInfo}>
-            <Text style={styles.sukiName} numberOfLines={1}>{consumer.full_name}</Text>
-            <Text style={styles.sukiOrders}>{consumer.orderCount} orders</Text>
-            <Text style={styles.sukiLastOrder}>Last order • {formatDate(consumer.lastOrderDate)}</Text>
-          </View>
-        </View>
-        <TouchableOpacity 
-          style={styles.sukiChatButton}
-          onPress={() => handleChatPress(consumer)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
-          <Text style={styles.sukiChatText}>Chat</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  });
+  const unreadNotifCount = notifications.filter(n => !n.is_read).length;
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Dashboard" subtitle="Loading..." />
+        <WovenBackground isDark={isDark} />
+        <Header
+          title="Dashboard"
+          subtitle="Loading..."
+          showNotifications
+          notificationCount={unreadNotifCount}
+          onNotificationPress={() => navigation.navigate('VendorNotifications')}
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading dashboard...</Text>
@@ -460,7 +489,14 @@ export default function VendorDashboardScreen({ navigation }) {
   if (!stall) {
     return (
       <View style={styles.container}>
-        <Header title="Dashboard" subtitle="No stall assigned" />
+        <WovenBackground isDark={isDark} />
+        <Header
+          title="Dashboard"
+          subtitle="No stall assigned"
+          showNotifications
+          notificationCount={unreadNotifCount}
+          onNotificationPress={() => navigation.navigate('VendorNotifications')}
+        />
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
             <Ionicons name="storefront-outline" size={56} color={COLORS.primary} />
@@ -474,7 +510,14 @@ export default function VendorDashboardScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Header title="Dashboard" subtitle={stall.stall_name || 'Manage your stall'} />
+      <WovenBackground isDark={isDark} />
+      <Header
+        title="Dashboard"
+        subtitle={stall.stall_name || 'Manage your stall'}
+        showNotifications
+        notificationCount={unreadNotifCount}
+        onNotificationPress={() => navigation.navigate('VendorNotifications')}
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -510,10 +553,10 @@ export default function VendorDashboardScreen({ navigation }) {
                 onPress={togglePause}
                 activeOpacity={0.7}
               >
-                <Ionicons 
-                  name={isPaused ? 'play-outline' : 'pause-outline'} 
-                  size={16} 
-                  color="#FFFFFF" 
+                <Ionicons
+                  name={isPaused ? 'play-outline' : 'pause-outline'}
+                  size={16}
+                  color={COLORS.text.inverse}
                 />
                 <Text style={styles.storeToggleText}>
                   {isPaused ? 'Open Store' : 'Close Store'}
@@ -532,6 +575,23 @@ export default function VendorDashboardScreen({ navigation }) {
           </View>
         )}
 
+        {!stallLocation && (
+          <TouchableOpacity
+            style={styles.locationNudge}
+            onPress={() => setShowLocationCapture(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="navigate-outline" size={18} color={COLORS.primary} />
+            <View style={styles.locationNudgeTextWrap}>
+              <Text style={styles.locationNudgeTitle}>Set your stall location</Text>
+              <Text style={styles.locationNudgeSubtitle}>
+                Stand at your stall and tap here — takes about 10 seconds
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+        )}
+
         {/* ============================================================
             STATS GRID
         ============================================================ */}
@@ -547,21 +607,21 @@ export default function VendorDashboardScreen({ navigation }) {
             title="Pending Orders"
             value={stats.pendingOrders}
             icon="time-outline"
-            iconBg="#FEF3C7"
+            iconBg={COLORS.warningLight}
             onPress={() => navigation.navigate('VendorOrders')}
           />
           <StatCard
             title="Awaiting Verify"
             value={stats.awaitingVerification}
             icon="card-outline"
-            iconBg="#DBEAFE"
+            iconBg={COLORS.infoLight}
             onPress={() => navigation.navigate('VendorOrders')}
           />
           <StatCard
             title="Completed Today"
             value={stats.completedToday}
             icon="checkmark-done-outline"
-            iconBg="#D1FAE5"
+            iconBg={COLORS.successLight}
           />
         </View>
 
@@ -574,26 +634,18 @@ export default function VendorDashboardScreen({ navigation }) {
             <Ionicons name="construct-outline" size={18} color={COLORS.text.lighter} />
           </View>
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity 
-              style={styles.quickAction} 
+            {/* Alerts tile removed — it duplicated the bell icon already in
+                the header above, both opening the same VendorNotifications
+                screen. */}
+            <TouchableOpacity
+              style={[styles.quickAction, styles.quickActionFull]}
               onPress={() => navigation.navigate('VendorReports')}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#EDE9FE' }]}>
-                <Ionicons name="bar-chart-outline" size={24} color={COLORS.purple} />
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.infoLight }]}>
+                <Ionicons name="bar-chart-outline" size={24} color={COLORS.info} />
               </View>
               <Text style={styles.quickActionLabel}>Reports</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => navigation.navigate('VendorNotifications')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="notifications-outline" size={24} color={COLORS.warning} />
-              </View>
-              <Text style={styles.quickActionLabel}>Alerts</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -619,7 +671,7 @@ export default function VendorDashboardScreen({ navigation }) {
             </View>
           ) : (
             sukiBuyers.map((consumer) => (
-              <SukiBuyerCard key={consumer.id} consumer={consumer} />
+              <SukiBuyerCard key={consumer.id} consumer={consumer} styles={styles} COLORS={COLORS} onChatPress={handleChatPress} />
             ))
           )}
         </View>
@@ -741,6 +793,15 @@ export default function VendorDashboardScreen({ navigation }) {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <StallLocationCapture
+        visible={showLocationCapture}
+        stallId={stall?.id}
+        capturedBy="vendor"
+        reason={stallLocation?.reregister_reason || null}
+        onClose={() => setShowLocationCapture(false)}
+        onSaved={(saved) => setStallLocation(saved)}
+      />
     </View>
   );
 }
@@ -782,8 +843,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...TEXT_STYLES.h1,
     color: COLORS.text.dark,
     marginBottom: 8,
   },
@@ -840,10 +900,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   storeName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
+    ...TEXT_STYLES.h1,
+    color: COLORS.text.inverse,
   },
   storeSubtitle: {
     fontSize: 13,
@@ -867,7 +925,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   storeToggleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
 
   closedWarning: {
@@ -887,6 +945,32 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     flex: 1,
+  },
+
+  locationNudge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primarySurface,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  locationNudgeTextWrap: {
+    flex: 1,
+  },
+  locationNudgeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+  },
+  locationNudgeSubtitle: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 1,
   },
 
   statsGrid: {
@@ -919,8 +1003,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: '800',
+    ...TEXT_STYLES.h1,
     color: COLORS.text.dark,
   },
   statLabel: {
@@ -950,8 +1033,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.md,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...TEXT_STYLES.h3,
     color: COLORS.text.dark,
     flex: 1,
   },
@@ -964,7 +1046,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   pendingBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   seeAllText: {
     fontSize: 13,
@@ -976,6 +1058,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  quickActionFull: {
+    width: '100%',
   },
   quickAction: {
     width: '45%',
@@ -999,6 +1084,25 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '500',
     color: COLORS.text.dark,
     textAlign: 'center',
+  },
+  quickActionBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  quickActionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.text.inverse,
   },
 
   // Suki Buyers
@@ -1026,7 +1130,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
   },
   sukiAvatarFallback: {
     width: 44,
@@ -1039,7 +1143,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   sukiAvatarText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   sukiRankBadge: {
     position: 'absolute',
@@ -1058,14 +1162,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   sukiRankText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   sukiInfo: {
     flex: 1,
   },
   sukiName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TEXT_STYLES.bodySmall,
     color: COLORS.text.dark,
   },
   sukiOrders: {
@@ -1136,16 +1239,16 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
   },
   orderStatusCompleted: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: COLORS.successLight,
   },
   orderStatusCancelled: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.errorLight,
   },
   orderStatusPending: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
   },
   orderStatusText: {
     fontSize: 9,
@@ -1164,7 +1267,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   orderTotal: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: 'Baloo2_800ExtraBold',
+    fontWeight: '800',
     color: COLORS.primary,
   },
   orderTime: {
@@ -1217,8 +1321,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
   },
   productName: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TEXT_STYLES.bodySmall,
     color: COLORS.text.dark,
   },
   productMeta: {
@@ -1254,14 +1357,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   profileAvatarText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TEXT_STYLES.bodySmall,
     color: COLORS.text.dark,
   },
   profileSub: {

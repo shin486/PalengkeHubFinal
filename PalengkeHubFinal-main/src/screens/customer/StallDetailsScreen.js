@@ -24,6 +24,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useFavorites } from '../../hooks/useFavorites';
 import { chatService } from '../../services/chatService';
 import StallMap from '../../components/StallMap';
+import * as Location from 'expo-location';
+import {
+  fetchCurrentStallLocation,
+  haversineDistanceMeters,
+  formatDistance,
+  getDirectionsUrl,
+} from '../../services/stallLocationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -71,30 +78,6 @@ const getRandomRatingCount = (stallId) => {
   return Math.floor(5 + (randomValue * 195));
 };
 
-const getStallCoordinates = (section, stallNumber) => {
-  const baseLat = 13.9417;
-  const baseLng = 121.1642;
-  
-  const sectionOffsets = {
-    'Meat Section': { lat: 0.0008, lng: -0.0012 },
-    'Vegetable Section': { lat: 0.0002, lng: -0.0008 },
-    'Fish Section': { lat: -0.0003, lng: 0.0005 },
-    'Fruit Section': { lat: 0.0005, lng: 0.0002 },
-    'Dry Goods': { lat: -0.0001, lng: -0.0015 },
-    'Poultry Section': { lat: 0.0010, lng: -0.0005 },
-    'Rice Section': { lat: 0.0003, lng: -0.0003 },
-    'Dairy Section': { lat: -0.0002, lng: 0.0008 },
-  };
-  
-  const offset = sectionOffsets[section] || { lat: 0, lng: 0 };
-  const stallOffset = (parseInt(stallNumber) || 0) * 0.00002;
-  
-  return {
-    latitude: baseLat + offset.lat + stallOffset,
-    longitude: baseLng + offset.lng + stallOffset,
-  };
-};
-
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
@@ -111,6 +94,8 @@ export default function StallDetailsScreen({ navigation, route }) {
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [stallImageError, setStallImageError] = useState(false);
   const [vendorAvatarError, setVendorAvatarError] = useState(false);
+  const [stallLocation, setStallLocation] = useState(null); // real captured GPS pin, or null if never set
+  const [userLocation, setUserLocation] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   //  HIDE THE GLOBAL HEADER
@@ -173,16 +158,22 @@ export default function StallDetailsScreen({ navigation, route }) {
       }
       
       setStall(stallData);
-      
+
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
         .eq('stall_id', stallId)
         .eq('is_available', true);
-      
+
       if (productsError) throw productsError;
       setProducts(productsData || []);
-      
+
+      try {
+        setStallLocation(await fetchCurrentStallLocation(stallId));
+      } catch (locError) {
+        console.warn('Error fetching stall location:', locError.message);
+      }
+
     } catch (error) {
       console.error('Error fetching stall:', error);
       Alert.alert('Error', 'Failed to load stall details');
@@ -194,6 +185,26 @@ export default function StallDetailsScreen({ navigation, route }) {
   useEffect(() => {
     fetchStallDetails();
   }, [stallId]);
+
+  // Best-effort: distance only shows once this resolves, and silently
+  // stays hidden if permission is denied or unavailable — no coordinate
+  // is ever fabricated to fill the gap.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({});
+        if (!cancelled) {
+          setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+        }
+      } catch (err) {
+        console.warn('Error getting customer location:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const startChat = async () => {
     if (!user) {
@@ -242,9 +253,11 @@ export default function StallDetailsScreen({ navigation, route }) {
   };
 
   const openMapsDirections = () => {
-    const coords = getStallCoordinates(stall?.section, stall?.stall_number);
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}&travelmode=walking`;
-    Linking.openURL(url).catch(() => {
+    if (!stallLocation) {
+      Alert.alert('Location not set', 'This stall hasn\'t captured its exact location yet.');
+      return;
+    }
+    Linking.openURL(getDirectionsUrl(stallLocation.lat, stallLocation.lng)).catch(() => {
       Alert.alert('Error', 'Could not open maps');
     });
   };
@@ -261,7 +274,12 @@ export default function StallDetailsScreen({ navigation, route }) {
 
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
-  const stallCoords = getStallCoordinates(stall?.section, stall?.stall_number);
+
+  const distanceLabel = useMemo(() => {
+    if (!stallLocation || !userLocation) return null;
+    const meters = haversineDistanceMeters(userLocation.lat, userLocation.lng, stallLocation.lat, stallLocation.lng);
+    return formatDistance(meters);
+  }, [stallLocation, userLocation]);
 
   // Navigate back
   const goBack = () => {
@@ -279,8 +297,19 @@ export default function StallDetailsScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      
-      <ScrollView 
+
+      {/* Back Button — a sibling of the ScrollView, not nested inside the
+          hero banner, so it stays fixed on screen instead of scrolling
+          away with the banner. */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={goBack}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chevron-back" size={28} color={COLORS.onInk} />
+      </TouchableOpacity>
+
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -290,8 +319,8 @@ export default function StallDetailsScreen({ navigation, route }) {
         ============================================================ */}
         <View style={styles.bannerContainer}>
           {stall?.image_url && !stallImageError ? (
-            <Image 
-              source={{ uri: stall.image_url }} 
+            <Image
+              source={{ uri: stall.image_url }}
               style={styles.bannerImage}
               onError={() => setStallImageError(true)}
               resizeMode="cover"
@@ -304,19 +333,10 @@ export default function StallDetailsScreen({ navigation, route }) {
               <Ionicons name="storefront-outline" size={72} color="rgba(255,255,255,0.2)" />
             </LinearGradient>
           )}
-          
+
           {/* Dark Overlay for readability */}
           <View style={styles.bannerOverlay} />
-          
-          {/* Back Button */}
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={goBack}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
-          
+
           {/* Favorite Button */}
           <TouchableOpacity 
             style={styles.bannerFavButton}
@@ -471,8 +491,8 @@ export default function StallDetailsScreen({ navigation, route }) {
             activeOpacity={0.95}
           >
             <StallMap
-              latitude={stallCoords.latitude}
-              longitude={stallCoords.longitude}
+              latitude={stallLocation?.lat}
+              longitude={stallLocation?.lng}
               stallName={stall?.stall_name}
               stallNumber={stall?.stall_number}
               section={stall?.section}
@@ -492,8 +512,14 @@ export default function StallDetailsScreen({ navigation, route }) {
             {stall?.location_notes && (
               <Text style={styles.locationNotes}>{stall.location_notes}</Text>
             )}
+            {distanceLabel && (
+              <View style={styles.distanceRow}>
+                <Ionicons name="walk-outline" size={14} color={COLORS.primary} />
+                <Text style={styles.distanceText}>{distanceLabel}</Text>
+              </View>
+            )}
           </View>
-          
+
           <View style={styles.locationActions}>
             <TouchableOpacity 
               style={[styles.locationButton, styles.directionsButton]}
@@ -650,8 +676,8 @@ export default function StallDetailsScreen({ navigation, route }) {
           {/* Full Screen Map - with pointerEvents handling */}
           <View style={styles.modalMapWrapper}>
             <StallMap
-              latitude={stallCoords.latitude}
-              longitude={stallCoords.longitude}
+              latitude={stallLocation?.lat}
+              longitude={stallLocation?.lng}
               stallName={stall?.stall_name}
               stallNumber={stall?.stall_number}
               section={stall?.section}
@@ -739,7 +765,10 @@ const createStyles = (COLORS) => StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    // A fixed dark surface, not a translucent one tuned only for sitting
+    // over the hero photo — this button now stays on screen over whatever
+    // content is scrolled beneath it, not just the banner.
+    backgroundColor: COLORS.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -1010,6 +1039,17 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.light,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  distanceText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   locationActions: {
     flexDirection: 'row',

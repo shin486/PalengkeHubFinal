@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import AdminSidebar from './admin/AdminSidebar';
@@ -77,7 +78,15 @@ function EmptyState({ message }) {
 }
 
 function Modal({ title, onClose, children, width = '600px' }) {
-  return (
+  // Rendered via a portal straight to <body> — several ancestors in the
+  // admin layout (.admin-main, .stat-card, etc.) carry a `transform` from
+  // their entrance animation's `forwards` fill-mode. A transformed ancestor
+  // becomes the containing block for `position: fixed` descendants, so
+  // without the portal this modal was trapped inside the scrollable content
+  // column instead of centering over the real viewport — it rendered
+  // hundreds of pixels down the page, off-screen, looking like it "covered
+  // the whole screen" as a bare dark overlay with no visible box.
+  return createPortal(
     <div className="admin-modal-overlay" onClick={onClose}>
       <div className="admin-modal" style={{ maxWidth: width }} onClick={e => e.stopPropagation()}>
         <div className="admin-modal-header">
@@ -86,7 +95,8 @@ function Modal({ title, onClose, children, width = '600px' }) {
         </div>
         <div className="admin-modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -99,17 +109,38 @@ function FormField({ label, children }) {
   );
 }
 
-/* ==================== PDF GENERATION ==================== */
+/* ==================== PDF GENERATION ====================
+   Colors mirror the app's actual design system (src/theme/tokens.js) —
+   brand orange, never red on anything that isn't an error. */
 const PDF_COLORS = {
-  primary: [122, 28, 30],
-  secondary: [185, 28, 28],
-  accent: [220, 38, 38],
-  dark: [17, 24, 39],
-  muted: [107, 114, 128],
-  light: [243, 244, 246],
-  border: [229, 231, 235],
-  white: [255, 255, 255],
+  primary: [232, 131, 58],   // brand orange #E8833A
+  secondary: [201, 106, 40], // primaryDark #C96A28
+  accent: [216, 154, 23],    // gold #D89A17
+  dark: [38, 16, 6],         // ink #261006
+  muted: [138, 114, 99],     // text tertiary #8A7263
+  light: [243, 227, 203],    // surfaceSecondary #F3E3CB
+  border: [227, 207, 176],   // border #E3CFB0
+  white: [255, 253, 250],    // paper #FFFDFA
 };
+
+// Preloaded once so every PDF can stamp the real logo instead of a "PH"
+// text badge. Falls back gracefully if this hasn't resolved yet (only
+// possible if a report is exported within moments of the page loading).
+let cachedLogoDataUrl = null;
+(async () => {
+  try {
+    const res = await fetch('/palengkehublogo.jpg');
+    const blob = await res.blob();
+    cachedLogoDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn('Could not preload PDF logo:', e);
+  }
+})();
 
 function addPdfHeader(doc, title, subtitle) {
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -119,10 +150,21 @@ function addPdfHeader(doc, title, subtitle) {
   doc.rect(0, 42, pageWidth, 3, 'F');
   doc.setFillColor(...PDF_COLORS.white);
   doc.roundedRect(14, 8, 26, 26, 4, 4, 'F');
-  doc.setTextColor(...PDF_COLORS.primary);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('PH', 27, 25, { align: 'center' });
+  if (cachedLogoDataUrl) {
+    try {
+      doc.addImage(cachedLogoDataUrl, 'JPEG', 15, 9, 24, 24, undefined, 'FAST');
+    } catch (e) {
+      doc.setTextColor(...PDF_COLORS.primary);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text('PH', 27, 25, { align: 'center' });
+    }
+  } else {
+    doc.setTextColor(...PDF_COLORS.primary);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('PH', 27, 25, { align: 'center' });
+  }
   doc.setTextColor(...PDF_COLORS.white);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
@@ -273,6 +315,7 @@ export default function AdminDashboard() {
     'price-anomaly': 'Price Anomaly Detection',
     announcements: 'Announcements', complaints: 'Complaint Management',
     reports: 'Reports & Audit', chats: 'Chats',
+    'vendor-applications': 'Vendor Applications', 'vendor-locations': 'Vendor Locations',
   };
 
   return (
@@ -309,6 +352,8 @@ function SectionRenderer({ section, setActiveSection }) {
     case 'complaints': return <ComplaintManagement />;
     case 'chats': return <Chat />;
     case 'reports': return <ReportsAndAudit />;
+    case 'vendor-applications': return <VendorApplications />;
+    case 'vendor-locations': return <VendorLocations />;
     default: return <Overview />;
   }
 }
@@ -340,6 +385,16 @@ function Overview({ onNavigate }) {
         supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       ]);
+      // Supabase query errors land in r[i].error without throwing — the
+      // outer try/catch never saw these, so an RLS/query failure on any one
+      // count silently rendered as "0" (e.g. "0 pending complaints") with
+      // no indication anything was actually wrong.
+      const statLabels = ['vendors', 'customers', 'stalls', 'orders', 'products', 'pending applications', 'pending orders', 'pending complaints'];
+      const failed = r.map((res, i) => res.error ? statLabels[i] : null).filter(Boolean);
+      if (failed.length) {
+        console.error('Overview stats load errors:', failed);
+        toast({ message: `Could not load: ${failed.join(', ')}`, type: 'error' });
+      }
       setStats({ vendors: r[0].count || 0, customers: r[1].count || 0, stalls: r[2].count || 0, orders: r[3].count || 0, products: r[4].count || 0, pendingApps: r[5].count || 0, pendingOrders: r[6].count || 0, pendingComplaints: r[7].count || 0 });
       const { data: recentOrders } = await supabase.from('orders').select('*, customer:consumer_id(full_name), stall:stall_id(stall_name)').order('created_at', { ascending: false }).limit(8);
       setOrders(recentOrders || []);
@@ -451,7 +506,7 @@ function Overview({ onNavigate }) {
       {(stats.pendingApps > 0 || stats.pendingOrders > 0 || stats.pendingComplaints > 0) && (
         <div className="alert-strip">
           {[
-            { v: stats.pendingApps, l: 'vendor applications', section: 'stalls' },
+            { v: stats.pendingApps, l: 'vendor applications', section: 'vendor-applications' },
             { v: stats.pendingOrders, l: 'pending orders', section: 'orders' },
             { v: stats.pendingComplaints, l: 'open complaints', section: 'complaints' },
           ].filter(p => p.v > 0).map(p => (
@@ -613,7 +668,11 @@ function StallManagement() {
   const sections = [...new Set(stalls.map(s => s.section).filter(Boolean))];
 
   const toggleActive = async (stall) => {
-    await supabase.from('stalls').update({ is_active: !stall.is_active }).eq('id', stall.id);
+    const { error } = await supabase.from('stalls').update({ is_active: !stall.is_active }).eq('id', stall.id);
+    if (error) {
+      toast({ message: `Failed to update stall: ${error.message}`, type: 'error' });
+      return;
+    }
     await logAudit('stall_status_change', 'stalls', stall.id, `${stall.stall_name || `Stall #${stall.stall_number}`} ${stall.is_active ? 'deactivated' : 'activated'}`);
     toast({ message: `Stall ${stall.is_active ? 'deactivated' : 'activated'} successfully`, type: 'success' });
     load();
@@ -770,7 +829,11 @@ function UserManagement() {
   });
 
   const toggleActive = async (user) => {
-    await supabase.from('profiles').update({ is_active: user.is_active === false ? true : false }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ is_active: user.is_active === false ? true : false }).eq('id', user.id);
+    if (error) {
+      toast({ message: `Failed to update user: ${error.message}`, type: 'error' });
+      return;
+    }
     await logAudit('user_status_change', 'profiles', user.email, `${user.email} ${user.is_active === false ? 'activated' : 'deactivated'}`);
     toast({ message: `User ${user.is_active === false ? 'activated' : 'deactivated'} successfully`, type: 'success' });
     load();
@@ -785,14 +848,22 @@ function UserManagement() {
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} placeholder="All Statuses" />
       </div>
       <div className="admin-table-wrap">
-        <table className="admin-table">
+        <table className="admin-table admin-table-fixed">
+          <colgroup>
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '24%' }} />
+          </colgroup>
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Registered</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No users found" /></td></tr>
               : filtered.map(u => (
                 <tr key={u.id}>
-                  <td><strong>{u.full_name || 'Unnamed'}</strong></td>
-                  <td>{u.email || 'N/A'}</td>
+                  <td className="cell-truncate"><strong>{u.full_name || 'Unnamed'}</strong></td>
+                  <td className="cell-truncate" title={u.email || ''}>{u.email || 'N/A'}</td>
                   <td><span className="status-badge status-confirmed" style={{ textTransform: 'capitalize' }}>{u.role || 'consumer'}</span></td>
                   <td>{PH_DATE(u.created_at)}</td>
                   <td><span className={`status-badge ${u.is_active === false ? 'status-cancelled' : 'status-completed'}`}>{u.is_active === false ? 'Inactive' : 'Active'}</span></td>
@@ -820,6 +891,418 @@ function UserManagement() {
           </div>
           <div className="modal-actions">
             <button className="btn btn-secondary" onClick={() => setSelected(null)}>Close</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ==================== VENDOR APPLICATIONS ==================== */
+function VendorApplications() {
+  const [applications, setApplications] = useState([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [requesting, setRequesting] = useState(null);
+  const [requestMessage, setRequestMessage] = useState('');
+
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from('vendor_applications')
+      .select('*, applicant:applicant_id(full_name, email, phone)')
+      .order('application_date', { ascending: false });
+    setApplications(data || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = applications.filter(a => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || (a.business_name || '').toLowerCase().includes(q) || (a.applicant?.full_name || '').toLowerCase().includes(q) || (a.applicant?.email || '').toLowerCase().includes(q);
+    const matchStatus = !statusFilter || a.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const approve = async (app) => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from('vendor_applications').update({
+        status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: session?.user?.id || null,
+      }).eq('id', app.id);
+      if (error) { toast({ message: `Failed to approve: ${error.message}`, type: 'error' }); return; }
+      const { error: roleError } = await supabase.from('profiles').update({ role: 'vendor' }).eq('id', app.applicant_id);
+      if (roleError) { toast({ message: `Approved, but failed to grant vendor role: ${roleError.message}`, type: 'error' }); }
+      await logAudit('vendor_application_approved', 'vendor_applications', app.id, `${app.business_name} approved — ${app.applicant?.full_name || app.applicant_id} is now a vendor`);
+      toast({ message: `${app.business_name} approved — applicant is now a vendor`, type: 'success' });
+      setSelected(null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reject = async (app) => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from('vendor_applications').update({
+        status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: session?.user?.id || null,
+      }).eq('id', app.id);
+      if (error) { toast({ message: `Failed to reject: ${error.message}`, type: 'error' }); return; }
+      await logAudit('vendor_application_rejected', 'vendor_applications', app.id, `${app.business_name} rejected`);
+      toast({ message: `${app.business_name} rejected`, type: 'success' });
+      setSelected(null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitResubmissionRequest = async () => {
+    if (!requesting || !requestMessage.trim()) {
+      toast({ message: 'Write a message explaining what to fix', type: 'error' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const { error: appError } = await supabase.from('vendor_applications').update({
+        resubmission_status: 'requested',
+        resubmission_message: requestMessage.trim(),
+        resubmission_requested_at: nowIso,
+      }).eq('id', requesting.id);
+      if (appError) { toast({ message: `Failed to flag application: ${appError.message}`, type: 'error' }); return; }
+
+      const { error } = await supabase.from('notifications').insert({
+        user_id: requesting.applicant_id,
+        type: 'vendor_resubmission',
+        title: 'Update needed on your vendor application',
+        message: requestMessage.trim(),
+        data: { vendor_application_id: requesting.id },
+        is_read: false,
+      });
+      if (error) { toast({ message: `Failed to notify applicant: ${error.message}`, type: 'error' }); return; }
+      await logAudit('vendor_application_resubmission_requested', 'vendor_applications', requesting.id, `Asked ${requesting.applicant?.full_name || requesting.applicant_id} to resubmit: ${requestMessage.trim()}`);
+      toast({ message: 'Applicant notified — application stays pending', type: 'success' });
+      setRequesting(null);
+      setRequestMessage('');
+      setSelected(null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-header">Vendor Applications</div>
+      <div className="admin-toolbar-row">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search by business name or applicant..." />
+        <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }]} placeholder="All Statuses" />
+      </div>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Business</th><th>Applicant</th><th>Category</th><th>Applied</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No vendor applications found" /></td></tr>
+              : filtered.map(a => (
+                <tr key={a.id}>
+                  <td><strong>{a.business_name || 'N/A'}</strong><div className="table-subtext">{a.address || ''}</div></td>
+                  <td>{a.applicant?.full_name || 'N/A'}<div className="text-subtext">{a.applicant?.email || ''}</div></td>
+                  <td><span className="status-badge status-confirmed">{a.category || 'N/A'}</span></td>
+                  <td>{PH_DATE(a.application_date)}</td>
+                  <td>
+                    <span className={`status-badge ${a.status === 'approved' ? 'status-completed' : a.status === 'rejected' ? 'status-cancelled' : 'status-pending'}`} style={{ textTransform: 'capitalize' }}>{a.status}</span>
+                    {a.resubmission_status === 'requested' && (
+                      <div className="status-badge status-pending" style={{ marginTop: '4px' }}>Awaiting Resubmission</div>
+                    )}
+                    {a.resubmission_status === 'resubmitted' && (
+                      <div className="status-badge status-confirmed" style={{ marginTop: '4px' }}>Resubmitted — Review</div>
+                    )}
+                  </td>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="btn btn-sm btn-primary" onClick={() => setSelected(a)}>View Details</button>
+                      {a.status === 'pending' && (
+                        <>
+                          <button className="btn btn-sm btn-success" onClick={() => approve(a)} disabled={busy}>Approve</button>
+                          <button className="btn btn-sm btn-danger" onClick={() => reject(a)} disabled={busy}>Reject</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <Modal title="Vendor Application" onClose={() => setSelected(null)}>
+          <div className="user-detail-grid">
+            <div><strong>Business Name:</strong> {selected.business_name || 'N/A'}</div>
+            <div><strong>Category:</strong> {selected.category || 'N/A'}</div>
+            <div><strong>Applicant:</strong> {selected.applicant?.full_name || 'N/A'}</div>
+            <div><strong>Email:</strong> {selected.applicant?.email || 'N/A'}</div>
+            <div><strong>Phone:</strong> {selected.applicant?.phone || 'N/A'}</div>
+            <div><strong>Address / Stall:</strong> {selected.address || 'N/A'}</div>
+            <div><strong>Experience:</strong> {selected.experience || 'N/A'}</div>
+            <div><strong>Applied:</strong> {PH_DATETIME(selected.application_date)}</div>
+            <div><strong>Status:</strong> <span style={{ textTransform: 'capitalize' }}>{selected.status}</span></div>
+            {selected.reviewed_at && <div><strong>Reviewed:</strong> {PH_DATETIME(selected.reviewed_at)}</div>}
+          </div>
+          {selected.notes && (
+            <div style={{ marginTop: '16px' }}>
+              <strong>Notes:</strong>
+              <p style={{ marginTop: '4px', color: 'var(--admin-text-secondary)' }}>{selected.notes}</p>
+            </div>
+          )}
+          {selected.resubmission_status === 'requested' && (
+            <div style={{ marginTop: '16px', padding: '12px', background: 'var(--gold-soft, #FBEFD2)', borderRadius: 'var(--admin-radius-sm)', fontSize: '0.85rem' }}>
+              <strong>Awaiting resubmission</strong> — requested {PH_DATETIME(selected.resubmission_requested_at)}
+              <p style={{ marginTop: '4px', color: 'var(--admin-text-secondary)' }}>"{selected.resubmission_message}"</p>
+            </div>
+          )}
+          {selected.resubmission_status === 'resubmitted' && (
+            <div style={{ marginTop: '16px', padding: '12px', background: 'var(--brand-soft, #FBE7D4)', borderRadius: 'var(--admin-radius-sm)', fontSize: '0.85rem' }}>
+              <strong>Applicant resubmitted documents</strong> — {PH_DATETIME(selected.resubmitted_at)}. The documents below are the updated set — please review again.
+              <p style={{ marginTop: '4px', color: 'var(--admin-text-secondary)' }}>Original request: "{selected.resubmission_message}"</p>
+            </div>
+          )}
+          {Array.isArray(selected.documents) && selected.documents.length > 0 ? (
+            <div style={{ marginTop: '16px' }}>
+              <strong>Documents:</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {selected.documents.map((doc, i) => (
+                  <a key={i} href={doc.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
+                    {doc.type === 'valid_id' ? 'Valid ID' : doc.type === 'business_permit' ? 'Business Permit' : `Document ${i + 1}`}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: '16px', padding: '12px', background: 'var(--gold-soft, #FBEFD2)', borderRadius: 'var(--admin-radius-sm)', fontSize: '0.85rem', color: 'var(--admin-text-secondary)' }}>
+              No documents on file — this application can't really be verified yet. Use "Request Resubmission" to ask the applicant to upload their ID and business permit.
+            </div>
+          )}
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setSelected(null)}>Close</button>
+            {selected.status === 'pending' && (
+              <>
+                <button className="btn btn-secondary" onClick={() => { setRequesting(selected); setRequestMessage(''); }} disabled={busy}>Request Resubmission</button>
+                <button className="btn btn-danger" onClick={() => reject(selected)} disabled={busy}>Reject</button>
+                <button className="btn btn-success" onClick={() => approve(selected)} disabled={busy}>Approve</button>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {requesting && (
+        <Modal title="Request Resubmission" onClose={() => setRequesting(null)}>
+          <p style={{ marginBottom: '12px', color: 'var(--admin-text-secondary)' }}>
+            {requesting.applicant?.full_name || 'The applicant'} will get a notification asking them to fix and resubmit. The application stays pending — nothing is approved or rejected.
+          </p>
+          <FormField label="Message to applicant">
+            <textarea
+              className="form-input"
+              rows={4}
+              value={requestMessage}
+              onChange={e => setRequestMessage(e.target.value)}
+              placeholder="e.g. Please upload a clear photo of your valid government ID and business permit — we couldn't verify your application without them."
+            />
+          </FormField>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setRequesting(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitResubmissionRequest} disabled={busy || !requestMessage.trim()}>Send Request</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ==================== VENDOR LOCATIONS ==================== */
+const LOCATION_REVIEW_THRESHOLD_METERS = 15;
+
+function VendorLocations() {
+  const [tab, setTab] = useState('queue');
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [flagging, setFlagging] = useState(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [viewingMap, setViewingMap] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('stall_locations')
+      .select('*, stall:stall_id(id, stall_number, stall_name, section, vendor:vendor_id(id, full_name))')
+      .eq('is_current', true)
+      .order('accuracy_meters', { ascending: false, nullsFirst: false });
+    setLocations(data || []);
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const queue = locations.filter(l => !l.verified_by_admin || (l.accuracy_meters != null && l.accuracy_meters > LOCATION_REVIEW_THRESHOLD_METERS));
+  const rows = tab === 'queue' ? queue : locations;
+
+  const approve = async (loc) => {
+    setBusy(true);
+    try {
+      const { error } = await supabase.from('stall_locations').update({
+        verified_by_admin: true, verified_at: new Date().toISOString(),
+      }).eq('id', loc.id);
+      if (error) { toast({ message: `Failed to approve location: ${error.message}`, type: 'error' }); return; }
+      await logAudit('stall_location_approved', 'stall_locations', loc.id, `${loc.stall?.stall_name || `Stall #${loc.stall?.stall_number}`} location verified`);
+      toast({ message: 'Stall location approved', type: 'success' });
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitFlag = async () => {
+    if (!flagging || !flagReason.trim()) {
+      toast({ message: 'Describe why this stall needs to re-register its location', type: 'error' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from('stall_locations').update({
+        reregister_reason: flagReason.trim(), verified_by_admin: false,
+      }).eq('id', flagging.id);
+      if (error) { toast({ message: `Failed to flag: ${error.message}`, type: 'error' }); return; }
+
+      const vendorId = flagging.stall?.vendor?.id;
+      if (vendorId) {
+        await supabase.from('notifications').insert({
+          user_id: vendorId,
+          type: 'stall_location_reregister',
+          title: 'Stall location needs re-registration',
+          message: flagReason.trim(),
+          data: { stall_id: flagging.stall_id, location_id: flagging.id },
+          is_read: false,
+        });
+      }
+      await logAudit('stall_location_flagged', 'stall_locations', flagging.id, `${flagging.stall?.stall_name || `Stall #${flagging.stall?.stall_number}`} flagged for re-registration: ${flagReason.trim()}`);
+      toast({ message: 'Vendor notified to re-register their location', type: 'success' });
+      setFlagging(null);
+      setFlagReason('');
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-header">Vendor Locations</div>
+      <div className="report-tabs" role="tablist" aria-label="Vendor location sections" style={{ marginBottom: '16px' }}>
+        <button role="tab" aria-selected={tab === 'queue'} className={`report-tab${tab === 'queue' ? ' active' : ''}`} onClick={() => setTab('queue')}>
+          Needs Review {queue.length > 0 && `(${queue.length})`}
+        </button>
+        <button role="tab" aria-selected={tab === 'all'} className={`report-tab${tab === 'all' ? ' active' : ''}`} onClick={() => setTab('all')}>
+          All Stalls
+        </button>
+      </div>
+
+      {loading ? <SkeletonTable rows={5} cols={7} /> : (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead><tr><th>Stall</th><th>Vendor</th><th>Coordinates</th><th>Accuracy</th><th>Captured By</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {rows.length === 0 ? <tr><td colSpan="7"><EmptyState message={tab === 'queue' ? 'Nothing needs review right now' : 'No stall locations found'} /></td></tr>
+                : rows.map(l => {
+                  const needsReview = !l.verified_by_admin || (l.accuracy_meters != null && l.accuracy_meters > LOCATION_REVIEW_THRESHOLD_METERS);
+                  return (
+                    <tr key={l.id}>
+                      <td><strong>{l.stall?.stall_name || `Stall #${l.stall?.stall_number}`}</strong><div className="table-subtext">{l.stall?.section || ''}</div></td>
+                      <td>{l.stall?.vendor?.full_name || 'N/A'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="coords-map-trigger"
+                          onClick={() => setViewingMap(l)}
+                          title="View this pin on a map"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {Number(l.lat).toFixed(6)}, {Number(l.lng).toFixed(6)}
+                        </button>
+                      </td>
+                      <td>{l.accuracy_meters != null ? `±${Math.round(l.accuracy_meters)}m` : (l.manually_adjusted ? 'Manual' : 'N/A')}</td>
+                      <td style={{ textTransform: 'capitalize' }}>{l.captured_by || 'N/A'}</td>
+                      <td><span className={`status-badge ${needsReview ? 'status-pending' : 'status-completed'}`}>{needsReview ? 'Needs Review' : 'Verified'}</span></td>
+                      <td>
+                        <div className="action-buttons">
+                          <button className="btn btn-sm btn-success" onClick={() => approve(l)} disabled={busy}>Approve</button>
+                          <button className="btn btn-sm btn-danger" onClick={() => { setFlagging(l); setFlagReason(''); }} disabled={busy}>Flag / Reject</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {flagging && (
+        <Modal title="Flag Location for Re-registration" onClose={() => setFlagging(null)}>
+          <p style={{ marginBottom: '12px', color: 'var(--admin-text-secondary)' }}>
+            {flagging.stall?.stall_name || `Stall #${flagging.stall?.stall_number}`} will be asked to re-pin their stall location. Explain why so the vendor knows what to fix.
+          </p>
+          <FormField label="Reason">
+            <textarea
+              className="form-input"
+              rows={4}
+              value={flagReason}
+              onChange={e => setFlagReason(e.target.value)}
+              placeholder="e.g. Pin lands outside the market building — please re-capture standing at your stall."
+            />
+          </FormField>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setFlagging(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={submitFlag} disabled={busy || !flagReason.trim()}>Notify Vendor</button>
+          </div>
+        </Modal>
+      )}
+
+      {viewingMap && (
+        <Modal
+          title={`${viewingMap.stall?.stall_name || `Stall #${viewingMap.stall?.stall_number}`} — Pin Location`}
+          onClose={() => setViewingMap(null)}
+          width="600px"
+        >
+          <p style={{ marginBottom: '12px', color: 'var(--admin-text-secondary)', fontSize: '0.9rem' }}>
+            Check the pin actually lands inside or right next to the market building — that's what "verified" is standing for.
+          </p>
+          <div style={{ borderRadius: 'var(--admin-radius)', overflow: 'hidden', border: '1px solid var(--admin-border)' }}>
+            <iframe
+              title="Stall pin location"
+              width="100%"
+              height="360"
+              style={{ border: 0, display: 'block' }}
+              loading="lazy"
+              src={`https://www.google.com/maps?q=${viewingMap.lat},${viewingMap.lng}&z=18&output=embed`}
+            />
+          </div>
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setViewingMap(null)}>Close</button>
+            <a
+              className="btn btn-primary"
+              href={`https://www.google.com/maps/search/?api=1&query=${viewingMap.lat},${viewingMap.lng}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open in Google Maps
+            </a>
           </div>
         </Modal>
       )}
@@ -877,23 +1360,20 @@ function ProductCategories() {
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Stock</th><th>Status</th></tr></thead>
+          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Status</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No products found" /></td></tr>
-              : filtered.map(p => {
-                // The DB column is 'stock_quantity' (nullable); map to 'stock' for the UI
-                const isLow = (p.stock_quantity ?? 0) < 5;
-                return (
-                  <tr key={p.id}>
-                    <td><strong>{p.name}</strong></td>
-                    <td><span className="status-badge status-confirmed">{p.category || 'Uncategorized'}</span></td>
-                    <td>{p.stall?.stall_name || p.stall?.stall_number || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
-                    <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
-                    <td>{p.stock_quantity ?? 0}{isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low</span>}</td>
-                    <td><span className={`status-badge ${isLow ? 'status-pending' : 'status-completed'}`}>{isLow ? 'Reorder' : 'In Stock'}</span></td>
-                  </tr>
-                );
-              })}
+            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No products found" /></td></tr>
+              : filtered.map(p => (
+                <tr key={p.id}>
+                  <td><strong>{p.name}</strong></td>
+                  <td><span className="status-badge status-confirmed">{p.category || 'Uncategorized'}</span></td>
+                  <td>{p.stall?.stall_name || p.stall?.stall_number || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
+                  <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
+                  {/* A palengke doesn't track live stock counts — the vendor's own
+                      is_available toggle (set in the vendor app) is the real signal. */}
+                  <td><span className={`status-badge ${p.is_available === false ? 'status-cancelled' : 'status-completed'}`}>{p.is_available === false ? 'Not Available' : 'Available'}</span></td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
@@ -918,8 +1398,17 @@ function PriceMonitor() {
       const [p, s, ph] = await Promise.all([
         supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
         supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
-        supabase.from('price_history').select('*').catch(() => ({ data: [] })),
+        supabase.from('price_history').select('*'),
       ]);
+      if (p.error) throw p.error;
+      if (s.error) throw s.error;
+      // price_history failing shouldn't block the whole page (products/stalls
+      // still render), but it silently swallowing into an empty result made
+      // a real query failure look identical to "no price history yet".
+      if (ph.error) {
+        console.error('PriceMonitor price_history load error:', ph.error.message);
+        toast({ message: `Could not load price history: ${ph.error.message}`, type: 'error' });
+      }
       const histByProduct = {};
       (ph.data || []).forEach(h => { if (!histByProduct[h.product_id]) histByProduct[h.product_id] = h; });
       const productsWithHistory = (p.data || []).map(prod => ({
@@ -990,11 +1479,10 @@ function PriceMonitor() {
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Last Updated</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Last Updated</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="8"><EmptyState message="No products found" /></td></tr>
+            {filtered.length === 0 ? <tr><td colSpan="7"><EmptyState message="No products found" /></td></tr>
               : filtered.map(p => {
-                                const isLow = (p.stock_quantity ?? 0) < 5;
                 const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
                 return (
                   <tr key={p.id}>
@@ -1003,8 +1491,9 @@ function PriceMonitor() {
                     <td>{p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
                     <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
                     <td>{lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A'}</td>
-                    <td>{p.stock_quantity ?? 0}{isLow && <span className="status-badge status-pending" style={{ marginLeft: '8px' }}>Low</span>}</td>
-                    <td><span className={`status-badge ${isLow ? 'status-pending' : 'status-completed'}`}>{isLow ? 'Reorder' : 'In Stock'}</span></td>
+                    {/* A palengke doesn't track live stock counts — the vendor's own
+                        is_available toggle (set in the vendor app) is the real signal. */}
+                    <td><span className={`status-badge ${p.is_available === false ? 'status-cancelled' : 'status-completed'}`}>{p.is_available === false ? 'Not Available' : 'Available'}</span></td>
                     <td><button className="btn btn-sm btn-primary" onClick={() => viewProduct(p)}>View History</button></td>
                   </tr>
                 );
@@ -1378,7 +1867,14 @@ function ComplaintManagement() {
   const [resolution, setResolution] = useState('');
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('complaints').select('*, user:profiles(full_name, email)').order('created_at', { ascending: false });
+    // complaints has two FKs into profiles (user_id and resolved_by), so
+    // the implicit "profiles(...)" embed is ambiguous (PGRST201) and
+    // errors the whole query — has to name which FK to follow.
+    const { data, error } = await supabase.from('complaints').select('*, user:profiles!complaints_user_id_fkey(full_name, email), stall:stall_id(stall_name, stall_number)').order('created_at', { ascending: false });
+    if (error) {
+      toast({ message: `Failed to load complaints: ${error.message}`, type: 'error' });
+      return;
+    }
     setComplaints(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1391,7 +1887,8 @@ function ComplaintManagement() {
   ];
 
   const updateStatus = async (status) => {
-    await supabase.from('complaints').update({ status, resolution: resolution }).eq('id', selected.id);
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.from('complaints').update({ status, resolution, resolved_by: session?.user?.id || null, resolved_at: new Date().toISOString() }).eq('id', selected.id);
     await logAudit('complaint_status_change', 'complaints', selected.id, `Status changed to ${status}`);
     setSelected(null);
     setResolution('');
@@ -1399,9 +1896,12 @@ function ComplaintManagement() {
     load();
   };
 
+  // There is no "subject" column — a complaint is just a free-text
+  // message tied to a stall, so the row title falls back to the stall
+  // name and search matches against the message body instead.
   const filtered = complaints.filter(c => {
     const q = search.toLowerCase();
-    const matchSearch = !q || (c.subject || '').toLowerCase().includes(q) || (c.user?.full_name || '').toLowerCase().includes(q);
+    const matchSearch = !q || (c.message || '').toLowerCase().includes(q) || (c.user?.full_name || '').toLowerCase().includes(q) || (c.stall?.stall_name || '').toLowerCase().includes(q);
     const matchStatus = !statusFilter || c.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -1415,14 +1915,15 @@ function ComplaintManagement() {
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Subject</th><th>User</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+          <thead><tr><th>Stall</th><th>Message</th><th>User</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No complaints found" /></td></tr>
+            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No complaints found" /></td></tr>
               : filtered.map(c => {
                 const t = types.find(t => t.value === c.status) || types[0];
                 return (
                   <tr key={c.id}>
-                    <td><strong>{c.subject || 'No subject'}</strong></td>
+                    <td><strong>{c.stall?.stall_name || `Stall #${c.stall?.stall_number}` || 'N/A'}</strong></td>
+                    <td style={{ maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.message || 'No message'}</td>
                     <td>{c.user?.full_name || 'N/A'}</td>
                     <td><span className={`status-badge ${t.cls}`}>{t.label}</span></td>
                     <td>{PH_DATE(c.created_at)}</td>
@@ -1437,14 +1938,20 @@ function ComplaintManagement() {
       {selected && (
         <Modal title="Complaint Details" onClose={() => setSelected(null)} width="700px">
           <div className="complaint-detail">
-            <div className="complaint-detail-row"><strong>Subject:</strong> {selected.subject || 'N/A'}</div>
+            <div className="complaint-detail-row"><strong>Stall:</strong> {selected.stall?.stall_name || `Stall #${selected.stall?.stall_number}` || 'N/A'}</div>
             <div className="complaint-detail-row"><strong>User:</strong> {selected.user?.full_name || 'N/A'} ({selected.user?.email || 'N/A'})</div>
             <div className="complaint-detail-row"><strong>Status:</strong> {types.find(t => t.value === selected.status)?.label || selected.status}</div>
             <div className="complaint-detail-row"><strong>Date:</strong> {PH_DATETIME(selected.created_at)}</div>
             <div className="complaint-description">
-              <strong>Description:</strong><br />
-              {selected.description || 'No description provided.'}
+              <strong>Message:</strong><br />
+              {selected.message || 'No message provided.'}
             </div>
+            {selected.resolution && (
+              <div className="complaint-description">
+                <strong>Previous Resolution Notes:</strong><br />
+                {selected.resolution}
+              </div>
+            )}
             <FormField label="Resolution">
               <textarea className="form-input" value={resolution} onChange={e => setResolution(e.target.value)} placeholder="Enter resolution details..." />
             </FormField>
@@ -1826,7 +2333,12 @@ function AuditLogs() {
   const [actionFilter, setActionFilter] = useState('');
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('audit_log').select('*, user:profiles(full_name)').order('created_at', { ascending: false }).limit(200);
+    const { data, error } = await supabase.from('audit_log').select('*, user:profiles(full_name)').order('created_at', { ascending: false }).limit(200);
+    if (error) {
+      console.error('AuditLogs load error:', error.message);
+      toast({ message: `Failed to load audit logs: ${error.message}`, type: 'error' });
+      return;
+    }
     setLogs(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1881,21 +2393,33 @@ function AnalyticsReports() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [exporting, setExporting] = useState(null);
+  // Each report card gets its own independent filter — setting a category
+  // on Product Price Report shouldn't silently narrow what Product
+  // Performance exports next, so these live in one object keyed by report
+  // rather than sharing state across cards.
+  const [filters, setFilters] = useState({
+    products: '', priceHistory: '', pricePerProduct: '', productPerformance: '',
+    stalls: '', orders: '', sales: '', vendorPerformance: '', customerAnalytics: '',
+  });
+  const setFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, s, o, oi, ph] = await Promise.all([
+      const [p, s, o, ph] = await Promise.all([
         supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
         supabase.from('stalls').select('*, vendor:profiles(full_name, email)').order('stall_number'),
-        supabase.from('orders').select('*, customer:consumer_id(full_name, email), stall:stall_id(stall_name, stall_number)').order('created_at', { ascending: false }).limit(1000),
-        supabase.from('order_items').select('*').order('created_at', { ascending: false }).limit(2000),
-        supabase.from('price_history').select('*, product:product_id(name)').order('changed_at', { ascending: false }).limit(500),
+        supabase.from('orders').select('*, customer:consumer_id(full_name, email), stall:stall_id(stall_name, stall_number, section)').order('created_at', { ascending: false }).limit(1000),
+        supabase.from('price_history').select('*, product:product_id(name, category)').order('changed_at', { ascending: false }).limit(500),
       ]);
       setProducts(p.data || []);
       setStalls(s.data || []);
       setOrders(o.data || []);
-      setOrderItems(oi.data || []);
+      // There is no order_items table — line items live as a JSONB
+      // `items` array embedded on each order. Flatten completed orders'
+      // items here so calculateProductPerformance has real data instead
+      // of the permanently-empty result the missing table always gave it.
+      setOrderItems((o.data || []).filter(x => x.status === 'completed').flatMap(x => x.items || []));
       setPriceHistory(ph.data || []);
       // Sales data
       const completed = (o.data || []).filter(x => x.status === 'completed');
@@ -1913,6 +2437,16 @@ function AnalyticsReports() {
     }
   }, []);
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Category/section-insensitive-dedupe, matching the pattern already used
+  // in ProductCategories — "Meat" and "meat" collapse to one option.
+  const dedupeCaseInsensitive = (values) => Object.values(
+    [...new Set(values.filter(Boolean).map(v => v.trim()))]
+      .reduce((acc, v) => { acc[v.toLowerCase()] = v; return acc; }, {})
+  ).sort((a, b) => a.localeCompare(b));
+
+  const categoryOptions = dedupeCaseInsensitive(products.map(p => p.category));
+  const sectionOptions = dedupeCaseInsensitive(stalls.map(s => s.section));
 
   // Apply date range filter to orders
   const getFilteredOrders = () => {
@@ -1945,116 +2479,155 @@ function AnalyticsReports() {
     return Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
   })();
 
+  // Applies the category-shaped reports' filter (case-insensitive, "" = all).
+  const byCategory = (list, filterKey) => filters[filterKey]
+    ? list.filter(x => (x.category || '').toLowerCase() === filters[filterKey].toLowerCase())
+    : list;
+  // Applies the section-shaped reports' filter, against either a stall row
+  // itself (`.section`) or a row that carries a joined `.stall.section`.
+  const bySection = (list, filterKey, getSection) => filters[filterKey]
+    ? list.filter(x => (getSection(x) || '').toLowerCase() === filters[filterKey].toLowerCase())
+    : list;
+
   const handleExport = async (type) => {
     setExporting(type);
     try {
       if (type === 'products-pdf') {
-        const rows = products.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.stock_quantity ?? 0]);
+        const scoped = byCategory(products, 'products');
+        const rows = scoped.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.is_available === false ? 'Not Available' : 'Available']);
         generatePdf({
           title: 'Product Price Report',
-          subtitle: `Complete list of products and their current prices (${formatDateRange(customStart, customEnd)})`,
-          headers: ['Product', 'Category', 'Stall', 'Price', 'Stock'],
+          subtitle: `Complete list of products and their current prices${filters.products ? ` — ${filters.products}` : ''} (${formatDateRange(customStart, customEnd)})`,
+          headers: ['Product', 'Category', 'Stall', 'Price', 'Availability'],
           rows,
           filename: `palengkehub_products_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Products: ${products.length}`, `Generated by PalengkeHub Admin`],
+          summary: [`Total Products: ${scoped.length}`, `Generated by PalengkeHub Admin`],
         });
         toast({ message: 'Product Price Report generated successfully', type: 'success' });
       } else if (type === 'products-csv') {
+        const scoped = byCategory(products, 'products');
         exportToCSV({
-          data: products,
+          data: scoped.map(p => ({ ...p, availability: p.is_available === false ? 'Not Available' : 'Available', stall_name: p.stall?.stall_name || 'N/A' })),
           filename: `palengkehub_products_${formatDateRange(customStart, customEnd)}.csv`,
-          headers: ['name', 'category', 'price', 'stock_quantity', 'stall_name'],
+          headers: ['name', 'category', 'price', 'availability', 'stall_name'],
         });
         toast({ message: 'Product data exported to CSV', type: 'success' });
       } else if (type === 'stalls-pdf') {
-        const rows = stalls.map(s => [s.stall_name || `Stall #${s.stall_number}`, s.stall_number, s.section || 'N/A', s.floor || 'N/A', s.location || 'N/A', s.vendor?.full_name || 'Unassigned', s.is_active ? 'Active' : 'Inactive']);
+        const scoped = bySection(stalls, 'stalls', s => s.section);
+        const rows = scoped.map(s => [s.stall_name || `Stall #${s.stall_number}`, s.stall_number, s.section || 'N/A', s.floor || 'N/A', s.location || 'N/A', s.vendor?.full_name || 'Unassigned', s.is_active ? 'Active' : 'Inactive']);
         generatePdf({
           title: 'Stall Report',
-          subtitle: 'Complete list of market stalls',
+          subtitle: `Complete list of market stalls${filters.stalls ? ` — ${filters.stalls}` : ''}`,
           headers: ['Stall Name', 'Number', 'Section', 'Floor', 'Location', 'Vendor', 'Status'],
           rows,
           filename: `palengkehublog_stalls_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Stalls: ${stalls.length}`, `Active: ${stalls.filter(s => s.is_active).length}`, `Inactive: ${stalls.filter(s => !s.is_active).length}`],
+          summary: [`Total Stalls: ${scoped.length}`, `Active: ${scoped.filter(s => s.is_active).length}`, `Inactive: ${scoped.filter(s => !s.is_active).length}`],
         });
         toast({ message: 'Stall Report generated successfully', type: 'success' });
       } else if (type === 'stalls-csv') {
+        const scoped = bySection(stalls, 'stalls', s => s.section);
         exportToCSV({
-          data: stalls,
+          data: scoped,
           filename: `palengkehublog_stalls_${formatDateRange(customStart, customEnd)}.csv`,
           headers: ['stall_name', 'stall_number', 'section', 'floor', 'location', 'is_active'],
         });
         toast({ message: 'Stall data exported to CSV', type: 'success' });
       } else if (type === 'orders-pdf') {
-        const rows = filteredOrders.map(o => [`#${o.order_number?.slice(-8) || String(o.id).slice(-6)}`, o.status, `₱${PH(o.total_amount || o.total)}`, PH_DATE(o.created_at), o.customer?.full_name || 'N/A', o.stall?.stall_name || 'N/A']);
+        const scoped = bySection(filteredOrders, 'orders', o => o.stall?.section);
+        const scopedCompleted = scoped.filter(o => o.status === 'completed');
+        const rows = scoped.map(o => [`#${o.order_number?.slice(-8) || String(o.id).slice(-6)}`, o.status, `₱${PH(o.total_amount || o.total)}`, PH_DATE(o.created_at), o.customer?.full_name || 'N/A', o.stall?.stall_name || 'N/A']);
         generatePdf({
           title: 'Order Report',
-          subtitle: `All orders (${filteredOrders.length} records)`,
+          subtitle: `All orders${filters.orders ? ` — ${filters.orders}` : ''} (${scoped.length} records)`,
           headers: ['Order #', 'Status', 'Total', 'Date', 'Customer', 'Stall'],
           rows,
           filename: `palengkehublog_orders_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Orders: ${filteredOrders.length}`, `Total Revenue: ₱${PH(filteredCompleted.reduce((s, o) => s + parseFloat(o.total_amount || o.total || 0), 0))}`],
+          summary: [`Total Orders: ${scoped.length}`, `Total Revenue: ₱${PH(scopedCompleted.reduce((s, o) => s + parseFloat(o.total_amount || o.total || 0), 0))}`],
         });
         toast({ message: 'Order Report generated successfully', type: 'success' });
       } else if (type === 'orders-csv') {
+        const scoped = bySection(filteredOrders, 'orders', o => o.stall?.section);
         exportToCSV({
-          data: filteredOrders,
+          data: scoped,
           filename: `palengkehublog_orders_${formatDateRange(customStart, customEnd)}.csv`,
           headers: ['order_number', 'status', 'total_amount', 'created_at', 'customer_name', 'stall_name'],
         });
         toast({ message: 'Order data exported to CSV', type: 'success' });
       } else if (type === 'sales-pdf') {
-        const rows = filteredSales.map(s => [s.date, `₱${PH(s.total)}`]);
+        const scopedCompleted = bySection(filteredCompleted, 'sales', o => o.stall?.section);
+        const scopedSales = (() => {
+          const byDate = {};
+          scopedCompleted.forEach(x => {
+            const d = (x.created_at || '').split('T')[0];
+            byDate[d] = (byDate[d] || 0) + parseFloat(x.total_amount || 0);
+          });
+          return Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
+        })();
+        const rows = scopedSales.map(s => [s.date, `₱${PH(s.total)}`]);
         generatePdf({
           title: 'Sales Report',
-          subtitle: `Completed sales by date (${filteredCompleted.length} transactions)`,
+          subtitle: `Completed sales by date${filters.sales ? ` — ${filters.sales}` : ''} (${scopedCompleted.length} transactions)`,
           headers: ['Date', 'Total Sales'],
           rows,
           filename: `palengkehublog_sales_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Sales: ₱${PH(filteredSales.reduce((s, x) => s + x.total, 0))}`, `Total Transactions: ${filteredCompleted.length}`],
+          summary: [`Total Sales: ₱${PH(scopedSales.reduce((s, x) => s + x.total, 0))}`, `Total Transactions: ${scopedCompleted.length}`],
         });
         toast({ message: 'Sales Report generated successfully', type: 'success' });
       } else if (type === 'sales-csv') {
+        const scopedCompleted = bySection(filteredCompleted, 'sales', o => o.stall?.section);
+        const scopedSales = (() => {
+          const byDate = {};
+          scopedCompleted.forEach(x => {
+            const d = (x.created_at || '').split('T')[0];
+            byDate[d] = (byDate[d] || 0) + parseFloat(x.total_amount || 0);
+          });
+          return Object.entries(byDate).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
+        })();
         exportToCSV({
-          data: filteredSales,
+          data: scopedSales,
           filename: `palengkehublog_sales_${formatDateRange(customStart, customEnd)}.csv`,
           headers: ['date', 'total'],
         });
         toast({ message: 'Sales data exported to CSV', type: 'success' });
       } else if (type === 'price-history-pdf') {
-        const rows = priceHistory.map(h => [h.product?.name || 'Unknown', `₱${PH(h.previous_price)}`, `₱${PH(h.new_price)}`, PH_DATETIME(h.changed_at)]);
+        const scoped = byCategory(priceHistory.map(h => ({ ...h, category: h.product?.category })), 'priceHistory');
+        const rows = scoped.map(h => [h.product?.name || 'Unknown', `₱${PH(h.previous_price)}`, `₱${PH(h.new_price)}`, PH_DATETIME(h.changed_at)]);
         generatePdf({
           title: 'Price Change Report',
-          subtitle: 'Historical price changes per product',
+          subtitle: `Historical price changes per product${filters.priceHistory ? ` — ${filters.priceHistory}` : ''}`,
           headers: ['Product', 'Previous Price', 'New Price', 'Date Changed'],
           rows,
           filename: `palengkehublog_price_changes_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Price Changes: ${priceHistory.length}`],
+          summary: [`Total Price Changes: ${scoped.length}`],
         });
         toast({ message: 'Price Change Report generated successfully', type: 'success' });
       } else if (type === 'price-history-csv') {
+        const scoped = byCategory(priceHistory.map(h => ({ ...h, category: h.product?.category, product_name: h.product?.name })), 'priceHistory');
         exportToCSV({
-          data: priceHistory,
+          data: scoped,
           filename: `palengkehublog_price_changes_${formatDateRange(customStart, customEnd)}.csv`,
           headers: ['product_name', 'previous_price', 'new_price', 'changed_at'],
         });
         toast({ message: 'Price history exported to CSV', type: 'success' });
       } else if (type === 'price-per-product-pdf') {
-        const rows = products.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
+        const scoped = byCategory(products, 'pricePerProduct');
+        const rows = scoped.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
         generatePdf({
           title: 'Price Per Product Report',
-          subtitle: 'Current price of each product per stall',
+          subtitle: `Current price of each product per stall${filters.pricePerProduct ? ` — ${filters.pricePerProduct}` : ''}`,
           headers: ['Product', 'Category', 'Price', 'Stall'],
           rows,
           filename: `palengkehublog_price_per_product_${formatDateRange(customStart, customEnd)}.pdf`,
-          summary: [`Total Products: ${products.length}`],
+          summary: [`Total Products: ${scoped.length}`],
         });
         toast({ message: 'Price Per Product Report generated successfully', type: 'success' });
       } else if (type === 'vendor-performance-pdf') {
-        const vendorPerf = calculateVendorPerformance(stalls, filteredOrders);
+        const scopedStalls = bySection(stalls, 'vendorPerformance', s => s.section);
+        const vendorPerf = calculateVendorPerformance(scopedStalls, filteredOrders);
         const rows = vendorPerf.map(v => [v.stallName, v.vendor, v.section, `₱${PH(v.totalRevenue)}`, v.orderCount, v.completedOrders]);
         generatePdf({
           title: 'Vendor Performance Report',
-          subtitle: 'Revenue and order count by vendor/stall',
+          subtitle: `Revenue and order count by vendor/stall${filters.vendorPerformance ? ` — ${filters.vendorPerformance}` : ''}`,
           headers: ['Stall', 'Vendor', 'Section', 'Revenue', 'Total Orders', 'Completed'],
           rows,
           filename: `palengkehublog_vendor_performance_${formatDateRange(customStart, customEnd)}.pdf`,
@@ -2062,7 +2635,8 @@ function AnalyticsReports() {
         });
         toast({ message: 'Vendor Performance Report generated successfully', type: 'success' });
       } else if (type === 'vendor-performance-csv') {
-        const vendorPerf = calculateVendorPerformance(stalls, filteredOrders);
+        const scopedStalls = bySection(stalls, 'vendorPerformance', s => s.section);
+        const vendorPerf = calculateVendorPerformance(scopedStalls, filteredOrders);
         exportToCSV({
           data: vendorPerf,
           filename: `palengkehublog_vendor_performance_${formatDateRange(customStart, customEnd)}.csv`,
@@ -2070,11 +2644,12 @@ function AnalyticsReports() {
         });
         toast({ message: 'Vendor performance exported to CSV', type: 'success' });
       } else if (type === 'customer-analytics-pdf') {
-        const customerData = calculateCustomerAnalytics(filteredOrders);
+        const scoped = bySection(filteredOrders, 'customerAnalytics', o => o.stall?.section);
+        const customerData = calculateCustomerAnalytics(scoped);
         const rows = customerData.map(c => [c.customerName, `₱${PH(c.totalSpent)}`, c.orderCount]);
         generatePdf({
           title: 'Customer Analytics Report',
-          subtitle: 'Top customers by total spending',
+          subtitle: `Top customers by total spending${filters.customerAnalytics ? ` — ${filters.customerAnalytics}` : ''}`,
           headers: ['Customer', 'Total Spent', 'Order Count'],
           rows,
           filename: `palengkehublog_customer_analytics_${formatDateRange(customStart, customEnd)}.pdf`,
@@ -2082,7 +2657,8 @@ function AnalyticsReports() {
         });
         toast({ message: 'Customer Analytics Report generated successfully', type: 'success' });
       } else if (type === 'customer-analytics-csv') {
-        const customerData = calculateCustomerAnalytics(filteredOrders);
+        const scoped = bySection(filteredOrders, 'customerAnalytics', o => o.stall?.section);
+        const customerData = calculateCustomerAnalytics(scoped);
         exportToCSV({
           data: customerData,
           filename: `palengkehublog_customer_analytics_${formatDateRange(customStart, customEnd)}.csv`,
@@ -2090,11 +2666,12 @@ function AnalyticsReports() {
         });
         toast({ message: 'Customer analytics exported to CSV', type: 'success' });
       } else if (type === 'product-performance-pdf') {
-        const productPerf = calculateProductPerformance(products, orderItems);
+        const scoped = byCategory(products, 'productPerformance');
+        const productPerf = calculateProductPerformance(scoped, orderItems);
         const rows = productPerf.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.totalRevenue)}`, p.totalSold, p.orderCount]);
         generatePdf({
           title: 'Product Performance Report',
-          subtitle: 'Top selling products by revenue',
+          subtitle: `Top selling products by revenue${filters.productPerformance ? ` — ${filters.productPerformance}` : ''}`,
           headers: ['Product', 'Category', 'Revenue', 'Units Sold', 'Orders'],
           rows,
           filename: `palengkehublog_product_performance_${formatDateRange(customStart, customEnd)}.pdf`,
@@ -2102,7 +2679,8 @@ function AnalyticsReports() {
         });
         toast({ message: 'Product Performance Report generated successfully', type: 'success' });
       } else if (type === 'product-performance-csv') {
-        const productPerf = calculateProductPerformance(products, orderItems);
+        const scoped = byCategory(products, 'productPerformance');
+        const productPerf = calculateProductPerformance(scoped, orderItems);
         exportToCSV({
           data: productPerf,
           filename: `palengkehublog_product_performance_${formatDateRange(customStart, customEnd)}.csv`,
@@ -2175,7 +2753,8 @@ function AnalyticsReports() {
         <div className="report-grid">
           <div className="report-card">
             <h4>Product Price Report</h4>
-            <p>Complete list of all products with current prices and stock levels.</p>
+            <p>Complete list of all products with current prices and availability.</p>
+            <FilterSelect value={filters.products} onChange={v => setFilter('products', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('products-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('products-csv')} disabled={loading || exporting}>CSV</button>
@@ -2184,6 +2763,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Stall Report</h4>
             <p>All market stalls with vendor assignments, locations, and status.</p>
+            <FilterSelect value={filters.stalls} onChange={v => setFilter('stalls', v)} options={sectionOptions.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('stalls-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('stalls-csv')} disabled={loading || exporting}>CSV</button>
@@ -2192,6 +2772,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Order Report</h4>
             <p>All orders with status, totals, and transaction dates.</p>
+            <FilterSelect value={filters.orders} onChange={v => setFilter('orders', v)} options={sectionOptions.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('orders-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('orders-csv')} disabled={loading || exporting}>CSV</button>
@@ -2200,6 +2781,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Sales Report</h4>
             <p>Completed sales aggregated by date with revenue totals.</p>
+            <FilterSelect value={filters.sales} onChange={v => setFilter('sales', v)} options={sectionOptions.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('sales-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('sales-csv')} disabled={loading || exporting}>CSV</button>
@@ -2208,6 +2790,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Price Change Report</h4>
             <p>Historical price changes per product with timestamps.</p>
+            <FilterSelect value={filters.priceHistory} onChange={v => setFilter('priceHistory', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-history-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('price-history-csv')} disabled={loading || exporting}>CSV</button>
@@ -2216,6 +2799,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Price Per Product</h4>
             <p>Current price of each product per stall for market comparison.</p>
+            <FilterSelect value={filters.pricePerProduct} onChange={v => setFilter('pricePerProduct', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-per-product-pdf')} disabled={loading || exporting}>PDF</button>
             </div>
@@ -2223,6 +2807,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Vendor Performance</h4>
             <p>Revenue and order count by vendor/stall.</p>
+            <FilterSelect value={filters.vendorPerformance} onChange={v => setFilter('vendorPerformance', v)} options={sectionOptions.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('vendor-performance-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('vendor-performance-csv')} disabled={loading || exporting}>CSV</button>
@@ -2231,6 +2816,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Customer Analytics</h4>
             <p>Top customers by total spending and order count.</p>
+            <FilterSelect value={filters.customerAnalytics} onChange={v => setFilter('customerAnalytics', v)} options={sectionOptions.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('customer-analytics-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('customer-analytics-csv')} disabled={loading || exporting}>CSV</button>
@@ -2239,6 +2825,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Product Performance</h4>
             <p>Top selling products by revenue and units sold.</p>
+            <FilterSelect value={filters.productPerformance} onChange={v => setFilter('productPerformance', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('product-performance-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('product-performance-csv')} disabled={loading || exporting}>CSV</button>

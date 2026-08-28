@@ -102,6 +102,12 @@ export default function OrdersScreen({ navigation }) {
   const [ratingComment, setRatingComment] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
 
+  // Report an Issue (customer complaint about a stall/order)
+  const [reportIssueModalVisible, setReportIssueModalVisible] = useState(false);
+  const [reportIssueOrder, setReportIssueOrder] = useState(null);
+  const [reportIssueMessage, setReportIssueMessage] = useState('');
+  const [submittingReportIssue, setSubmittingReportIssue] = useState(false);
+
   // Customer cancellation states
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState(null);
@@ -584,6 +590,54 @@ export default function OrdersScreen({ navigation }) {
     setSelectedRating(0);
     setRatingComment('');
     setRatingModalVisible(true);
+  };
+
+  // Help & Support tells customers to "File within 24 hours of pickup
+  // through Report an Issue" — that promise had no screen behind it
+  // anywhere in the app. This is it.
+  const canReportIssue = (order) => {
+    if (order.status !== 'completed') return false;
+    const completedAt = new Date(order.updated_at || order.created_at);
+    const hoursSince = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60);
+    return hoursSince <= 24;
+  };
+
+  const handleReportIssue = (order) => {
+    setReportIssueOrder(order);
+    setReportIssueMessage('');
+    setReportIssueModalVisible(true);
+  };
+
+  const submitReportIssue = async () => {
+    if (!reportIssueMessage.trim()) {
+      Alert.alert('Error', 'Please describe the issue');
+      return;
+    }
+
+    setSubmittingReportIssue(true);
+    try {
+      const stall = reportIssueOrder?.stall;
+      const { error } = await supabase
+        .from('complaints')
+        .insert({
+          user_id: user.id,
+          stall_id: stall?.id,
+          message: `[Order #${reportIssueOrder?.order_number?.slice(-8) || reportIssueOrder?.id}] ${reportIssueMessage.trim()}`,
+          status: 'pending',
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Report Submitted', 'Thanks for letting us know — our team will look into this.');
+      setReportIssueModalVisible(false);
+      setReportIssueOrder(null);
+      setReportIssueMessage('');
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      Alert.alert('Error', 'Failed to submit report. Please try again.');
+    } finally {
+      setSubmittingReportIssue(false);
+    }
   };
 
   const submitRating = async () => {
@@ -1144,7 +1198,7 @@ export default function OrdersScreen({ navigation }) {
               </LinearGradient>
             </TouchableOpacity>
             
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.rateButton}
               onPress={() => handleRateVendor(order)}
             >
@@ -1155,6 +1209,20 @@ export default function OrdersScreen({ navigation }) {
                 <Text style={styles.actionButtonText}> Rate Vendor</Text>
               </LinearGradient>
             </TouchableOpacity>
+
+            {canReportIssue(order) && (
+              <TouchableOpacity
+                style={styles.rateButton}
+                onPress={() => handleReportIssue(order)}
+              >
+                <LinearGradient
+                  colors={['#6B7280', '#4B5563']}
+                  style={styles.actionButtonGradient}
+                >
+                  <Text style={styles.actionButtonText}>Report an Issue</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -1178,7 +1246,7 @@ export default function OrdersScreen({ navigation }) {
                 onPress={() => openMapsDirections(stall)}
               >
                 <LinearGradient
-                  colors={['#FF6B6B', '#FF8E8E']}
+                  colors={[COLORS.primary, COLORS.primaryLight]}
                   style={styles.mapGradient}
                 >
                   <Text style={styles.mapButtonText}> Get Directions</Text>
@@ -1255,7 +1323,7 @@ export default function OrdersScreen({ navigation }) {
           onPress={() => navigation.navigate('Login')}
         >
           <LinearGradient
-            colors={['#FF6B6B', '#FF8E8E']}
+            colors={[COLORS.primary, COLORS.primaryLight]}
             style={styles.signInGradient}
           >
             <Text style={styles.signInButtonText}>Sign In</Text>
@@ -1268,7 +1336,7 @@ export default function OrdersScreen({ navigation }) {
   if (loading && !refreshing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
@@ -1313,7 +1381,7 @@ export default function OrdersScreen({ navigation }) {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF6B6B']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
         }
       >
         {displayOrders.length === 0 ? (
@@ -1380,7 +1448,7 @@ export default function OrdersScreen({ navigation }) {
               }}
             >
               <LinearGradient
-                colors={['#FF6B6B', '#FF8E8E']}
+                colors={[COLORS.primary, COLORS.primaryLight]}
                 style={styles.modalDirectionsGradient}
               >
                 <Text style={styles.modalDirectionsText}> Get Directions</Text>
@@ -1432,11 +1500,62 @@ export default function OrdersScreen({ navigation }) {
                 disabled={submittingRating}
               >
                 <LinearGradient
-                  colors={['#FF6B6B', '#FF8E8E']}
+                  colors={[COLORS.primary, COLORS.primaryLight]}
                   style={styles.ratingModalSubmitGradient}
                 >
                   <Text style={styles.ratingModalSubmitText}>
                     {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Report an Issue Modal */}
+      <Modal
+        visible={reportIssueModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setReportIssueModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.ratingModalContainer}>
+            <Text style={styles.ratingModalTitle}>Report an Issue</Text>
+            <Text style={styles.ratingModalSubtitle}>
+              {reportIssueOrder?.stall?.stall_name || 'Vendor'} • Order #{reportIssueOrder?.order_number?.slice(-8) || reportIssueOrder?.id}
+            </Text>
+
+            <TextInput
+              style={styles.ratingCommentInput}
+              placeholder="What went wrong? (missing items, wrong order, etc.)"
+              placeholderTextColor={COLORS.text.lighter}
+              value={reportIssueMessage}
+              onChangeText={setReportIssueMessage}
+              multiline
+              numberOfLines={4}
+            />
+
+            <View style={styles.ratingModalButtons}>
+              <TouchableOpacity
+                style={styles.ratingModalCancel}
+                onPress={() => setReportIssueModalVisible(false)}
+              >
+                <Text style={styles.ratingModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.ratingModalSubmit}
+                onPress={submitReportIssue}
+                disabled={submittingReportIssue}
+              >
+                <LinearGradient
+                  colors={['#6B7280', '#4B5563']}
+                  style={styles.ratingModalSubmitGradient}
+                >
+                  <Text style={styles.ratingModalSubmitText}>
+                    {submittingReportIssue ? 'Submitting...' : 'Submit Report'}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -1844,9 +1963,9 @@ const createStyles = (COLORS) => StyleSheet.create({
   cancelGradient: { paddingVertical: 12, alignItems: 'center' },
   cancelButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
 
-  completedActionsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
-  orderAgainButton: { flex: 1, borderRadius: 10, overflow: 'hidden' },
-  rateButton: { flex: 1, borderRadius: 10, overflow: 'hidden' },
+  completedActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8, marginBottom: 12 },
+  orderAgainButton: { flex: 1, minWidth: '45%', borderRadius: 10, overflow: 'hidden' },
+  rateButton: { flex: 1, minWidth: '45%', borderRadius: 10, overflow: 'hidden' },
   actionButtonGradient: { paddingVertical: 12, alignItems: 'center' },
   actionButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
 
@@ -1869,7 +1988,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   shopButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
 
   modalContainer: { flex: 1, backgroundColor: COLORS.surface },
-  modalHeader: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#FF6B6B' },
+  modalHeader: { paddingTop: 50, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: COLORS.primary },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
   modalSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
   modalCloseButton: { position: 'absolute', top: 50, right: 16, backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },

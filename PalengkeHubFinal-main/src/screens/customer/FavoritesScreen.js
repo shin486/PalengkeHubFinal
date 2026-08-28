@@ -76,7 +76,7 @@ export default function FavoritesScreen({ navigation }) {
         {stall.image_url ? (
           <Image source={{ uri: stall.image_url }} style={styles.stallAvatar} />
         ) : (
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.stallAvatarGradient}>
+          <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.stallAvatarGradient}>
             <Ionicons name="storefront-outline" size={18} />
           </LinearGradient>
         )}

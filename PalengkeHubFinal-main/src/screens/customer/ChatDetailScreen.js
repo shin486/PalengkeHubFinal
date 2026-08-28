@@ -106,16 +106,6 @@ export default function ChatDetailScreen({ navigation, route }) {
     };
   }, [navigation]);
 
-  //  Suggested quick reply messages
-  const suggestedMessages = [
-    { id: 1, text: "Ask about Order" },
-    { id: 2, text: "Send QR Code" },
-    { id: 3, text: "Confirm Payment" },
-    { id: 4, text: "Check Availability" },
-    { id: 5, text: "Total Amount" },
-    { id: 6, text: "Pickup Time" },
-  ];
-
   const handleSend = async () => {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage) return;
@@ -140,10 +130,6 @@ export default function ChatDetailScreen({ navigation, route }) {
   const handleSendImage = async () => {
     if (uploadingImage) return;
     await sendImage();
-  };
-
-  const handleSuggestedMessage = async (suggestedText) => {
-    await sendMessage(suggestedText);
   };
 
   const openImageModal = (imageUrl) => {
@@ -211,7 +197,7 @@ export default function ChatDetailScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.surface} />
       
       {/*  CUSTOM HEADER - Replaces the global Header */}
       <View style={styles.customHeader}>
@@ -261,6 +247,7 @@ export default function ChatDetailScreen({ navigation, route }) {
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
       )}
       
@@ -269,24 +256,6 @@ export default function ChatDetailScreen({ navigation, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* Suggested Messages Row */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.suggestedContainer}
-          contentContainerStyle={styles.suggestedContent}
-        >
-          {suggestedMessages.map((suggested, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.suggestedButton}
-              onPress={() => handleSuggestedMessage(suggested.text)}
-            >
-              <Text style={styles.suggestedText}>{suggested.text}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
@@ -488,29 +457,6 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 12,
     marginBottom: 4,
     backgroundColor: COLORS.surfaceSecondary,
-  },
-
-  // ── Suggested Messages ──
-  suggestedContainer: {
-    backgroundColor: COLORS.card,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingVertical: 8,
-  },
-  suggestedContent: {
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  suggestedButton: {
-    backgroundColor: COLORS.surfaceSecondary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginHorizontal: 4,
-  },
-  suggestedText: {
-    fontSize: 13,
-    color: COLORS.text.secondary,
   },
 
   // ── Input ──

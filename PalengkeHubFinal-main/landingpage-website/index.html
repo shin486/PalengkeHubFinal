@@ -3,534 +3,1542 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PalengkeHub — Lipa City Public Market Online</title>
-<link rel="icon" type="image/jpeg" href="palengkehublogo.jpg">
-<meta name="description" content="Bili online, sundo sa Lipa! Order from the Lipa City Public Market then pick up sa market. Simple lang!">
+<title>PalengkeHub | Ang palengke ng Lipa, ngayon nasa online.</title>
+<meta name="description" content="Bili online, sundo sa Lipa. Compare prices across the stalls of the Lipa City Public Market, pay with GCash, then pick up your tinda at the stall.">
+<meta name="theme-color" content="#261006">
+<link rel="icon" type="image/webp" href="./assets/logo-mark.webp">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
-<script>
-  // ── IMMEDIATE admin subdomain redirect (runs before page renders) ──
-  if (window.location.hostname.startsWith('admin.')) {
-    window.location.replace('https://admin.palengkehub.site/admin-login');
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="./assets/market-hero.webp" media="(min-width: 800px)">
+
+<style>
+/* ============================================================
+   PALENGKEHUB DESIGN TOKENS
+   Copied verbatim from 06-adoption/tokens.css (light theme).
+   Never write a hex in a rule below. If a value is missing, add
+   a token here.
+   ============================================================ */
+:root {
+  /* brand: the logo ring orange */
+  --brand:#E8833A; --brand-hover:#F0913F; --brand-dark:#C96A28;
+  --brand-soft:#FBE7D4; --brand-tint:#FDF3E9;
+  /* ink: the logo outline brown */
+  --ink:#261006; --ink-2:#5B4436; --ink-3:#8A7263; --ink-4:#A89484; --inverse:#FFFDFA;
+  /* surfaces */
+  --paper:#F2E7D6; --card:#FFFDFA; --card-2:#F8F0E4;
+  --wicker:#E2BA87; --wicker-soft:#F3E3CB; --line:#E3CFB0; --line-soft:#EFDFC6;
+  /* semantic */
+  --leaf:#9EBF5C; --leaf-dark:#61802F; --leaf-soft:#EDF3DE;
+  --tomato:#D34638; --tomato-dark:#9E2B20; --tomato-soft:#FBE2DE;
+  --fish:#84BEE0; --fish-dark:#2C6C93; --fish-soft:#E5F1F9;
+  --gold:#D89A17; --gold-dark:#8F6407; --gold-soft:#FBEFD2;
+  /* third party, never restyled */
+  --gcash:#007DFE; --gcash-soft:#E4F0FF;
+  /* "on" pairs */
+  --on-brand:#261006; --ink-surface:#261006; --ink-on:#F5E7D5;
+  --leaf-solid:#61802F; --leaf-on:#F7FBEF; --tomato-on:#FFF6F1;
+  /* overlay and texture */
+  --overlay:rgba(38,16,6,.50); --texture-a:rgba(38,16,6,.030); --texture-b:rgba(38,16,6,.026);
+  /* the price verdict */
+  --verdict-cheap-bg:#EDF3DE; --verdict-cheap-text:#61802F;
+  --verdict-fair-bg:#F3E3CB;  --verdict-fair-text:#5B4436;
+  --verdict-dear-bg:#FBE2DE;  --verdict-dear-text:#9E2B20;
+  --verdict-best-bg:#61802F;  --verdict-best-text:#F7FBEF;
+  /* spacing */
+  --s-xs:4px; --s-sm:8px; --s-md:12px; --s-lg:16px; --s-xl:20px; --s-xxl:24px; --s-xxxl:32px;
+  /* radius */
+  --r-xs:6px; --r-sm:10px; --r-md:12px; --r-lg:16px; --r-xl:22px; --r-pill:999px;
+  /* elevation */
+  --e-0:none;
+  --e-1:0 1px 2px rgba(38,16,6,.06);
+  --e-2:0 6px 18px -10px rgba(38,16,6,.55);
+  --e-3:0 14px 34px -14px rgba(38,16,6,.60);
+  --e-bar:0 -4px 18px -10px rgba(38,16,6,.45);
+  --e-press:0 3px 0 0 var(--brand-dark);
+  /* motion */
+  --t-fast:.15s ease; --t-base:.22s cubic-bezier(.2,0,0,1); --t-slow:.32s cubic-bezier(.2,0,0,1);
+  /* type */
+  --f-display:"Baloo 2", system-ui, -apple-system, sans-serif;
+  --f-ui:"Nunito", system-ui, -apple-system, sans-serif;
+  --fs-price-hero:38px; --fs-display:26px; --fs-h1:22px; --fs-h2:19px; --fs-h3:17px;
+  --fs-body:16px; --fs-body-sm:15px; --fs-label:14px; --fs-caption:13px; --fs-micro:12px;
+  --fw-regular:400; --fw-medium:600; --fw-semibold:700; --fw-bold:800; --fw-black:900;
+  --lh-tight:1.15; --lh-snug:1.25; --lh-base:1.45; --lh-relaxed:1.6;
+  /* layout */
+  --tapmin:44px; --border-w:2px; --hairline-w:1px; --wrap-max:1120px; --gutter:16px;
+
+  /* ------------------------------------------------------------
+     LANDING DISPLAY SCALE (new tokens, this surface only)
+     The app scale tops out at 38px because it lives on a phone.
+     A marketing page needs three sizes above it. Same family,
+     same weights, nothing else new.
+     ------------------------------------------------------------ */
+  --fs-lp-hero:  clamp(38px, 7.4vw, 68px);
+  --fs-lp-title: clamp(29px, 5.2vw, 50px);
+  --fs-lp-lead:  clamp(17px, 2.1vw, 21px);
+  --fs-lp-num:   clamp(40px, 7vw, 68px);
+  --wrap-wide: 1280px;
+
+  /* Reading tones on the two dark surfaces (hero photo, ink bands).
+     The app never needs these because it has no dark hero. */
+  --on-dark-1: #F5E7D5;   /* = --ink-on, primary text on ink */
+  --on-dark-2: #CBB49C;   /* secondary */
+  --on-dark-3: #A88F76;   /* captions, footer meta */
+
+  /* The device shell in the phone mock. Two steps of the ink family. */
+  --device-hi: #3B2416;
+  --device-lo: #150902;
+
+  /* Alpha variants used below are written as rgba() of these exact
+     tokens: --ink 38,16,6, --paper 242,231,214, --wicker 226,186,135,
+     --brand 232,131,58, --inverse 255,253,250. No new colour is
+     introduced anywhere on this page. */
+}
+
+/* ---------- lenis, inlined per the security rule (no second request) ---------- */
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
+.lenis.lenis-smooth [data-lenis-prevent]{overscroll-behavior:contain}
+.lenis.lenis-stopped{overflow:hidden}
+.lenis.lenis-smooth iframe{pointer-events:none}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:var(--f-ui);
+  font-size:var(--fs-body);
+  line-height:var(--lh-base);
+  color:var(--ink);
+  background-color:var(--paper);
+  background-image:
+    repeating-linear-gradient( 45deg, var(--texture-a) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, var(--texture-b) 0 2px, transparent 2px 9px);
+  overflow-x:hidden;
+}
+img{max-width:100%;display:block;height:auto}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+h1,h2,h3,h4,p{margin:0}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.wrap{width:100%;max-width:var(--wrap-max);margin-inline:auto;padding-inline:var(--gutter)}
+.wrap-wide{width:100%;max-width:var(--wrap-wide);margin-inline:auto;padding-inline:var(--gutter)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid var(--brand);outline-offset:3px;border-radius:var(--r-xs)}
+
+/* ---------- shared type ---------- */
+.kicker{
+  display:inline-flex;align-items:center;gap:var(--s-sm);
+  font-size:var(--fs-micro);font-weight:var(--fw-bold);
+  letter-spacing:.14em;text-transform:uppercase;
+  color:var(--brand-dark);background:var(--brand-soft);
+  border:var(--border-w) solid var(--wicker);
+  border-radius:var(--r-pill);padding:5px 14px;
+}
+.kicker svg{width:14px;height:14px;flex:none}
+.sec-title{
+  font-family:var(--f-display);font-weight:var(--fw-bold);
+  font-size:var(--fs-lp-title);line-height:var(--lh-tight);
+  letter-spacing:-.01em;margin-top:var(--s-lg);
+}
+.sec-lead{
+  font-size:var(--fs-lp-lead);color:var(--ink-2);
+  line-height:var(--lh-relaxed);margin-top:var(--s-md);max-width:56ch;
+}
+.sec{padding-block:clamp(56px,9vw,110px)}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:var(--s-sm);
+  min-height:var(--tapmin);padding:0 var(--s-xxl);
+  border-radius:var(--r-pill);font-weight:var(--fw-bold);font-size:var(--fs-body);
+  border:var(--border-w) solid transparent;
+  transition:transform var(--t-fast),background var(--t-fast),box-shadow var(--t-fast);
+}
+.btn svg{width:20px;height:20px;flex:none}
+.btn-primary{background:var(--brand);color:var(--on-brand);border-color:var(--brand-dark);box-shadow:var(--e-press)}
+.btn-primary:hover{background:var(--brand-hover)}
+.btn-primary:active{transform:translateY(3px);box-shadow:0 0 0 0 var(--brand-dark)}
+.btn-ghost{background:transparent;color:var(--inverse);border-color:rgba(255,253,250,.45)}
+.btn-ghost:hover{background:rgba(255,253,250,.12)}
+.btn-quiet{background:var(--card);color:var(--ink);border-color:var(--line)}
+.btn-quiet:hover{background:var(--card-2)}
+
+/* ---------- chips ---------- */
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:var(--fs-micro);font-weight:var(--fw-bold);
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:4px 10px;border-radius:var(--r-pill);
+}
+.chip-mura{background:var(--verdict-cheap-bg);color:var(--verdict-cheap-text)}
+.chip-fair{background:var(--verdict-fair-bg);color:var(--verdict-fair-text)}
+.chip-mahal{background:var(--verdict-dear-bg);color:var(--verdict-dear-text)}
+.chip-best{background:var(--verdict-best-bg);color:var(--verdict-best-text)}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+.nav{
+  position:fixed;inset:0 0 auto 0;z-index:60;
+  transition:background var(--t-base),box-shadow var(--t-base),border-color var(--t-base);
+  border-bottom:var(--border-w) solid transparent;
+}
+.nav.solid{background:var(--card);border-bottom-color:var(--line);box-shadow:var(--e-2)}
+.nav-in{display:flex;align-items:center;gap:var(--s-xl);height:68px}
+.nav-logo{display:flex;align-items:center;gap:var(--s-sm);margin-right:auto}
+.nav-logo img{width:40px;height:40px;border-radius:var(--r-sm)}
+.nav-logo b{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);color:var(--inverse);transition:color var(--t-base)}
+.nav-logo b i{font-style:normal;color:var(--brand)}
+.nav.solid .nav-logo b{color:var(--ink)}
+.nav-links{display:none;gap:var(--s-xxl);align-items:center}
+.nav-links a{font-weight:var(--fw-semibold);font-size:var(--fs-body-sm);color:var(--inverse);opacity:.92;transition:color var(--t-base),opacity var(--t-fast)}
+.nav-links a:hover{opacity:1;color:var(--brand)}
+.nav.solid .nav-links a{color:var(--ink-2)}
+.nav.solid .nav-links a:hover{color:var(--brand-dark)}
+.nav-in > .btn{display:none;height:44px;padding-inline:var(--s-xl);font-size:var(--fs-body-sm)}
+@media (min-width:900px){.nav-in > .btn{display:inline-flex}}
+.nav-toggle{
+  display:inline-flex;width:44px;height:44px;align-items:center;justify-content:center;
+  border-radius:var(--r-sm);border:var(--border-w) solid rgba(255,253,250,.4);color:var(--inverse);
+}
+.nav.solid .nav-toggle{border-color:var(--line);color:var(--ink)}
+.nav-toggle svg{width:22px;height:22px}
+.nav-panel{display:none;background:var(--card);border-top:var(--border-w) solid var(--line);padding:var(--s-md) var(--gutter) var(--s-xl)}
+.nav-panel.open{display:block}
+.nav-panel a{display:block;padding:var(--s-md) 0;font-weight:var(--fw-semibold);border-bottom:var(--hairline-w) solid var(--line-soft)}
+.nav-panel .btn{width:100%;margin-top:var(--s-lg)}
+@media (min-width:900px){
+  .nav-links{display:flex}
+  .nav-toggle{display:none}
+  .nav-panel{display:none!important}
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero{position:relative;isolation:isolate;overflow:clip;padding:118px 0 clamp(48px,7vw,90px);color:var(--inverse)}
+.hero-photo{
+  position:absolute;inset:-10% 0 -4%;z-index:-3;
+  background:url("./assets/market-hero-sm.webp") center 42%/cover no-repeat;
+  filter:saturate(.92) contrast(1.02);
+  will-change:transform;
+}
+@media (min-width:800px){.hero-photo{background-image:url("./assets/market-hero.webp")}}
+.hero-scrim{
+  position:absolute;inset:0;z-index:-2;
+  background:
+    radial-gradient(90% 70% at 18% 42%, rgba(38,16,6,.62) 0%, rgba(38,16,6,.30) 55%, transparent 100%),
+    linear-gradient(180deg, rgba(38,16,6,.86) 0%, rgba(38,16,6,.52) 26%, rgba(38,16,6,.66) 62%, var(--ink) 100%);
+}
+.hero-weave{
+  position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:
+    repeating-linear-gradient( 45deg, rgba(242,231,214,.05) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, rgba(242,231,214,.04) 0 2px, transparent 2px 9px);
+}
+.hero-in{display:grid;gap:clamp(36px,5vw,20px);align-items:center}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:var(--s-sm);flex-wrap:wrap;
+  font-size:var(--fs-micro);font-weight:var(--fw-bold);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--brand);background:rgba(38,16,6,.55);border:var(--border-w) solid rgba(232,131,58,.5);
+  border-radius:var(--r-pill);padding:6px 14px;
+}
+.hero-eyebrow{white-space:nowrap}
+.hero-eyebrow s{display:none;text-decoration:none;color:var(--inverse);opacity:.7;margin-left:var(--s-sm)}
+@media (min-width:560px){.hero-eyebrow s{display:inline}}
+h1.hero-h1{
+  font-family:var(--f-display);font-weight:var(--fw-bold);
+  font-size:var(--fs-lp-hero);line-height:1.02;letter-spacing:-.02em;
+  margin-top:var(--s-xl);text-wrap:balance;
+}
+.hero-h1 .l1{display:block}
+.hero-h1 .l2{display:block;margin-top:.16em}
+.hero-h1 .l2 em{
+  display:inline-block;font-style:normal;
+  background:var(--brand);color:var(--on-brand);
+  padding:.02em .24em .1em;border-radius:var(--r-md);
+  box-shadow:0 14px 34px -14px rgba(0,0,0,.75), inset 0 -4px 0 0 rgba(38,16,6,.14);
+}
+.hero-h1 .l2 em:first-child{transform:rotate(-1.6deg)}
+.hero-h1 .l2 em+em{transform:rotate(.9deg);margin-left:.16em}
+.hero-sub{margin-top:var(--s-xxl);font-size:var(--fs-lp-lead);line-height:var(--lh-relaxed);color:var(--on-dark-1);max-width:46ch}
+.hero-cta{display:flex;flex-wrap:wrap;gap:var(--s-md);margin-top:var(--s-xxxl)}
+.hero-trust{display:flex;flex-wrap:wrap;gap:var(--s-lg) var(--s-xxl);margin-top:var(--s-xxxl);padding-top:var(--s-xl);border-top:var(--hairline-w) solid rgba(242,231,214,.22)}
+.hero-trust div{display:flex;align-items:center;gap:var(--s-sm);font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--on-dark-2)}
+.hero-trust svg{width:18px;height:18px;color:var(--brand);flex:none}
+
+/* hero stage: phone + floating presyo tags */
+.stage{position:relative;display:flex;justify-content:center;padding-block:var(--s-lg)}
+.stage::before{
+  content:"";position:absolute;z-index:0;pointer-events:none;
+  left:0;right:0;top:6%;height:76%;
+  background:radial-gradient(closest-side, rgba(232,131,58,.34), rgba(232,131,58,.06) 62%, transparent 78%);
+}
+.stage .phone{width:min(292px,72vw);position:relative;z-index:1}
+.tag{
+  position:absolute;z-index:3;
+  display:flex;align-items:center;gap:var(--s-md);
+  background:var(--card);color:var(--ink);
+  border:var(--border-w) solid var(--wicker);border-radius:var(--r-lg);
+  padding:var(--s-sm) var(--s-md) var(--s-sm) var(--s-sm);
+  box-shadow:var(--e-3);will-change:transform;
+}
+.tag img{width:44px;height:44px;border-radius:var(--r-sm);object-fit:cover;flex:none}
+.tag-k{font-size:var(--fs-caption);color:var(--ink-3);font-weight:var(--fw-semibold);line-height:1.2}
+.tag-p{font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-h2);line-height:1.1}
+.tag-p span{font-family:var(--f-ui);font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3)}
+/* under 900 the tags stop floating and sit under the phone as a real row,
+   so nothing ever covers the app screenshot on a small viewport */
+.tags{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-sm);width:100%;max-width:340px;margin-top:var(--s-lg)}
+@media (max-width:899px){
+  .stage{flex-direction:column;align-items:center}
+  .tag{position:static;padding:var(--s-sm);box-shadow:var(--e-2)}
+  .tag img{width:36px;height:36px}
+  .tag-k{font-size:11px}
+  .tag-p{font-size:var(--fs-h3)}
+  .tag-3{display:none}
+}
+@media (min-width:900px){
+  .tags{display:contents}
+  .tag-1{left:-4%;top:16%}
+  .tag-2{right:-6%;top:44%}
+  .tag-3{left:-2%;bottom:12%}
+  .hero{padding-top:150px}
+  .hero-in{grid-template-columns:1.06fr .94fr;gap:clamp(24px,4vw,64px);min-height:calc(100svh - 150px)}
+  .stage .phone{width:min(330px,30vw)}
+  .tag-1{left:-11%;top:11%}
+  .tag-2{right:-3%;top:43%}
+  .tag-3{left:-6%;bottom:13%}
+}
+.scroll-cue{display:none}
+@media (min-width:900px){
+  .scroll-cue{
+    display:flex;align-items:center;gap:var(--s-sm);
+    margin-top:var(--s-xxxl);font-size:var(--fs-micro);font-weight:var(--fw-bold);
+    letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-2);
   }
+  .scroll-cue i{display:block;width:1px;height:34px;background:linear-gradient(var(--brand),transparent);flex:none}
+}
 
-  document.addEventListener('DOMContentLoaded', function() {
-    // Mobile menu toggle
-    const menuToggle = document.getElementById('menu-toggle');
-    const navMenu = document.getElementById('nav-menu');
-    
-    if (menuToggle && navMenu) {
-      menuToggle.addEventListener('click', function() {
-        menuToggle.classList.toggle('active');
-        navMenu.classList.toggle('active');
-      });
-    }
+/* ============================================================
+   PHONE COMPONENT
+   One frame, three parts: a fixed app header, a scrolling body
+   strip driven by --p (0 to 1), a fixed tab bar.
+   ============================================================ */
+.phone{
+  position:relative;flex:none;
+  border-radius:38px;padding:9px;
+  background:linear-gradient(160deg,var(--device-hi),var(--ink) 45%,var(--device-lo));
+  box-shadow:0 40px 70px -30px rgba(38,16,6,.9), 0 0 0 2px rgba(226,186,135,.28), inset 0 2px 2px rgba(255,253,250,.14);
+}
+.phone::after{
+  content:"";position:absolute;left:50%;top:14px;transform:translateX(-50%);
+  width:32%;height:9px;border-radius:var(--r-pill);background:rgba(0,0,0,.55);
+}
+.screen{
+  position:relative;overflow:hidden;border-radius:30px;
+  aspect-ratio:375/760;background:var(--paper);
+}
+.screen-hdr,.screen-tab{position:absolute;left:0;width:100%;z-index:2}
+.screen-hdr{top:0}
+.screen-tab{bottom:0;box-shadow:var(--e-bar)}
+.screen-body{
+  position:absolute;left:0;right:0;
+  top:calc(162 / 760 * 100%);bottom:calc(60 / 760 * 100%);
+  overflow:hidden;
+}
+.screen-strip{
+  width:100%;height:auto;
+  transform:translate3d(0, calc(var(--p,0) * -72.27%), 0);
+  will-change:transform;
+}
+.screen-glare{
+  position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:linear-gradient(122deg, rgba(255,253,250,.16) 0%, rgba(255,253,250,.04) 22%, transparent 42%);
+}
 
-    // Scroll animations
-    const observerOptions = {
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px'
-    };
+/* ============================================================
+   CATEGORY BAND
+   ============================================================ */
+.band{
+  position:relative;overflow:hidden;
+  background:var(--ink-surface);color:var(--ink-on);
+  padding-block:clamp(40px,6vw,64px);
+}
+.band-head{display:flex;flex-direction:column;gap:var(--s-md);align-items:flex-start}
+.band-head .sec-title{color:var(--ink-on);margin-top:var(--s-sm)}
+.band-head .sec-lead{color:var(--on-dark-2)}
+.band .kicker{background:rgba(232,131,58,.16);border-color:rgba(232,131,58,.45);color:var(--brand)}
+.rail{display:flex;gap:var(--s-xl);margin-top:var(--s-xxxl);width:max-content;will-change:transform}
+/* Full-bleed on purpose, not nested in .wrap-wide like the heading above
+   it — that 1280px max-width column was the actual bug: the dark .band
+   section runs the full browser width, but the cards were capped to the
+   centered content column, so on any screen wider than ~1280px there was
+   a permanent gap between the last visible card and the true edge. */
+.rail-clip{width:100%;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);
+          mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.cat{
+  display:flex;align-items:center;gap:var(--s-md);flex:none;
+  background:rgba(242,231,214,.06);border:var(--border-w) solid rgba(226,186,135,.28);
+  border-radius:var(--r-xl);padding:var(--s-md) var(--s-xl) var(--s-md) var(--s-md);
+}
+.cat img{width:56px;height:56px;object-fit:contain;flex:none}
+.cat b{display:block;font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold);white-space:nowrap}
+.cat span{display:block;font-size:var(--fs-caption);color:var(--on-dark-3);white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){
+  /* -25% of 4 copies is exactly one set-width, same distance the old -50%
+     of 2 copies covered — so the duration stays the same speed, not 2x. */
+  .rail-anim{animation:railslide 42s linear infinite}
+  @keyframes railslide{from{transform:translate3d(0,0,0)}to{transform:translate3d(-25%,0,0)}}
+}
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('animate-in');
-        }
-      });
-    }, observerOptions);
+/* ============================================================
+   APP STORY
+   A sticky phone beside three beats. No pinning and no spacer,
+   so every pixel of the section is real content whether the
+   motion layer runs or not.
+   ============================================================ */
+.story{position:relative;background:var(--card-2);border-block:var(--border-w) solid var(--line)}
+.story-stage{display:flex;flex-direction:column;gap:var(--s-xxl);margin-top:clamp(28px,4vw,48px)}
+.story-stage .phone{
+  position:sticky;top:82px;z-index:2;
+  width:186px;align-self:center;
+}
+.beats{display:grid;gap:var(--s-xl)}
+.beat{
+  background:var(--card);border:var(--border-w) solid var(--line);
+  border-radius:var(--r-xl);padding:var(--s-xl);
+  transition:border-color var(--t-base),background var(--t-base);
+}
+.beat.on{border-color:var(--brand);background:var(--brand-tint)}
+.beat h3{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);line-height:var(--lh-tight);margin-top:var(--s-sm)}
+.beat p{margin-top:var(--s-md);font-size:var(--fs-body);color:var(--ink-2);line-height:var(--lh-relaxed);max-width:46ch}
+.beat-n{
+  display:inline-flex;align-items:center;gap:var(--s-sm);
+  font-family:var(--f-ui);font-weight:var(--fw-bold);font-size:var(--fs-micro);
+  letter-spacing:.18em;color:var(--brand-dark);
+}
+.beat-n i{display:block;width:22px;height:2px;background:var(--brand);flex:none}
 
-    document.querySelectorAll('.animate-on-scroll').forEach(el => {
-      observer.observe(el);
-    });
+/* small, real fragments of the app rendered in the design system */
+.widget{
+  margin-top:var(--s-xl);max-width:520px;
+  background:var(--card);border:var(--border-w) solid var(--line);
+  border-radius:var(--r-lg);padding:var(--s-md);display:grid;gap:var(--s-sm);
+}
+.w-search{
+  display:flex;align-items:center;gap:var(--s-sm);
+  background:var(--wicker-soft);border-radius:var(--r-pill);
+  padding:var(--s-sm) var(--s-lg);font-weight:var(--fw-semibold);color:var(--ink-2);
+}
+.w-search svg{width:18px;height:18px;color:var(--ink-3);flex:none}
+.w-row{display:flex;align-items:center;gap:var(--s-md);padding:var(--s-sm) var(--s-xs)}
+.w-row+.w-row{border-top:var(--hairline-w) solid var(--line-soft)}
+.w-row img{width:40px;height:40px;border-radius:var(--r-sm);object-fit:cover;flex:none}
+.w-row > span{display:block;min-width:0}
+.w-row b{display:block;font-size:var(--fs-body-sm);font-weight:var(--fw-bold);line-height:1.25}
+.w-row em{display:block;font-style:normal;font-size:var(--fs-caption);color:var(--ink-3)}
+.w-price{margin-left:auto;flex:none;font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-h2);white-space:nowrap}
+.w-price i{font-family:var(--f-ui);font-style:normal;font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3);margin-left:4px}
+.w-foot{
+  display:flex;align-items:center;gap:var(--s-md);
+  border-top:var(--border-w) solid var(--line);margin-top:var(--s-xs);padding-top:var(--s-md);
+  font-size:var(--fs-caption);color:var(--ink-3);
+}
+.w-foot b{margin-left:auto;font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);color:var(--ink)}
+.w-pay{
+  display:flex;align-items:center;justify-content:center;gap:var(--s-sm);
+  background:var(--gcash-soft);color:var(--gcash);border-radius:var(--r-sm);
+  padding:var(--s-md);font-weight:var(--fw-bold);font-size:var(--fs-body-sm);
+}
+.w-pay svg{width:20px;height:20px}
+.w-compare{grid-template-columns:repeat(3,1fr);gap:var(--s-sm)}
+.w-cell{display:grid;gap:var(--s-xs);justify-items:start;padding:var(--s-sm);border-radius:var(--r-md);background:var(--card-2)}
+.w-cell b{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);line-height:1}
+.w-cell em{font-style:normal;font-size:var(--fs-micro);color:var(--ink-3);line-height:1.3}
+.w-save{background:var(--leaf-soft)}
+.w-save b{color:var(--leaf-dark)}
+@media (max-width:899px){.widget{background:var(--card-2);border-color:var(--line-soft)}.w-compare{grid-template-columns:1fr 1fr}.w-save{grid-column:1/-1}}
+@media (min-width:900px){
+  .story-stage{
+    display:grid;grid-template-columns:min(360px,32%) 1fr;
+    gap:clamp(40px,6vw,96px);align-items:start;margin-top:clamp(36px,4vw,56px);
+  }
+  .story-stage .phone{width:100%;align-self:start;top:calc(50svh - 372px)}
+  .beats{gap:0}
+  .beat{
+    min-height:52svh;display:flex;flex-direction:column;justify-content:center;
+    background:transparent;border:0;border-radius:0;padding:var(--s-xl) 0;
+    border-bottom:var(--border-w) solid var(--line);
+    transition:opacity var(--t-slow);
+  }
+  /* the dim-until-active pass only exists when the motion layer is alive,
+     so a blocked CDN never leaves two thirds of the copy faded out */
+  html.mo .beat{opacity:.42}
+  .beat:last-child{border-bottom:0}
+  .beat.on,html.mo .beat.on{background:transparent;opacity:1}
+  .beat h3{font-size:var(--fs-lp-title)}
+  .beat p{font-size:var(--fs-lp-lead);margin-top:var(--s-lg)}
+}
+@media (prefers-reduced-motion:reduce){
+  .beat{opacity:1!important;min-height:0!important}
+}
 
-    // Smooth scroll for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-      anchor.addEventListener('click', function(e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth' });
-        }
-      });
-    });
+/* ============================================================
+   PRESYO CHECK
+   ============================================================ */
+.presyo-head{display:grid;gap:var(--s-xl)}
+@media (min-width:900px){.presyo-head{grid-template-columns:1.15fr .85fr;align-items:end}}
+.ruler{
+  margin-top:clamp(32px,5vw,56px);
+  background:var(--card);border:var(--border-w) solid var(--line);border-radius:var(--r-xl);
+  padding:var(--s-xl);
+}
+@media (min-width:720px){.ruler{padding:var(--s-xxxl)}}
+.ruler-top{display:flex;align-items:center;gap:var(--s-lg);flex-wrap:wrap}
+.ruler-top img{width:64px;height:64px;border-radius:var(--r-md);object-fit:cover;border:var(--border-w) solid var(--line)}
+.ruler-top h3{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);line-height:1.1}
+.ruler-top p{font-size:var(--fs-caption);color:var(--ink-3)}
+.ruler-top .save{margin-left:auto;text-align:right}
+.ruler-top .save b{display:block;font-family:var(--f-display);font-size:var(--fs-price-hero);font-weight:var(--fw-bold);color:var(--leaf-dark);line-height:1}
+.ruler-top .save span{font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3)}
+.rows{margin-top:var(--s-xxl);display:grid;gap:var(--s-md)}
+.row{
+  display:grid;grid-template-columns:1fr auto;gap:var(--s-sm) var(--s-lg);align-items:center;
+  padding:var(--s-md);border-radius:var(--r-lg);
+  background:var(--card-2);border:var(--border-w) solid transparent;
+}
+.row.win{background:var(--leaf-soft);border-color:var(--leaf)}
+.row-name{display:flex;align-items:center;gap:var(--s-sm);font-weight:var(--fw-bold);font-size:var(--fs-body-sm)}
+.row-name svg{width:18px;height:18px;color:var(--ink-3);flex:none}
+.row-name em{font-style:normal;font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3)}
+@media (max-width:719px){.rn em{display:block;margin-top:2px}}
+.row-price{font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-h1);white-space:nowrap}
+.row-price span{font-family:var(--f-ui);font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3)}
+.row-bar{grid-column:1/-1;height:12px;border-radius:var(--r-pill);background:var(--wicker-soft);overflow:hidden}
+.row-bar i{display:block;height:100%;border-radius:var(--r-pill);width:var(--w);transform-origin:left center;background:var(--leaf)}
+.row.mid .row-bar i{background:var(--wicker)}
+.row.dear .row-bar i{background:var(--tomato)}
+.row-meta{grid-column:1/-1;display:flex;align-items:center;gap:var(--s-sm);flex-wrap:wrap}
+.ruler-foot{margin-top:var(--s-xl);padding-top:var(--s-lg);border-top:var(--hairline-w) solid var(--line-soft);
+  display:flex;gap:var(--s-md);align-items:center;font-size:var(--fs-caption);color:var(--ink-3)}
+.ruler-foot svg{width:16px;height:16px;flex:none;color:var(--ink-4)}
 
-    // Back to top button
-    const backToTop = document.getElementById('back-to-top');
-    if (backToTop) {
-      window.addEventListener('scroll', function() {
-        if (window.scrollY > 400) {
-          backToTop.classList.add('visible');
-        } else {
-          backToTop.classList.remove('visible');
-        }
-      });
-      backToTop.addEventListener('click', function() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-    }
+.pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--s-md);margin-top:var(--s-xl)}
+@media (min-width:720px){.pgrid{grid-template-columns:repeat(4,1fr);gap:var(--s-lg)}}
+.pcard{background:var(--card);border:var(--border-w) solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.pcard img{width:100%;height:auto;aspect-ratio:1;object-fit:cover}
+.pcard div{padding:var(--s-md)}
+.pcard b{display:block;font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold)}
+.pcard em{font-style:normal;display:block;font-size:var(--fs-caption);color:var(--ink-3);margin-bottom:var(--s-sm)}
+.pcard s{display:block;font-family:var(--f-display);font-size:var(--fs-h2);font-weight:var(--fw-bold);text-decoration:none}
+.pcard s span{font-family:var(--f-ui);font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--ink-3)}
 
-    // Admin shortcut - Ctrl+1 redirects to admin login page
-    document.addEventListener('keydown', function(e) {
-      if (e.ctrlKey && e.key === '1') {
-        e.preventDefault();
-        window.location.href = 'https://admin.palengkehub.site/admin-login';
-      }
-    });
+/* ============================================================
+   PAANO (route)
+   ============================================================ */
+.route{position:relative;margin-top:clamp(32px,5vw,60px);padding-left:34px}
+.route-line{position:absolute;left:15px;top:14px;bottom:14px;width:4px;border-radius:var(--r-pill);background:var(--line)}
+.route-fill{position:absolute;left:15px;top:14px;width:4px;border-radius:var(--r-pill);background:var(--brand);height:100%;transform-origin:top;transform:scaleY(var(--rp,1))}
+.step{position:relative;padding-bottom:clamp(28px,5vw,68px)}
+.step:last-child{padding-bottom:0}
+.step-dot{
+  position:absolute;left:-34px;top:0;width:34px;height:34px;border-radius:var(--r-pill);
+  display:grid;place-items:center;background:var(--brand);color:var(--on-brand);
+  font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-body-sm);
+  border:var(--border-w) solid var(--brand-dark);z-index:1;
+}
+.step h3{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);line-height:1.15}
+.step p{margin-top:var(--s-sm);color:var(--ink-2);max-width:46ch}
+.step .gcash{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s-md);
+  background:var(--gcash-soft);color:var(--gcash);border-radius:var(--r-pill);
+  padding:4px 12px;font-size:var(--fs-micro);font-weight:var(--fw-bold);letter-spacing:.06em;white-space:nowrap}
+.paano-in{display:grid;gap:clamp(32px,5vw,56px)}
+@media (min-width:900px){.paano-in{grid-template-columns:.9fr 1.1fr;align-items:start}
+  .route{margin-top:var(--s-sm)}}
+.notes{list-style:none;margin:var(--s-xxl) 0 0;padding:0;display:grid;gap:var(--s-md);max-width:46ch}
+.notes li{display:flex;gap:var(--s-md);align-items:flex-start;font-size:var(--fs-body-sm);color:var(--ink-2);line-height:var(--lh-base)}
+.notes svg{width:20px;height:20px;flex:none;margin-top:2px;color:var(--leaf-dark)}
 
-    // FAQ accordion
-    document.querySelectorAll('.faq-item').forEach(item => {
-      const question = item.querySelector('.faq-question');
-      if (question) {
-        question.addEventListener('click', function() {
-          const isOpen = item.classList.contains('open');
-          // Close all
-          document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
-          // Open clicked if it was closed
-          if (!isOpen) {
-            item.classList.add('open');
-          }
-        });
-      }
-    });
-  });
-</script>
+/* the pickup ticket: what the vendor actually sees at the stall */
+.ticket{
+  margin-top:var(--s-xxl);max-width:420px;
+  background:var(--card);border:var(--border-w) solid var(--wicker);
+  border-radius:var(--r-lg);padding:var(--s-lg);box-shadow:var(--e-2);
+}
+.ticket-top{display:flex;align-items:center;gap:var(--s-md)}
+.ticket-top img{width:34px;height:34px;border-radius:var(--r-xs);flex:none}
+.ticket-top b{display:block;font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold)}
+.ticket-top em{font-style:normal;font-size:var(--fs-caption);color:var(--ink-3)}
+.ticket-top .chip{margin-left:auto}
+.ticket-code{
+  margin-top:var(--s-md);text-align:center;
+  background:var(--ink-surface);color:var(--ink-on);border-radius:var(--r-sm);
+  padding:var(--s-sm);font-family:var(--f-display);font-weight:var(--fw-bold);
+  font-size:var(--fs-h1);letter-spacing:.22em;
+}
+.ticket-rows{margin-top:var(--s-md);display:grid;gap:var(--s-sm)}
+.ticket-rows div{display:flex;gap:var(--s-md);align-items:baseline;font-size:var(--fs-caption)}
+.ticket-rows span{color:var(--ink-3);width:56px;flex:none}
+.ticket-rows b{font-size:var(--fs-body-sm);font-weight:var(--fw-semibold)}
+.ticket-tear{
+  height:2px;margin:var(--s-lg) calc(var(--s-lg) * -1);
+  background:repeating-linear-gradient(90deg,var(--line) 0 8px,transparent 8px 16px);
+}
+.ticket-items{display:grid;gap:var(--s-sm);font-size:var(--fs-body-sm)}
+.ticket-items div{display:flex;gap:var(--s-md)}
+.ticket-items b{margin-left:auto;font-family:var(--f-display);font-weight:var(--fw-bold)}
+.ticket-total{border-top:var(--hairline-w) solid var(--line-soft);padding-top:var(--s-sm);font-weight:var(--fw-bold)}
+.ticket-total b{font-size:var(--fs-h2)}
+.ticket-note{margin-top:var(--s-md);font-size:var(--fs-micro);color:var(--ink-4)}
+
+/* ============================================================
+   LOCATION
+   ============================================================ */
+.loc{position:relative;overflow:hidden;background:var(--ink-surface);color:var(--ink-on)}
+.loc-photo{position:absolute;inset:0;z-index:0}
+.loc-photo img{width:100%;height:100%;object-fit:cover;opacity:.34;will-change:transform}
+.loc::after{content:"";position:absolute;inset:0;z-index:0;
+  background:linear-gradient(180deg,var(--ink) 0%,rgba(38,16,6,.62) 40%,var(--ink) 100%)}
+.loc-in{position:relative;z-index:1}
+.loc .kicker{background:rgba(232,131,58,.16);border-color:rgba(232,131,58,.45);color:var(--brand)}
+.loc .sec-title{color:var(--inverse)}
+.loc .sec-lead{color:var(--on-dark-2)}
+.loc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--s-md);margin-top:clamp(28px,4vw,44px)}
+@media (min-width:900px){.loc-grid{grid-template-columns:repeat(4,1fr);gap:var(--s-lg)}}
+.loc-card{
+  background:rgba(242,231,214,.07);border:var(--border-w) solid rgba(226,186,135,.3);
+  border-radius:var(--r-lg);padding:var(--s-lg);
+}
+.loc-card svg{width:26px;height:26px;color:var(--brand)}
+.loc-card b{display:block;margin-top:var(--s-md);font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold);color:var(--inverse)}
+.loc-card p{margin-top:var(--s-xs);font-size:var(--fs-body-sm);color:var(--on-dark-2);line-height:var(--lh-base)}
+.loc-actions{margin-top:var(--s-xxl);display:flex;flex-wrap:wrap;gap:var(--s-md);align-items:center}
+.loc-actions .btn-ghost{color:var(--inverse)}
+
+/* ============================================================
+   FAQ
+   ============================================================ */
+.faq-in{display:grid;gap:clamp(28px,4vw,56px)}
+@media (min-width:900px){.faq-in{grid-template-columns:.8fr 1.2fr;align-items:start}}
+.faq-list{display:grid;gap:var(--s-md)}
+.faq-item{background:var(--card);border:var(--border-w) solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.faq-item[open]{border-color:var(--wicker);background:var(--brand-tint)}
+.faq-item summary{
+  display:flex;align-items:center;gap:var(--s-lg);cursor:pointer;list-style:none;
+  padding:var(--s-lg);min-height:var(--tapmin);
+  font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-h3);
+}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary::after{
+  content:"";margin-left:auto;flex:none;width:26px;height:26px;border-radius:var(--r-pill);
+  background:var(--wicker-soft);
+  background-image:linear-gradient(var(--ink-2),var(--ink-2)),linear-gradient(var(--ink-2),var(--ink-2));
+  background-size:12px 2px,2px 12px;background-position:center,center;background-repeat:no-repeat;
+  transition:transform var(--t-base);
+}
+.faq-item[open] summary::after{transform:rotate(45deg)}
+.faq-item p{padding:0 var(--s-lg) var(--s-lg);color:var(--ink-2);max-width:62ch}
+.ask{
+  margin-top:var(--s-xxl);display:grid;gap:var(--s-md);align-items:start;
+  background:var(--brand-tint);border:var(--border-w) solid var(--wicker);
+  border-radius:var(--r-lg);padding:var(--s-lg);max-width:420px;
+}
+.ask svg{width:28px;height:28px;color:var(--brand-dark)}
+.ask b{font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold)}
+.ask p{margin-top:var(--s-xs);font-size:var(--fs-body-sm);color:var(--ink-2)}
+.ask .btn{justify-self:start}
+
+/* ============================================================
+   DOWNLOAD
+   ============================================================ */
+.dl{position:relative;overflow:hidden;background:var(--brand-tint);border-block:var(--border-w) solid var(--line)}
+.dl-in{display:grid;gap:clamp(32px,5vw,56px);align-items:center}
+@media (min-width:900px){.dl-in{grid-template-columns:1.05fr .95fr}}
+.dl-lockup{width:min(240px,58%);margin-bottom:var(--s-xl)}
+.dl h2{font-family:var(--f-display);font-size:var(--fs-lp-title);font-weight:var(--fw-bold);line-height:var(--lh-tight);margin-top:var(--s-lg)}
+.dl p.lead{margin-top:var(--s-md);font-size:var(--fs-lp-lead);color:var(--ink-2);max-width:46ch;line-height:var(--lh-relaxed)}
+.dl-row{display:flex;flex-wrap:wrap;gap:var(--s-xl);margin-top:var(--s-xxl);align-items:center}
+.qr{
+  margin:0;flex:none;border-radius:var(--r-md);
+  background:var(--card);border:var(--border-w) solid var(--wicker);
+  display:grid;justify-items:center;gap:var(--s-xs);padding:var(--s-sm);
+}
+.qr img{width:96px;height:96px;border-radius:var(--r-xs)}
+.qr figcaption{font-size:11px;font-weight:var(--fw-bold);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
+.watch{display:inline-flex;align-items:center;gap:var(--s-sm);min-height:var(--tapmin);
+  font-weight:var(--fw-bold);font-size:var(--fs-body-sm);color:var(--brand-dark)}
+.watch svg{width:22px;height:22px}
+.watch:hover{color:var(--ink)}
+.dl-note{margin-top:var(--s-lg);font-size:var(--fs-caption);color:var(--ink-3);max-width:44ch}
+.dl-art{position:relative;border-radius:var(--r-xl);overflow:hidden;border:var(--border-w) solid var(--wicker)}
+.dl-art img{width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}
+.dl-art figcaption{
+  position:absolute;inset:auto 0 0 0;padding:var(--s-xl);
+  background:linear-gradient(transparent,rgba(38,16,6,.88));
+  color:var(--inverse);font-family:var(--f-display);font-size:var(--fs-h2);font-weight:var(--fw-bold);
+}
+
+/* ============================================================
+   TEAM + FOOTER
+   ============================================================ */
+.team{display:grid;gap:var(--s-md);grid-template-columns:repeat(2,1fr)}
+@media (min-width:720px){.team{grid-template-columns:repeat(4,1fr);gap:var(--s-lg)}}
+.tcard{background:var(--card);border:var(--border-w) solid var(--line);border-radius:var(--r-lg);padding:var(--s-lg)}
+.tcard .av{
+  width:46px;height:46px;border-radius:var(--r-pill);display:grid;place-items:center;
+  background:var(--brand-soft);color:var(--brand-dark);border:var(--border-w) solid var(--wicker);
+  font-family:var(--f-display);font-weight:var(--fw-bold);font-size:var(--fs-body-sm);
+}
+.tcard b{display:block;margin-top:var(--s-md);font-size:var(--fs-body-sm);font-weight:var(--fw-bold)}
+.tcard em{font-style:normal;display:block;font-size:var(--fs-caption);color:var(--ink-3)}
+.tcard a{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s-md);font-size:var(--fs-caption);font-weight:var(--fw-semibold);color:var(--brand-dark)}
+.tcard a svg{width:15px;height:15px}
+
+footer.ft{background:var(--ink-surface);color:var(--ink-on);padding-block:clamp(40px,6vw,64px)}
+.ft-grid{display:grid;gap:var(--s-xxxl)}
+@media (min-width:720px){.ft-grid{grid-template-columns:1.6fr 1fr 1fr}}
+.ft-logo{display:flex;align-items:center;gap:var(--s-sm)}
+.ft-logo img{width:40px;height:40px;border-radius:var(--r-sm)}
+.ft-logo b{font-family:var(--f-display);font-size:var(--fs-h1);font-weight:var(--fw-bold);color:var(--inverse)}
+.ft-logo b i{font-style:normal;color:var(--brand)}
+.ft p{margin-top:var(--s-md);color:var(--on-dark-2);font-size:var(--fs-body-sm);max-width:40ch;line-height:var(--lh-relaxed)}
+.ft h4{font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold);color:var(--inverse)}
+.ft ul{list-style:none;margin:var(--s-md) 0 0;padding:0;display:grid;gap:var(--s-sm)}
+.ft ul a{font-size:var(--fs-body-sm);color:var(--on-dark-2)}
+.ft ul a:hover{color:var(--brand)}
+.ft-bottom{margin-top:var(--s-xxxl);padding-top:var(--s-xl);border-top:var(--hairline-w) solid rgba(226,186,135,.22);
+  display:flex;flex-wrap:wrap;gap:var(--s-md);justify-content:space-between;font-size:var(--fs-caption);color:var(--on-dark-3)}
+
+/* ============================================================
+   REVEALS
+   Default state is VISIBLE. Hidden states are only applied once
+   the motion layer is confirmed alive (html.mo), so a blocked CDN
+   or a JS failure leaves a complete, readable page.
+   ============================================================ */
+html.mo .rev{opacity:0;transform:translateY(26px)}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .rail-anim{animation:none!important}
+  .rev{opacity:1!important;transform:none!important}
+  .hero-photo,.tag,.screen-strip,.loc-photo img{transform:none!important}
+}
+html{scroll-behavior:smooth}
+</style>
 </head>
+
 <body>
 
-<header>
-  <div class="wrap">
-    <a href="index.html" class="logo logo-img"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
-    <nav>
-      <ul id="nav-menu">
-        <li><a href="index.html#how-it-works">How It Works</a></li>
-        <li><a href="index.html#location">Location</a></li>
-        <li><a href="index.html#faq">FAQ</a></li>
-        <li><a href="about.html">About</a></li>
-        <li><a href="contact.html">Contact</a></li>
-      </ul>
+<!-- ===================== NAV ===================== -->
+<header class="nav" id="nav">
+  <div class="wrap-wide nav-in">
+    <a class="nav-logo" href="#top" aria-label="PalengkeHub home">
+      <img src="./assets/logo-mark.webp" width="40" height="40" alt="PalengkeHub basket logo">
+      <b>Palengke<i>Hub</i></b>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#app">Ang App</a>
+      <a href="#presyo">Presyo Check</a>
+      <a href="#paano">Paano Gumana</a>
+      <a href="#location">Location</a>
+      <a href="#faq">FAQ</a>
     </nav>
-    <button class="menu-btn" id="menu-toggle" aria-label="Toggle menu">
-      <span></span>
-      <span></span>
-      <span></span>
+    <a class="btn btn-primary" href="PalengkeHub.apk" download="PalengkeHub.apk">Download App</a>
+    <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navPanel" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
+  </div>
+  <div class="nav-panel" id="navPanel">
+    <a href="#app">Ang App</a>
+    <a href="#presyo">Presyo Check</a>
+    <a href="#paano">Paano Gumana</a>
+    <a href="#location">Location</a>
+    <a href="#faq">FAQ</a>
+    <a class="btn btn-primary" href="PalengkeHub.apk" download="PalengkeHub.apk">Download App</a>
   </div>
 </header>
 
-<section class="hero">
-  <div class="wrap hero-inner">
-    <div class="hero-content">
-      <span class="eyebrow">Lipa City Public Market • Online since 2026</span>
-      <h1>Ang palengke ng Lipa, <em>ngayon nasa online.</em></h1>
-      <p class="sub">Bili online, sundo sa Lipa! Order sa Lipa City Public Market, tapos pick-up mo na lang. Simple lang!</p>
-      <div class="hero-actions">
-        <a href="#download" class="btn-primary">Download App</a>
-        <a href="#features" class="link-ghost">See how it works
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+<!-- ===================== HERO ===================== -->
+<section class="hero" id="top">
+  <div class="hero-photo" id="heroPhoto" role="img" aria-label="The Lipa City Public Market building on Ayala Highway, Lipa, Batangas"></div>
+  <div class="hero-scrim"></div>
+  <div class="hero-weave"></div>
+
+  <div class="wrap-wide hero-in">
+    <div class="hero-copy">
+      <p class="hero-eyebrow">Lipa City Public Market<s>&bull; Online since 2026</s></p>
+
+      <h1 class="hero-h1">
+        <span class="l1">Ang palengke ng Lipa,</span>
+        <span class="l2"><em>ngayon</em><em>nasa online.</em></span>
+      </h1>
+
+      <p class="hero-sub">Bili online, sundo sa Lipa. Tingnan ang presyo ng bawat stall bago ka umalis ng bahay, bayad sa GCash, tapos sunduin mo na lang ang tinda mo sa market. Simple lang.</p>
+
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="PalengkeHub.apk" download="PalengkeHub.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+          Download the app
+        </a>
+        <a class="btn btn-ghost" href="#paano">
+          Paano gumana
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </a>
       </div>
+
+      <div class="hero-trust">
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3.5v5c0 4.7-3.3 8.1-8 9.5-4.7-1.4-8-4.8-8-9.5v-5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
+          GCash lang, confirmed agad
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Bukas 5:00 AM to 7:00 PM
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Pickup sa mismong stall
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 6-6"/></svg>
+          Less hassle sa siksikan sa palengke at mahabang pila!
+        </div>
+      </div>
+
+      <p class="scroll-cue"><i></i> Scroll, ipapasyal ka namin sa app</p>
     </div>
-    <div class="hero-art">
-      <span class="hero-emoji emoji-1">🥭</span>
-      <span class="hero-emoji emoji-2">🍅</span>
-      <span class="hero-emoji emoji-3">🐟</span>
-      <span class="hero-emoji emoji-4">🧄</span>
-      <span class="hero-emoji emoji-5">🥬</span>
-      <span class="hero-emoji emoji-6">🛒</span>
-      <div class="phone-mockup">
-        <div class="phone-screen">
-          <div class="phone-header">
-            <div class="phone-notch"></div>
+
+    <div class="stage">
+      <div class="phone" aria-hidden="true">
+        <div class="screen">
+          <img class="screen-hdr" src="./assets/app-header.webp" width="375" height="162" alt="">
+          <div class="screen-body"><img class="screen-strip" src="./assets/app-strip.webp" width="375" height="1940" alt=""></div>
+          <img class="screen-tab" src="./assets/app-tabbar.webp" width="375" height="60" alt="">
+          <div class="screen-glare"></div>
+        </div>
+      </div>
+
+      <div class="tags">
+        <div class="tag tag-1">
+          <img src="./assets/p-kamatis.webp" width="44" height="44" alt="Kamatis">
+          <div>
+            <div class="tag-k">Kamatis, Aling Nena</div>
+            <div class="tag-p num">&#8369;60 <span>/ kg</span></div>
           </div>
-          <div class="phone-content">
-            <div class="phone-app-icon">
-              <img src="palengkehublogo.jpg" alt="PalengkeHub">
-            </div>
-            <div class="phone-app-name">PalengkeHub</div>
-            <div class="phone-rating">★★★★★ 4.9</div>
-            <div class="phone-stats">
-              <div class="phone-stat">
-                <span class="stat-num">50K+</span>
-                <span class="stat-label">Downloads</span>
-              </div>
-              <div class="phone-stat">
-                <span class="stat-num">4K+</span>
-                <span class="stat-label">Sellers</span>
-              </div>
-            </div>
+        </div>
+        <div class="tag tag-2">
+          <img src="./assets/p-bangus.webp" width="44" height="44" alt="Bangus">
+          <div>
+            <div class="tag-k">Bangus, Isda Section</div>
+            <div class="tag-p num">&#8369;180 <span>/ kg</span></div>
           </div>
         </div>
-        <div class="phone-reflection"></div>
-      </div>
-      <div class="floating-card card-price">
-        <div class="card-icon">🛒</div>
-        <div class="card-text">Big Savings<br><b>Up to 40% off</b></div>
-      </div>
-      <div class="floating-card card-stall">
-        <div class="card-icon">✓</div>
-        <div class="card-text">Verified<br><b>Sellers Only</b></div>
-      </div>
-      <div class="floating-card card-pickup">
-        <div class="card-icon">🛍️</div>
-        <div class="card-text">Pickup Ready<br><b>Same Day</b></div>
-      </div>
-    </div>
-  </div>
-  <svg class="wave-divider" viewBox="0 0 1200 48" preserveAspectRatio="none" aria-hidden="true">
-    <path d="M0,48 C150,14 350,0 600,12 C850,24 1000,44 1200,18 L1200,48 Z"/>
-  </svg>
-</section>
-
-<section class="trust animate-on-scroll">
-  <div class="wrap">
-    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>Secure checkout</div>
-    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Pickup at Lipa City Public Market</div>
-    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>4,000+ verified sellers</div>
-  </div>
-</section>
-
-<section class="stats animate-on-scroll">
-  <div class="wrap">
-    <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-number">50K+</div>
-        <div class="stat-label">App Downloads</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number">4,000+</div>
-        <div class="stat-label">Verified Sellers</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number">100K+</div>
-        <div class="stat-label">Pickups Completed</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number">4.9★</div>
-        <div class="stat-label">App Rating</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== Video Showcase ===== -->
-<section class="video-showcase animate-on-scroll" id="video">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Panoorin</span>
-      <h2>PalengkeHub in action</h2>
-      <p class="section-sub">Tingnan kung paano gumagana ang PalengkeHub — mula pag-order hanggang pickup sa Lipa City Public Market. Pindutin ang play at i-adjust ang volume kung gusto mo ng tunog!</p>
-    </div>
-    <div class="video-wrap">
-      <video controls preload="metadata" poster="palengkehublogo.jpg">
-        <source src="PALENGKEHUB.mp4" type="video/mp4">
-        <source src="PALENGKEHUB.mov" type="video/quicktime">
-        Sorry, your browser doesn't support embedded videos.
-      </video>
-    </div>
-  </div>
-</section>
-
-<svg class="scallop" viewBox="0 0 1200 26" preserveAspectRatio="none" aria-hidden="true">
-  <path d="M0,26 Q25,0 50,26 T100,26 T150,26 T200,26 T250,26 T300,26 T350,26 T400,26 T450,26 T500,26 T550,26 T600,26 T650,26 T700,26 T750,26 T800,26 T850,26 T900,26 T950,26 T1000,26 T1050,26 T1100,26 T1150,26 T1200,26 L1200,0 L0,0 Z"/>
-</svg>
-
-<section class="features animate-on-scroll" id="features">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Bakit PalengkeHub</span>
-      <h2>Built like a real palengke — just without the queue.</h2>
-    </div>
-    <div class="stalls animate-on-scroll">
-      <div class="stall">
-        <span class="hole"></span>
-        <span class="tag">Tinda</span>
-        <div class="stall-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10h16l-1.5 9a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7L4 10z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg>
+        <div class="tag tag-3">
+          <img src="./assets/p-saging.webp" width="44" height="44" alt="Saging na saba">
+          <div>
+            <div class="tag-k">Saging na Saba</div>
+            <div class="tag-p num">&#8369;65 <span>/ kg</span></div>
+          </div>
         </div>
-        <h3>Every stall, one app</h3>
-        <p>Browse produce, home goods, gadgets, and pasalubong from thousands of local sellers without hopping between sites.</p>
-      </div>
-      <div class="stall">
-        <span class="hole"></span>
-        <span class="tag">Bayad</span>
-        <div class="stall-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-        </div>
-        <h3>Pay with GCash, protected</h3>
-        <p>GCash lang ang bayad — para siguradong confirmed ang order mo at walang fake bookings. Bayad online, pick-up na lang sa stall.</p>
-      </div>
-      <div class="stall">
-        <span class="hole"></span>
-        <span class="tag">Sundo</span>
-        <div class="stall-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14"/><path d="M9 5V3h6v2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
-        </div>
-        <h3>Order online, pickup at the market</h3>
-        <p>Place your order, then pick it up at the Lipa City Public Market when it's ready — fast and easy.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== How It Works ===== -->
-<section class="how-it-works animate-on-scroll" id="how-it-works">
-  <div class="wrap">
-    <div class="hanging-sign hanging-sign-how" aria-hidden="true">
-      <span class="sign-rope rope-left"></span>
-      <span class="sign-rope rope-right"></span>
-      <div class="sign-board">Sariwa!</div>
+<!-- ===================== CATEGORY BAND ===================== -->
+<section class="band">
+  <div class="wrap-wide band-head">
+    <span class="kicker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      Mamili ayon sa kategorya
+    </span>
+    <h2 class="sec-title rev">Buong palengke, isang app.</h2>
+    <p class="sec-lead rev">Gulay, karne, isda, prutas, manok at bigas mula sa mga verified na stall ng Lipa City Public Market. Hindi na kailangang mag-hop sa iba't ibang page o mag-chat ng isa isa.</p>
+  </div>
+
+  <div class="rail-clip">
+    <div class="rail rail-anim" id="rail">
+      <div class="cat"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
+      <!-- The loop translates by -25% (see @keyframes railslide), so it
+           needs 4 copies of the set, not 2 — with only 2, one full set's
+           width can be narrower than a wide desktop viewport, and the
+           strip visibly runs out of cards before the loop catches up.
+           That gap on the right was this, not an animation bug. -->
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
     </div>
-    <div class="section-head">
-      <span class="kicker">Paano Gumana</span>
-      <h2>How PalengkeHub works</h2>
-      <p class="section-sub">Tatlong simpleng hakbang lang — order, bayad, sundo. Ganun kadali!</p>
+  </div>
+</section>
+
+<!-- ===================== APP STORY ===================== -->
+<section class="story sec" id="app">
+  <div class="wrap-wide">
+    <span class="kicker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M11 18.5h2"/></svg>
+      Ang app
+    </span>
+    <h2 class="sec-title rev">Nasa bulsa mo ang buong palengke.</h2>
+    <p class="sec-lead rev">Tatlong bagay lang ang kailangan mong tandaan: hanapin, ikumpara, sunduin. Ang nasa telepono sa tabi ay ang totoong app, hindi drawing.</p>
+
+    <div class="story-stage" id="storyStage">
+      <div class="phone" id="storyPhone" aria-hidden="true">
+        <div class="screen">
+          <img class="screen-hdr" src="./assets/app-header.webp" width="375" height="162" alt="" loading="lazy">
+          <div class="screen-body"><img class="screen-strip" src="./assets/app-strip.webp" width="375" height="1940" alt="" loading="lazy"></div>
+          <img class="screen-tab" src="./assets/app-tabbar.webp" width="375" height="60" alt="" loading="lazy">
+          <div class="screen-glare"></div>
+        </div>
+      </div>
+
+      <div class="beats" id="beats">
+        <article class="beat on">
+          <p class="beat-n"><i></i>01 Hanapin</p>
+          <h3>Hanapin ang tinda, hindi ang stall.</h3>
+          <p>I-type mo lang ang kamatis. Ilalabas ng app ang lahat ng stall na may kamatis ngayon, kasama ang presyo kada kilo at kung bukas ba sila.</p>
+
+          <div class="widget">
+            <div class="w-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
+              kamatis
+            </div>
+            <div class="w-row">
+              <img src="./assets/p-kamatis.webp" width="40" height="40" alt="">
+              <span><b>Aling Nena Gulayan</b><em>Vegetable Section, Stall #12</em></span>
+              <span class="w-price num">&#8369;60<i>/ kg</i></span>
+            </div>
+            <div class="w-row">
+              <img src="./assets/p-kamatis.webp" width="40" height="40" alt="">
+              <span><b>Aling Rosa Fresh Veggies</b><em>Vegetable Section, Stall #27</em></span>
+              <span class="w-price num">&#8369;72<i>/ kg</i></span>
+            </div>
+          </div>
+        </article>
+
+        <article class="beat">
+          <p class="beat-n"><i></i>02 Ikumpara</p>
+          <h3>Presyo Check, kada kilo, kada stall.</h3>
+          <p>Nakikita mo agad kung sino ang pinakamura at kung sino ang mahal. Walang paikot ikot sa buong palengke para lang magtanong ng presyo.</p>
+
+          <div class="widget w-compare">
+            <div class="w-cell">
+              <span class="chip chip-best">Pinakamura</span>
+              <b class="num">&#8369;60</b>
+              <em>Aling Nena Gulayan</em>
+            </div>
+            <div class="w-cell">
+              <span class="chip chip-mahal">Mahal</span>
+              <b class="num">&#8369;85</b>
+              <em>Mang Tonyo Gulay</em>
+            </div>
+            <div class="w-cell w-save">
+              <span class="chip chip-mura">Tipid</span>
+              <b class="num">&#8369;25</b>
+              <em>kada kilo</em>
+            </div>
+          </div>
+        </article>
+
+        <article class="beat">
+          <p class="beat-n"><i></i>03 Sunduin</p>
+          <h3>Isang PalengKart, kahit ilang stall.</h3>
+          <p>Ilagay sa PalengKart ang lahat ng kailangan mo, bayad sa GCash, tapos sunduin ang bawat order sa mismong stall ng vendor.</p>
+
+          <div class="widget">
+            <div class="w-row">
+              <img src="./assets/p-liempo.webp" width="40" height="40" alt="">
+              <span><b>Liempo, 1 kg</b><em>Mang Juan Meat Shop</em></span>
+              <span class="w-price num">&#8369;310</span>
+            </div>
+            <div class="w-row">
+              <img src="./assets/p-kamatis.webp" width="40" height="40" alt="">
+              <span><b>Kamatis, 1 kg</b><em>Aling Nena Gulayan</em></span>
+              <span class="w-price num">&#8369;60</span>
+            </div>
+            <div class="w-foot">
+              <span>Sundo sa 2 stall, Lipa City Public Market</span>
+              <b class="num">&#8369;370</b>
+            </div>
+            <div class="w-pay">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+              Bayad sa GCash
+            </div>
+          </div>
+        </article>
+      </div>
     </div>
-    <div class="steps">
-      <div class="step animate-on-scroll">
-        <div class="step-num">1</div>
-        <div class="step-icon">🛒</div>
+  </div>
+</section>
+
+<!-- ===================== PRESYO CHECK ===================== -->
+<section class="sec" id="presyo">
+  <div class="wrap-wide">
+    <div class="presyo-head">
+      <div>
+        <span class="kicker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          Presyo Check
+        </span>
+        <h2 class="sec-title rev">Bago ka umalis ng bahay, alam mo na kung sino ang pinakamura.</h2>
+      </div>
+      <p class="sec-lead rev">Sa palengke, iba iba ang presyo kada stall, at kailangan mong maglakad para malaman. Sa PalengkeHub nakahilera na sila, kada kilo, sa isang screen.</p>
+    </div>
+
+    <div class="ruler rev">
+      <div class="ruler-top">
+        <img src="./assets/p-kamatis.webp" width="64" height="64" alt="Kamatis, native tomatoes">
+        <div>
+          <h3>Kamatis</h3>
+          <p>Tomato &bull; presyo kada kilo &bull; Vegetable Section</p>
+        </div>
+        <div class="save">
+          <b class="num" data-count="25" data-prefix="&#8369;">&#8369;25</b>
+          <span>tipid kada kilo</span>
+        </div>
+      </div>
+
+      <div class="rows">
+        <div class="row win">
+          <div class="row-name">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.4 10.2A2 2 0 0116.6 21H7.4a2 2 0 01-2-1.8L4 9z"/><path d="M4 9l2-5h12l2 5"/></svg>
+            <span class="rn">Aling Nena Gulayan <em>Stall #12</em></span>
+          </div>
+          <div class="row-price num">&#8369;60 <span>/ kg</span></div>
+          <div class="row-bar"><i style="--w:70.6%"></i></div>
+          <div class="row-meta">
+            <span class="chip chip-best">Pinakamura</span>
+            <span class="chip chip-mura">Mura</span>
+          </div>
+        </div>
+
+        <div class="row mid">
+          <div class="row-name">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.4 10.2A2 2 0 0116.6 21H7.4a2 2 0 01-2-1.8L4 9z"/><path d="M4 9l2-5h12l2 5"/></svg>
+            <span class="rn">Aling Rosa Fresh Veggies <em>Stall #27</em></span>
+          </div>
+          <div class="row-price num">&#8369;72 <span>/ kg</span></div>
+          <div class="row-bar"><i style="--w:84.7%"></i></div>
+          <div class="row-meta"><span class="chip chip-fair">Katamtaman</span></div>
+        </div>
+
+        <div class="row dear">
+          <div class="row-name">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.4 10.2A2 2 0 0116.6 21H7.4a2 2 0 01-2-1.8L4 9z"/><path d="M4 9l2-5h12l2 5"/></svg>
+            <span class="rn">Mang Tonyo Gulay <em>Stall #41</em></span>
+          </div>
+          <div class="row-price num">&#8369;85 <span>/ kg</span></div>
+          <div class="row-bar"><i style="--w:100%"></i></div>
+          <div class="row-meta"><span class="chip chip-mahal">Mahal</span></div>
+        </div>
+      </div>
+
+      <p class="ruler-foot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        Sample data for this preview. Sa app, ang presyo ay galing mismo sa vendor at may timestamp kung kailan huling na-update.
+      </p>
+    </div>
+
+    <div class="pgrid rev">
+      <article class="pcard">
+        <img src="./assets/p-liempo.webp" width="360" height="360" alt="Liempo, pork belly">
+        <div><b>Liempo</b><em>Pork belly</em><s class="num">&#8369;310 <span>/ kg</span></s></div>
+      </article>
+      <article class="pcard">
+        <img src="./assets/p-bangus.webp" width="360" height="360" alt="Bangus, milkfish on ice">
+        <div><b>Bangus</b><em>Milkfish</em><s class="num">&#8369;180 <span>/ kg</span></s></div>
+      </article>
+      <article class="pcard">
+        <img src="./assets/p-itlog.webp" width="360" height="360" alt="Tray of fresh brown eggs">
+        <div><b>Itlog</b><em>Egg</em><s class="num">&#8369;105 <span>/ dosena</span></s></div>
+      </article>
+      <article class="pcard">
+        <img src="./assets/p-mangga.webp" width="360" height="360" alt="Ripe carabao mangoes">
+        <div><b>Mangga</b><em>Mango</em><s class="num">&#8369;140 <span>/ kg</span></s></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PAANO GUMANA ===================== -->
+<section class="sec" id="paano" style="background:var(--card-2);border-block:var(--border-w) solid var(--line)">
+  <div class="wrap-wide paano-in">
+    <div>
+      <span class="kicker">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M6 9l6-6 6 6"/></svg>
+        Paano gumana
+      </span>
+      <h2 class="sec-title rev">Apat na hakbang, tapos sundo na.</h2>
+      <p class="sec-lead rev">Walang delivery fee, walang rider, walang pila. Ikaw pa rin ang pupunta sa palengke, pero handa na ang tinda mo paglapit mo sa stall.</p>
+
+      <ul class="notes rev">
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Walang delivery fee. Ikaw ang sumusundo, kaya ang binabayaran mo ay ang tinda lang.
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Verified sellers lang ang nasa app. Totoong stall, totoong tao, nasa loob ng palengke.
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          Sariwa pa rin. Kinukuha ng vendor ang order mo malapit na sa oras ng pickup.
+        </li>
+      </ul>
+
+      <div class="ticket rev">
+        <div class="ticket-top">
+          <img src="./assets/logo-mark.webp" width="34" height="34" alt="">
+          <div>
+            <b>Pickup ticket</b>
+            <em>Ipakita ito sa vendor</em>
+          </div>
+          <span class="chip chip-mura">Bayad na</span>
+        </div>
+        <div class="ticket-code num">PH-2416</div>
+        <div class="ticket-rows">
+          <div><span>Stall</span><b>Aling Nena Gulayan, #12</b></div>
+          <div><span>Oras</span><b>Ngayon, 6:30 AM to 7:00 PM</b></div>
+          <div><span>Bayad</span><b>GCash, confirmed</b></div>
+        </div>
+        <div class="ticket-tear" aria-hidden="true"></div>
+        <div class="ticket-items">
+          <div><span>Kamatis, 1 kg</span><b class="num">&#8369;60</b></div>
+          <div><span>Sitaw, 1 tali</span><b class="num">&#8369;45</b></div>
+          <div class="ticket-total"><span>Kabuuan</span><b class="num">&#8369;105</b></div>
+        </div>
+        <p class="ticket-note">Sample ticket. Ang totoong code ay ibibigay ng app pagkatapos ng bayad.</p>
+      </div>
+    </div>
+
+    <div class="route" id="route">
+      <span class="route-line"></span>
+      <span class="route-fill" id="routeFill"></span>
+
+      <div class="step rev">
+        <span class="step-dot">1</span>
+        <h3>Mag-browse</h3>
+        <p>Buksan ang app at hanapin ang tinda. Makikita mo agad ang presyo kada kilo sa bawat stall na may stock ngayon.</p>
+      </div>
+      <div class="step rev">
+        <span class="step-dot">2</span>
         <h3>Pumili at mag-order</h3>
-        <p>Browse at pumili ng mga tinda mula sa verified sellers ng Lipa City Public Market.</p>
+        <p>Piliin ang stall na gusto mo, ilagay sa PalengKart, tapos i-schedule ang oras ng pickup mo.</p>
       </div>
-      <div class="step animate-on-scroll">
-        <div class="step-num">2</div>
-        <div class="step-icon">📱</div>
-        <h3>Bayad via GCash</h3>
-        <p>Magbayad online gamit ang GCash — secure, confirmed agad, at walang fake bookings.</p>
+      <div class="step rev">
+        <span class="step-dot">3</span>
+        <h3>Bayad sa GCash</h3>
+        <p>Magbayad online bago mo sunduin ang order. Confirmed agad ang booking at walang fake orders na natatanggap ang vendor.</p>
+        <span class="gcash">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+          GCash only
+        </span>
       </div>
-      <div class="step animate-on-scroll">
-        <div class="step-num">3</div>
-        <div class="step-icon">🛍️</div>
-        <h3>Sunduin sa market</h3>
-        <p>Pumunta sa Lipa City Public Market at i-pickup ang order mo sa mismong stall ng vendor.</p>
+      <div class="step rev">
+        <span class="step-dot">4</span>
+        <h3>Sunduin sa stall</h3>
+        <p>Pumunta sa Lipa City Public Market at ipakita ang order confirmation mo. Ibibigay na ng vendor ang tinda mo sa mismong stall nila.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== Location / Market Info ===== -->
-<section class="location animate-on-scroll" id="location">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Saan tayo?</span>
-      <h2>Hanapin kami sa Lipa City Public Market</h2>
-      <p class="section-sub">Eto ang address at pickup point ng PalengkeHub. Madaling puntahan, madaling i-pickup!</p>
-    </div>
-    <div class="location-grid">
-      <div class="location-card">
-        <div class="loc-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        </div>
-        <h3>Address</h3>
-        <p>Lipa City Public Market,<br>Lipa, Batangas 4217</p>
+<!-- ===================== LOCATION ===================== -->
+<section class="loc sec" id="location">
+  <div class="loc-photo"><img id="locPhoto" src="./assets/market-wide.webp" width="1600" height="686" alt="Lipa City Public Market at first light"></div>
+  <div class="wrap-wide loc-in">
+    <span class="kicker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Saan tayo
+    </span>
+    <h2 class="sec-title rev">Hanapin kami sa Lipa City Public Market.</h2>
+    <p class="sec-lead rev">Isang palengke lang ang sinasakop ng PalengkeHub ngayon, at alam namin ito nang husto. Eto ang address at ang pickup point.</p>
+
+    <div class="loc-grid">
+      <div class="loc-card rev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <b>Address</b>
+        <p>Lipa City Public Market<br>Lipa, Batangas 4217</p>
       </div>
-      <div class="location-card">
-        <div class="loc-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        </div>
-        <h3>Pickup Hours</h3>
-        <p>Monday – Sunday<br>5:00 AM – 7:00 PM</p>
+      <div class="loc-card rev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l4 2"/></svg>
+        <b>Pickup hours</b>
+        <p>Lunes hanggang Linggo<br>5:00 AM to 7:00 PM</p>
       </div>
-      <div class="location-card">
-        <div class="loc-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <h3>Pickup Point</h3>
-        <p>Sa mismong stall ng vendor<br>sa loob ng Lipa City Public Market</p>
+      <div class="loc-card rev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16l-1.4 10.2A2 2 0 0116.6 21H7.4a2 2 0 01-2-1.8L4 9z"/><path d="M4 9l2-5h12l2 5"/></svg>
+        <b>Pickup point</b>
+        <p>Sa mismong stall ng vendor<br>sa loob ng palengke</p>
       </div>
-      <div class="location-card">
-        <div class="loc-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        </div>
-        <h3>Payment</h3>
-        <p>GCash lang<br>— secure, walang fake bookings</p>
+      <div class="loc-card rev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>
+        <b>Payment</b>
+        <p>GCash lang<br>secure at walang fake bookings</p>
       </div>
     </div>
-    <div class="map-wrap">
-      <iframe
-        src="https://www.google.com/maps?q=Lipa+City+Public+Market,+Lipa,+Batangas&output=embed"
-        width="100%"
-        height="380"
-        style="border:0;"
-        allowfullscreen=""
-        loading="lazy"
-        referrerpolicy="no-referrer-when-downgrade"
-        title="Map to Lipa City Public Market">
-      </iframe>
+
+    <div class="loc-actions">
+      <a class="btn btn-ghost" href="https://www.google.com/maps/search/?api=1&amp;query=Lipa+City+Public+Market%2C+Lipa%2C+Batangas" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        Buksan sa Google Maps
+      </a>
+      <span style="font-size:var(--fs-caption);color:var(--on-dark-3)">Walang delivery. Pickup lang, kaya walang delivery fee.</span>
     </div>
   </div>
 </section>
 
-<!-- ===== FAQ ===== -->
-<section class="faq animate-on-scroll" id="faq">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">FAQ</span>
-      <h2>Mga madalas itanong</h2>
-      <p class="section-sub">Wala kang makita dito? I-message mo kami sa contact page!</p>
+<!-- ===================== FAQ ===================== -->
+<section class="sec" id="faq">
+  <div class="wrap-wide faq-in">
+    <div>
+      <span class="kicker">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 015 .8c0 1.7-2.5 2-2.5 3.5M12 17h.01"/></svg>
+        FAQ
+      </span>
+      <h2 class="sec-title rev">Mga madalas itanong.</h2>
+      <p class="sec-lead rev">Wala kang makita dito? I-message mo kami sa contact page at sasagutin ka namin.</p>
+
+      <div class="ask rev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.4 9 9 0 01-3.3-.6L3 21l1.8-5.2A8.3 8.3 0 014 11.5 8.4 8.4 0 0112.5 3 8.4 8.4 0 0121 11.5z"/></svg>
+        <div>
+          <b>May tanong pa?</b>
+          <p>Sagutin ka namin sa loob ng oras ng palengke, 5:00 AM to 7:00 PM.</p>
+        </div>
+        <a class="btn btn-quiet" href="contact.html">Contact</a>
+      </div>
     </div>
+
     <div class="faq-list">
-      <div class="faq-item">
-        <button class="faq-question" type="button">
-          <span>Saan ko susunduin ang order ko?</span>
-          <span class="faq-icon">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Diretso sa stall ng vendor mismo. Ipakita mo lang ang order confirmation mo sa vendor, at ibibigay na nila sa iyo ang tinda mo.</p>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" type="button">
-          <span>Anong oras pwede mag-pickup?</span>
-          <span class="faq-icon">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Araw-araw, 5:00 AM hanggang 7:00 PM. I-schedule mo ang pickup mo kapag nag-order ka — may confirmation kami kapag handa na ang tinda mo.</p>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" type="button">
-          <span>Paano ako magbabayad?</span>
-          <span class="faq-icon">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>GCash lang ang tinatanggap namin. Magbayad online bago mo i-pickup ang order mo — para siguradong confirmed at maiiwasan ang fake bookings.</p>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" type="button">
-          <span>May delivery ba kayo?</span>
-          <span class="faq-icon">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Wala. Pickup lang talaga — kaya mas mura, walang delivery fee, at sigurado kang sariwa ang tinda mo pagdating mo sa market.</p>
-        </div>
-      </div>
-      <div class="faq-item">
-        <button class="faq-question" type="button">
-          <span>Pwede bang mag-order kahit hindi taga-Lipa?</span>
-          <span class="faq-icon">+</span>
-        </button>
-        <div class="faq-answer">
-          <p>Oo! Kahit saan ka pa, pwede kang mag-order online. Basta makarating ka lang sa Lipa City Public Market para i-pickup ang order mo.</p>
-        </div>
-      </div>
+      <details class="faq-item rev" open>
+        <summary>Saan ko susunduin ang order ko?</summary>
+        <p>Diretso sa stall ng vendor mismo. Ipakita mo lang ang order confirmation mo sa vendor at ibibigay na nila sa iyo ang tinda mo.</p>
+      </details>
+      <details class="faq-item rev">
+        <summary>Anong oras pwede mag-pickup?</summary>
+        <p>Araw araw, 5:00 AM hanggang 7:00 PM. I-schedule mo ang pickup mo kapag nag-order ka, at may confirmation kami kapag handa na ang tinda mo.</p>
+      </details>
+      <details class="faq-item rev">
+        <summary>Paano ako magbabayad?</summary>
+        <p>GCash lang ang tinatanggap namin. Magbayad online bago mo i-pickup ang order mo, para siguradong confirmed at maiiwasan ang fake bookings.</p>
+      </details>
+      <details class="faq-item rev">
+        <summary>May delivery ba kayo?</summary>
+        <p>Wala. Pickup lang talaga, kaya mas mura, walang delivery fee, at sigurado kang sariwa ang tinda mo pagdating mo sa market.</p>
+      </details>
+      <details class="faq-item rev">
+        <summary>Pwede bang mag-order kahit hindi taga-Lipa?</summary>
+        <p>Oo. Kahit saan ka pa, pwede kang mag-order online. Basta makarating ka lang sa Lipa City Public Market para i-pickup ang order mo.</p>
+      </details>
     </div>
   </div>
 </section>
 
-<svg class="scallop scallop-navy" viewBox="0 0 1200 26" preserveAspectRatio="none" aria-hidden="true">
-  <path d="M0,26 Q25,0 50,26 T100,26 T150,26 T200,26 T250,26 T300,26 T350,26 T400,26 T450,26 T500,26 T550,26 T600,26 T650,26 T700,26 T750,26 T800,26 T850,26 T900,26 T950,26 T1000,26 T1050,26 T1100,26 T1150,26 T1200,26 L1200,0 L0,0 Z"/>
-</svg>
+<!-- ===================== DOWNLOAD ===================== -->
+<section class="dl sec" id="download">
+  <div class="wrap-wide dl-in">
+    <div>
+      <img class="dl-lockup" src="./assets/logo-lockup.webp" width="720" height="240" alt="PalengkeHub" loading="lazy">
+      <span class="kicker">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+        Kunin ang app
+      </span>
+      <h2 class="rev">Ready na bang mag-market online?</h2>
+      <p class="lead rev">I-download ang PalengkeHub, mag-order sa mga paborito mong stall sa Lipa City Public Market, tapos sunduin mo na lang.</p>
 
-<!-- ===== Team ===== -->
-<section class="team animate-on-scroll" id="team">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Ang Koponan</span>
-      <h2>Meet the team behind PalengkeHub</h2>
-      <p class="section-sub">Apat na magkakasama na nagtayo ng PalengkeHub — ang online home ng Lipa City Public Market.</p>
+      <div class="dl-row rev">
+        <a class="btn btn-primary" href="PalengkeHub.apk" download="PalengkeHub.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>
+          Download APK
+        </a>
+        <figure class="qr">
+          <img src="./assets/palengkehub-qr.svg" width="112" height="112" alt="QR code for the PalengkeHub app">
+          <figcaption>I-scan gamit ang phone</figcaption>
+        </figure>
+        <a class="watch" href="PALENGKEHUB.mp4">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg>
+          Panoorin ang demo
+        </a>
+      </div>
+      <p class="dl-note">Android APK muna. Kapag na-download mo na, i-allow ang install from unknown sources para mag-install. Ang QR ay galing sa repo ng PalengkeHub, i-verify ang target link bago i-publish.</p>
     </div>
-    <div class="team-grid">
-      <div class="team-card">
-        <div class="team-avatar">JV</div>
-        <span class="team-position">Project Manager</span>
-        <h3>Adajar, Jhay-Vy R.</h3>
-        <p class="team-roles">UI/UX Designer</p>
-        <a href="https://github.com/haziaintsht" class="team-github" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
-          @haziaintsht
-        </a>
-      </div>
-      <div class="team-card">
-        <div class="team-avatar">RA</div>
-        <span class="team-position">Database Administrator</span>
-        <h3>Liman, Richard Allen</h3>
-        <p class="team-roles">Backend Developer</p>
-        <a href="https://github.com/shin486" class="team-github" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
-          @shin486
-        </a>
-      </div>
-      <div class="team-card">
-        <div class="team-avatar">RK</div>
-        <span class="team-position">Frontend Developer</span>
-        <h3>Endaya, Rhon Kelly</h3>
-        <p class="team-roles">UI Designer</p>
-        <a href="https://github.com/EndayaRK" class="team-github" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
-          @EndayaRK
-        </a>
-      </div>
-      <div class="team-card">
-        <div class="team-avatar">LR</div>
-        <span class="team-position">QA Tester</span>
-        <h3>Olarte, Ludwig Rex</h3>
-        <p class="team-roles">Mobile Developer</p>
-        <a href="https://github.com/Lordwig" class="team-github" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
-          @Lordwig
-        </a>
-      </div>
+
+    <figure class="dl-art rev" style="margin:0">
+      <img src="./assets/banner-harvest.webp" width="1300" height="732" alt="Fresh Philippine produce laid out at the market">
+      <figcaption>Sariwa mula sa palengke, hindi mula sa warehouse.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== TEAM ===================== -->
+<section class="sec" style="padding-block:clamp(48px,7vw,84px)">
+  <div class="wrap-wide">
+    <span class="kicker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 5.2a3.4 3.4 0 010 5.6M18 20a6.5 6.5 0 00-1.6-4.3"/></svg>
+      Ang koponan
+    </span>
+    <h2 class="sec-title rev" style="margin-bottom:var(--s-xxl)">Apat na taga-Lipa ang nagtayo nito.</h2>
+    <div class="team">
+      <article class="tcard rev">
+        <div class="av">JV</div><b>Adajar, Jhay-Vy R.</b><em>Project Manager, UI/UX Designer</em>
+        <a href="https://github.com/haziaintsht" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>haziaintsht</a>
+      </article>
+      <article class="tcard rev">
+        <div class="av">RA</div><b>Liman, Richard Allen</b><em>Database Admin, Backend Developer</em>
+        <a href="https://github.com/shin486" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>shin486</a>
+      </article>
+      <article class="tcard rev">
+        <div class="av">RK</div><b>Endaya, Rhon Kelly</b><em>Frontend Developer, UI Designer</em>
+        <a href="https://github.com/EndayaRK" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>EndayaRK</a>
+      </article>
+      <article class="tcard rev">
+        <div class="av">LR</div><b>Olarte, Ludwig Rex</b><em>QA Tester, Mobile Developer</em>
+        <a href="https://github.com/Lordwig" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.97 10.97 0 015.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .31.21.67.8.56A10.52 10.52 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>Lordwig</a>
+      </article>
     </div>
   </div>
 </section>
 
-<!-- ===== Back to top ===== -->
-<button id="back-to-top" aria-label="Back to top">↑</button>
-
-<section class="cta-banner animate-on-scroll" id="download">
-  <div class="wrap">
-    <h2>Ready na bang mag-market online?</h2>
-    <p>I-download ang PalengkeHub app, mag-order sa mga paborito mong stalls sa Lipa City Public Market, tapos sunduin mo na lang!</p>
-    <div class="cta-buttons">
-      <a href="PalengkeHub.apk" download="PalengkeHub.apk" class="btn-dark">Download App</a>
-      <a href="contact.html" class="btn-outline">Contact Us</a>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <a href="index.html" class="logo logo-img logo-footer"><img src="palengkehublogo.jpg" alt="PalengkeHub"><span class="logo-text">PalengkeHub</span></a>
-        <p>The online home of the Lipa City Public Market — order from its stalls and pick up your tinda at the market.</p>
-        <div class="social-links">
-          <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
-          <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
-          <a href="#" aria-label="Twitter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg></a>
-        </div>
+<!-- ===================== FOOTER ===================== -->
+<footer class="ft">
+  <div class="wrap-wide">
+    <div class="ft-grid">
+      <div>
+        <a class="ft-logo" href="#top">
+          <img src="./assets/logo-mark.webp" width="40" height="40" alt="">
+          <b>Palengke<i>Hub</i></b>
+        </a>
+        <p>The online home of the Lipa City Public Market. Order from its stalls, compare the presyo, and pick up your tinda at the market.</p>
       </div>
-      <div class="footer-col">
+      <div>
         <h4>Company</h4>
         <ul>
           <li><a href="about.html">About Us</a></li>
           <li><a href="contact.html">Contact</a></li>
-          <li><a href="index.html#team">Our Team</a></li>
+          <li><a href="#download">Download</a></li>
         </ul>
       </div>
-      <div class="footer-col">
+      <div>
         <h4>Support</h4>
         <ul>
-          <li><a href="index.html#faq">FAQ</a></li>
-          <li><a href="contact.html">Help Center</a></li>
-          <li><a href="index.html#location">Market Location</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#location">Market Location</a></li>
           <li><a href="https://admin.palengkehub.site/admin-login">Admin Login</a></li>
         </ul>
       </div>
     </div>
-    <div class="footer-bottom">
-      <span>© 2026 PalengkeHub. All rights reserved.</span>
-      <span>Made in the Philippines 🇵🇭</span>
+    <div class="ft-bottom">
+      <span>&copy; 2026 PalengkeHub. All rights reserved.</span>
+      <span>Ginawa sa Lipa, Batangas, Pilipinas.</span>
     </div>
   </div>
 </footer>
 
-<!-- Hidden admin link -->
-<a href="https://admin.palengkehub.site" style="display:none;" id="admin-link" aria-hidden="true">Admin Panel</a>
+<!-- ===================== MOTION LAYER =====================
+     Version pinned with SRI, per 01-security-review/summary.md.
+     If any of these fail to load the page stays exactly as it is
+     rendered above: complete, readable, nothing hidden.
+     ========================================================= -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"
+        integrity="sha384-XmJ9SoHtVOHoQUcKvFAzVXwdkKo1Ie3bhmSoIAkcdsHGaIrVJIkmozyq0FJeb/Ly"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/ScrollTrigger.min.js"
+        integrity="sha384-wl5TeDVvOWt30Pbf8aSo2ZrzsOjddu3avOBvHe+p+OhJt9gP6w9YXmDkN5DK2/dF"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"
+        integrity="sha384-jqpi9VmOdhyLoLURgjCn7EpnG9BbnHW57ibIZoeaIU+erWDH3k8fQQg0xH2ySjnw"
+        crossorigin="anonymous"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- always on, no library needed ---------- */
+  var nav = document.getElementById('nav');
+  var onNavScroll = function () {
+    nav.classList.toggle('solid', window.scrollY > 40);
+  };
+  onNavScroll();
+  window.addEventListener('scroll', onNavScroll, { passive: true });
+
+  var toggle = document.getElementById('navToggle');
+  var panel = document.getElementById('navPanel');
+  toggle.addEventListener('click', function () {
+    var open = panel.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') {
+      panel.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  /* ---------- gate everything else ---------- */
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var haveGsap = typeof window.gsap !== 'undefined' && typeof window.ScrollTrigger !== 'undefined';
+  if (reduced || !haveGsap) return;
+
+  var root = document.documentElement;
+  var restored = false;
+  var restore = function () {
+    if (restored) return;
+    restored = true;
+    root.classList.remove('mo');
+  };
+  /* safety net: if the motion layer has not painted in 4s, drop back
+     to the static page rather than leaving anything hidden. */
+  var guard = setTimeout(restore, 4000);
+
+  try {
+    root.classList.add('mo');
+    gsap.registerPlugin(ScrollTrigger);
+    ScrollTrigger.config({ ignoreMobileResize: true });
+
+    /* ---------- Lenis smooth scroll ---------- */
+    if (typeof window.Lenis !== 'undefined') {
+      var lenis = new Lenis({ lerp: 0.11, wheelMultiplier: 0.9 });
+      var raf = function (t) { lenis.raf(t * 1000); };
+      lenis.on('scroll', ScrollTrigger.update);
+      gsap.ticker.add(raf);
+      gsap.ticker.lagSmoothing(0);
+      /* hand the smooth-scroll layer back to native scroll on demand, so
+         automated capture and any host page can drive scrolling directly. */
+      window.__stopSmoothScroll = function () {
+        gsap.ticker.remove(raf);
+        lenis.destroy();
+        ScrollTrigger.refresh();
+      };
+      document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          var el = document.querySelector(a.getAttribute('href'));
+          if (!el) return;
+          e.preventDefault();
+          lenis.scrollTo(el, { offset: -68 });
+        });
+      });
+    }
+
+    /* ---------- reveals ---------- */
+    gsap.utils.toArray('.rev').forEach(function (el) {
+      gsap.to(el, {
+        opacity: 1, y: 0, duration: 0.7, ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 88%', once: true }
+      });
+    });
+
+    /* ---------- hero parallax ---------- */
+    gsap.to('#heroPhoto', {
+      yPercent: 12, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
+    });
+    gsap.to('.tag-1', { yPercent: -46, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    gsap.to('.tag-2', { yPercent: -78, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    gsap.to('.tag-3', { yPercent: -30, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    gsap.to('.stage .phone', { yPercent: -14, ease: 'none',
+      scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+
+    /* hero entrance, on load, not on scroll */
+    gsap.from('.hero-copy > *', {
+      opacity: 0, y: 26, duration: 0.75, ease: 'power2.out', stagger: 0.08, delay: 0.1
+    });
+    gsap.from('.stage', { opacity: 0, y: 40, duration: 0.9, ease: 'power2.out', delay: 0.25 });
+
+    /* ---------- the app story: the strip scrolls inside the phone ---------- */
+    var strip = document.querySelector('#storyPhone .screen-strip');
+    var beats = gsap.utils.toArray('#beats .beat');
+    var story = { p: 0 };
+
+    gsap.to(story, {
+      p: 1, ease: 'none',
+      scrollTrigger: {
+        trigger: '#storyStage',
+        start: 'top 30%',
+        end: 'bottom 85%',
+        scrub: 0.5,
+        invalidateOnRefresh: true
+      },
+      onUpdate: function () {
+        strip.style.setProperty('--p', story.p.toFixed(4));
+        /* one beat is active at every scroll position, derived from the
+           same progress value that drives the screen, so copy and screen
+           can never disagree */
+        var active = Math.max(0, Math.min(beats.length - 1, Math.floor(story.p * beats.length)));
+        for (var i = 0; i < beats.length; i++) beats[i].classList.toggle('on', i === active);
+      }
+    });
+
+    /* ---------- presyo: bars grow, savings counts up ---------- */
+    gsap.utils.toArray('.row-bar i').forEach(function (bar, i) {
+      gsap.from(bar, {
+        scaleX: 0, duration: 0.9, ease: 'power3.out', delay: i * 0.1,
+        scrollTrigger: { trigger: '.ruler', start: 'top 72%', once: true }
+      });
+    });
+    document.querySelectorAll('[data-count]').forEach(function (el) {
+      var end = parseFloat(el.getAttribute('data-count'));
+      var prefix = el.getAttribute('data-prefix') || '';
+      var o = { v: 0 };
+      gsap.to(o, {
+        v: end, duration: 1.1, ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 88%', once: true },
+        onUpdate: function () { el.textContent = prefix + Math.round(o.v); }
+      });
+    });
+
+    /* ---------- how it works: the route line draws ---------- */
+    gsap.fromTo('#routeFill', { scaleY: 0 }, {
+      scaleY: 1, ease: 'none',
+      scrollTrigger: { trigger: '#route', start: 'top 78%', end: 'bottom 72%', scrub: 0.4 }
+    });
+
+    /* ---------- location photo drift ---------- */
+    gsap.fromTo('#locPhoto', { yPercent: -8, scale: 1.14 }, {
+      yPercent: 8, ease: 'none',
+      scrollTrigger: { trigger: '.loc', start: 'top bottom', end: 'bottom top', scrub: true }
+    });
+
+    /* ---------- refresh once fonts and images settle ---------- */
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+    }
+    window.addEventListener('load', function () { ScrollTrigger.refresh(); });
+
+    clearTimeout(guard);
+  } catch (err) {
+    clearTimeout(guard);
+    restore();
+  }
+})();
+</script>
 
 </body>
 </html>

@@ -117,6 +117,12 @@ export const useCart = () => {
       stall_name: stallData?.stall_name,
       stall_number: stallData?.stall_number,
       section: stallData?.section,
+      // Every vendor gets paid separately via their own GCash (no shared
+      // payment gateway) — CheckoutScreen's groupByStall reads these two
+      // fields straight off the cart item, so without them every vendor's
+      // payment step silently fell back to the same placeholder number.
+      gcash_qr_url: stallData?.gcash_qr_url || null,
+      gcash_number: stallData?.gcash_number || null,
       quantity: quantity,
       selected_unit: item.selected_unit || item.unit,
       selected_unit_label: item.selected_unit_label,

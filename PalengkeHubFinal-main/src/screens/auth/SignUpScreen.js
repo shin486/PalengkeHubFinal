@@ -19,6 +19,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SvgXml } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
@@ -28,6 +29,17 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useColors } from '../../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
+
+// Squiggly hand-drawn divider for the OR section — matches LoginScreen's,
+// so the two auth screens read as one continuous flow rather than two
+// different products.
+const SquiggleDivider = () => {
+  const xml = `<svg viewBox="0 0 200 14" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <path d="M0 7 C12 2, 22 12, 34 7 C46 2, 56 12, 68 7 C80 2, 90 12, 102 7 C114 2, 124 12, 136 7 C148 2, 158 12, 170 7 C182 2, 192 12, 204 7"
+      fill="none" stroke="#D8C8BE" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>`;
+  return <SvgXml xml={xml} width="100%" height={14} />;
+};
 
 // Stall sections available in the market
 const STALL_SECTIONS = [
@@ -202,6 +214,12 @@ export const SignUpScreen = ({ setIsGuest }) => {
       const result = await sendAuthenticatorSms(phone);
       setExpectedVerificationCode(result.verification_code || '');
       setOtpModalVisible(true);
+      if (result.deliveryWarning) {
+        // The code is real and usable even though delivery may have
+        // failed — surface it as a heads-up, not a hard error, so the
+        // user still knows to double-check their phone/spam folder.
+        setSmsSendError(result.deliveryWarning);
+      }
       // On web, Alert.alert is blocking (window.alert) and can prevent the
       // OTP modal from appearing immediately — show the modal first instead.
       if (Platform.OS !== 'web') {
@@ -237,6 +255,11 @@ export const SignUpScreen = ({ setIsGuest }) => {
       const result = await sendEmailVerificationCode(email);
       setExpectedEmailVerificationCode(result.verification_code || '');
       setOtpModalVisible(true);
+      if (result.deliveryWarning) {
+        // The code is real and usable even though delivery may have
+        // failed — surface it as a heads-up, not a hard error.
+        setEmailSendError(result.deliveryWarning);
+      }
       if (Platform.OS !== 'web') {
         Alert.alert('Verification code sent', 'Please check your email and enter the 6-digit code to continue.');
       }
@@ -606,38 +629,10 @@ export const SignUpScreen = ({ setIsGuest }) => {
     }
   };
 
-  const uploadDocument = async (file, folder) => {
-    if (!file) return null;
-    
-    try {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: file.uri,
-        name: file.name,
-        type: file.type || 'image/jpeg',
-      });
-      
-      // Upload to your storage bucket
-      const { data, error } = await supabase.storage
-        .from('vendor_documents')
-        .upload(`${folder}/${Date.now()}_${file.name}`, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-      
-      if (error) throw error;
-      
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('vendor_documents')
-        .getPublicUrl(data.path);
-      
-      return urlData.publicUrl;
-    } catch (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-  };
+  // Document upload itself now happens in AuthContext's signUp() — see the
+  // note where validIdFile/businessPermitFile are added to metadata below —
+  // since the vendor_documents bucket needs an authenticated session that
+  // doesn't exist yet at this point in the flow.
 
   // Validate vendor fields
   const validateVendorFields = () => {
@@ -760,29 +755,24 @@ export const SignUpScreen = ({ setIsGuest }) => {
 
     try {
       const performSignUp = async () => {
-        let validIdUrl = null;
-        let businessPermitUrl = null;
-        
-        if (role === 'vendor') {
-          const timestamp = Date.now();
-          const userId = `temp_${timestamp}`;
-          
-          validIdUrl = await uploadDocument(validId, `valid_ids/${userId}`);
-          businessPermitUrl = await uploadDocument(businessPermit, `business_permits/${userId}`);
-        }
-        
+        // Document upload happens inside AuthContext's signUp() now, not
+        // here — the vendor_documents bucket requires an authenticated
+        // uploader, and no account exists yet at this point in the flow.
+        // Pass the raw picked files through; signUp() uploads them itself
+        // during the brief window its session is live, before it signs
+        // the new account back out pending OTP verification.
         const metadata = role === 'vendor' ? {
           stall_name: stallName,
           stall_section: stallSection,
           stall_number: stallNumber,
           phone: phone,
           verificationMethod,
-          valid_id_url: validIdUrl,
-          business_permit_url: businessPermitUrl,
+          validIdFile: validId,
+          businessPermitFile: businessPermit,
           requires_approval: true,
           terms_accepted: true,
           terms_accepted_at: new Date().toISOString(),
-        } : { 
+        } : {
           phone: phone,
           verificationMethod,
           terms_accepted: true,
@@ -848,9 +838,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
   };
 
   const getPasswordStrengthColor = () => {
-    if (passwordStrength <= 1) return '#EF4444';
-    if (passwordStrength <= 3) return '#F59E0B';
-    return '#10B981';
+    if (passwordStrength <= 1) return COLORS.error;
+    if (passwordStrength <= 3) return COLORS.warning;
+    return COLORS.success;
   };
 
   const getPasswordStrengthText = () => {
@@ -986,7 +976,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             }}
           >
             <LinearGradient
-              colors={['#DC2626', '#EF4444']}
+              colors={['#C96A28', '#E8833A']}
               style={styles.modalAcceptGradient}
             >
               <Text style={styles.modalAcceptText}>I Accept the Terms</Text>
@@ -1009,9 +999,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
         onPress={onUpload}
       >
         {file ? (
-          <Ionicons name="checkmark-circle" size={24} color="#10B981" style={styles.uploadIcon} />
+          <Ionicons name="checkmark-circle" size={24} color={COLORS.success} style={styles.uploadIcon} />
         ) : (
-          <Ionicons name={icon} size={24} color="#DC2626" style={styles.uploadIcon} />
+          <Ionicons name={icon} size={24} color={COLORS.error} style={styles.uploadIcon} />
         )}
         <Text style={[styles.uploadText, file && styles.uploadTextSuccess]}>
           {file ? fileName : `Upload ${label}`}
@@ -1039,7 +1029,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             <TextInput
               style={styles.input}
               placeholder="Stall Name (e.g., Mang Juan's Meat Shop)"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.tertiary}
               value={stallName}
               onChangeText={setStallName}
             />
@@ -1093,7 +1083,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             <TextInput
               style={styles.input}
               placeholder="Stall Number (e.g., 42, B-12)"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.tertiary}
               value={stallNumber}
               onChangeText={setStallNumber}
             />
@@ -1107,7 +1097,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
             <TextInput
               style={styles.input}
               placeholder="Contact Number"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.tertiary}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
@@ -1173,7 +1163,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
     >
       <Animated.View style={[styles.background, { opacity: fadeAnim }]}>
         <LinearGradient
-          colors={['#FFF5F5', '#FFFFFF', '#FFF0F0']}
+          colors={['#FDF3E9', '#FFFFFF', '#FBE7D4']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.backgroundGradient}
@@ -1196,7 +1186,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
           ]}
         >
           <LinearGradient
-            colors={['#DC2626', '#EF4444', '#F87171']}
+            colors={['#C96A28', '#E8833A', '#F0913F']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.logoContainer}
@@ -1232,7 +1222,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Full Name"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.text.tertiary}
                 value={fullName}
                 onChangeText={setFullName}
               />
@@ -1249,14 +1239,14 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Email Address"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.text.tertiary}
                 value={email}
                 onChangeText={validateEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
               {emailValid && email.length > 0 && (
-                <Ionicons name="checkmark" size={18} color="#10B981" />
+                <Ionicons name="checkmark" size={18} color={COLORS.success} />
               )}
             </Animated.View>
             {verificationMethod === 'email' && email.length > 0 && !emailValid && (
@@ -1280,7 +1270,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Contact Number"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.text.tertiary}
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
@@ -1320,7 +1310,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.text.tertiary}
                 value={password}
                 onChangeText={checkPasswordStrength}
                 secureTextEntry={!showPassword}
@@ -1344,9 +1334,9 @@ export const SignUpScreen = ({ setIsGuest }) => {
                       style={[
                         styles.strengthBar,
                         {
-                          backgroundColor: level <= passwordStrength 
-                            ? getPasswordStrengthColor() 
-                            : '#E5E7EB',
+                          backgroundColor: level <= passwordStrength
+                            ? getPasswordStrengthColor()
+                            : COLORS.border,
                           width: `${100 / 5}%`,
                         }
                       ]}
@@ -1367,7 +1357,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Confirm Password"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.text.tertiary}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
@@ -1448,7 +1438,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={signUpSuccess ? ['#10B981', '#059669'] : ['#DC2626', '#EF4444', '#F87171']}
+                colors={signUpSuccess ? ['#61802F', '#9EBF5C'] : ['#C96A28', '#E8833A', '#F0913F']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.signUpGradient}
@@ -1466,18 +1456,17 @@ export const SignUpScreen = ({ setIsGuest }) => {
 
           {/* Divider */}
           <View style={styles.divider}>
-            <View style={styles.dividerLine} />
+            <View style={{ flex: 1 }}><SquiggleDivider /></View>
             <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
+            <View style={{ flex: 1 }}><SquiggleDivider /></View>
           </View>
 
           {/* Guest Mode Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.guestButton}
             onPress={handleGuestMode}
             activeOpacity={0.7}
           >
-            <Ionicons name="hand-left-outline" size={18} />
             <View>
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
               <Text style={styles.guestButtonSubtext}>Browse without an account</Text>
@@ -1557,7 +1546,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#DC2626',
+    shadowColor: '#C96A28',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
@@ -1571,12 +1560,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: COLORS.primary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     letterSpacing: 0.5,
   },
   formSection: {
@@ -1596,12 +1585,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   welcomeText: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: COLORS.text.dark,
     marginBottom: 8,
   },
   signInText: {
     fontSize: 15,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     marginBottom: 32,
   },
   inputGroup: {
@@ -1610,63 +1599,64 @@ const createStyles = (COLORS) => StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F5EDE7',
     borderRadius: 16,
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 16,
+    borderColor: '#E4D3C8',
+    paddingLeft: 16,
+    paddingRight: 12,
+    minHeight: 50,
   },
   inputValid: {
-    borderColor: '#10B981',
-    backgroundColor: '#F0FDF4',
+    borderColor: COLORS.success,
+    backgroundColor: COLORS.successLight,
   },
   inputIcon: {
     fontSize: 18,
     marginRight: 12,
   },
   inputIconValid: {
-    color: '#10B981',
+    color: COLORS.success,
   },
   input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    padding: 14,
-    fontSize: 15,
+    flex: 1,
+    fontSize: 14.5,
     color: COLORS.text.dark,
-    backgroundColor: COLORS.background,
+    paddingVertical: 13,
   },
   placeholderText: {
-    color: '#9CA3AF',
+    color: COLORS.text.tertiary,
   },
   eyeButton: {
     padding: 8,
   },
   eyeIcon: {
     fontSize: 18,
-    color: '#9CA3AF',
+    color: COLORS.text.tertiary,
   },
   checkIcon: {
     fontSize: 16,
-    color: '#10B981',
+    color: COLORS.success,
     fontWeight: 'bold',
     marginLeft: 8,
   },
   errorText: {
     fontSize: 12,
-    color: '#EF4444',
+    color: COLORS.errorDark,
     marginTop: 6,
     marginLeft: 4,
   },
   successText: {
     fontSize: 12,
-    color: '#10B981',
+    color: COLORS.success,
     marginTop: 6,
     marginLeft: 4,
   },
   infoText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     marginTop: 6,
     marginLeft: 4,
   },
@@ -1692,7 +1682,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   roleLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.text.secondary,
     marginBottom: 12,
   },
   roleButtons: {
@@ -1704,17 +1694,17 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: '#E4D3C8',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F5EDE7',
   },
   roleButtonActive: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   roleText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     fontWeight: '500',
   },
   roleTextActive: {
@@ -1726,7 +1716,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   verificationLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.text.secondary,
     marginBottom: 12,
   },
   verificationButtons: {
@@ -1738,17 +1728,17 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: '#E4D3C8',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F5EDE7',
   },
   verificationButtonActive: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   verificationText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     fontWeight: '500',
   },
   verificationTextActive: {
@@ -1757,36 +1747,36 @@ const createStyles = (COLORS) => StyleSheet.create({
   verificationHint: {
     marginTop: 10,
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
   },
   vendorSection: {
     marginTop: 8,
     marginBottom: 16,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: COLORS.borderLight,
   },
   vendorSectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.dark,
     marginBottom: 4,
   },
   vendorSectionSubtitle: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     marginBottom: 16,
   },
   dropdownArrow: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.tertiary,
     paddingLeft: 8,
   },
   sectionPicker: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     marginTop: 8,
     maxHeight: 200,
   },
@@ -1814,12 +1804,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   documentsSectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.dark,
     marginBottom: 4,
   },
   documentsSectionSubtitle: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     marginBottom: 12,
   },
   documentUploadGroup: {
@@ -1828,11 +1818,11 @@ const createStyles = (COLORS) => StyleSheet.create({
   documentLabel: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#374151',
+    color: COLORS.text.secondary,
     marginBottom: 6,
   },
   requiredStar: {
-    color: '#EF4444',
+    color: COLORS.error,
     marginRight: 4,
   },
   uploadButton: {
@@ -1847,7 +1837,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderStyle: 'dashed',
   },
   uploadButtonSuccess: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: COLORS.successLight,
     borderColor: COLORS.success,
     borderStyle: 'solid',
   },
@@ -1856,22 +1846,22 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   uploadText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
     flex: 1,
   },
   uploadTextSuccess: {
-    color: '#10B981',
+    color: COLORS.success,
     fontWeight: '500',
   },
   uploadErrorText: {
     fontSize: 11,
-    color: '#EF4444',
+    color: COLORS.errorDark,
     marginTop: 4,
     marginLeft: 4,
   },
   requirementsNote: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     borderRadius: 12,
     padding: 12,
     marginTop: 8,
@@ -1887,17 +1877,17 @@ const createStyles = (COLORS) => StyleSheet.create({
   requirementsNoteTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#92400E',
+    color: COLORS.warning,
     marginBottom: 6,
   },
   requirementsNoteText: {
     fontSize: 11,
-    color: '#78350F',
+    color: '#8F6407',
     lineHeight: 16,
   },
   privacyNote: {
     flexDirection: 'row',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: COLORS.infoLight,
     borderRadius: 10,
     padding: 10,
     marginTop: 8,
@@ -1909,7 +1899,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   privacyNoteText: {
     flex: 1,
     fontSize: 10,
-    color: '#3B82F6',
+    color: COLORS.info,
     lineHeight: 14,
   },
   signUpButton: {
@@ -1939,37 +1929,35 @@ const createStyles = (COLORS) => StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#9CA3AF',
+    color: COLORS.text.tertiary,
     fontSize: 13,
   },
   guestButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: '#EF4444',
     borderRadius: 16,
     paddingVertical: 14,
     marginBottom: 24,
-    backgroundColor: 'white',
+    backgroundColor: '#F5EDE7',
   },
   guestButtonIcon: {
     fontSize: 24,
   },
   guestButtonText: {
-    color: '#EF4444',
-    fontSize: 16,
+    color: COLORS.text.dark,
+    fontSize: 14.5,
     fontWeight: '600',
+    textAlign: 'center',
   },
   guestButtonSubtext: {
-    color: '#9CA3AF',
-    fontSize: 12,
+    color: COLORS.text.tertiary,
+    fontSize: 11.5,
     marginTop: 2,
+    textAlign: 'center',
   },
   loginContainer: {
     flexDirection: 'row',
@@ -1978,13 +1966,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingTop: 8,
   },
   loginText: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 13.5,
+    color: COLORS.text.tertiary,
   },
   loginLink: {
-    fontSize: 14,
-    color: '#EF4444',
-    fontWeight: '600',
+    fontSize: 13.5,
+    color: COLORS.primaryDark,
+    fontWeight: '700',
   },
   //  Terms and Conditions Styles
   termsContainer: {
@@ -2001,14 +1989,14 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#DC2626',
+    borderColor: COLORS.primaryDark,
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
   checkboxChecked: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primaryDark,
   },
   checkboxCheck: {
     color: 'white',
@@ -2017,11 +2005,11 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   termsTextSmall: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.secondary,
   },
   termsLink: {
     fontSize: 13,
-    color: '#DC2626',
+    color: COLORS.primaryDark,
     fontWeight: '600',
   },
   modalContainer: {
@@ -2035,7 +2023,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
   },
   modalTitle: {
     fontSize: 20,
@@ -2054,16 +2042,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   termsText: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   termsHeading: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: COLORS.primaryDark,
   },
   termsLastUpdated: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 30,
@@ -2071,19 +2059,19 @@ const createStyles = (COLORS) => StyleSheet.create({
   modalFooter: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
   },
   otpInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: COLORS.border,
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
+    color: COLORS.text.dark,
     marginTop: 12,
     marginBottom: 8,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.inputBg,
   },
   otpBoxesRow: {
     flexDirection: 'row',
@@ -2119,7 +2107,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   otpButton: {
     marginTop: 12,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -2137,28 +2125,28 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
   },
   otpLinkText: {
-    color: '#DC2626',
+    color: COLORS.primaryDark,
     fontSize: 14,
     fontWeight: '600',
   },
   otpErrorText: {
-    color: '#B91C1C',
+    color: COLORS.errorDark,
     marginTop: 8,
     fontSize: 13,
   },
   otpHintBox: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.warningLight,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginTop: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: COLORS.warning,
   },
   otpHintText: {
     fontSize: 13,
-    color: '#92400E',
+    color: '#8F6407',
     lineHeight: 18,
     textAlign: 'center',
   },

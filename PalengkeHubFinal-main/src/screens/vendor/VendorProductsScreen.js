@@ -14,15 +14,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
+import { WovenBackground } from '../../components/WovenBackground';
 import { useAuth } from '../../contexts/AuthContext';
-import { useColors } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
 import { useVendorProducts } from '../../hooks/useVendorProducts';
 import { ModernProductCard } from '../../components/vendor/ModernProductCard';
 import { AddProductModal } from '../../components/vendor/AddProductModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
@@ -46,7 +47,7 @@ const checkStock = (product) => {
 export default function VendorProductsScreen({ navigation }) {
   const { user } = useAuth();
   const { t } = useI18n();
-  const COLORS = useColors();
+  const { colors: COLORS, isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -126,9 +127,9 @@ export default function VendorProductsScreen({ navigation }) {
   const getStatConfig = (key) => {
     const configs = {
       total: { icon: 'cube-outline', color: COLORS.primary, bg: COLORS.primarySurface },
-      available: { icon: 'checkmark-circle-outline', color: COLORS.success, bg: '#D1FAE5' },
-      lowStock: { icon: 'warning-outline', color: COLORS.warning, bg: '#FEF3C7' },
-      outOfStock: { icon: 'close-circle-outline', color: COLORS.error, bg: '#FEE2E2' },
+      available: { icon: 'checkmark-circle-outline', color: COLORS.success, bg: COLORS.successLight },
+      lowStock: { icon: 'warning-outline', color: COLORS.warning, bg: COLORS.warningLight },
+      outOfStock: { icon: 'close-circle-outline', color: COLORS.error, bg: COLORS.errorLight },
     };
     return configs[key] || configs.total;
   };
@@ -147,7 +148,7 @@ export default function VendorProductsScreen({ navigation }) {
 
   //  Get filter icon color
   const getFilterIconColor = (key, isActive) => {
-    if (isActive) return '#FFFFFF';
+    if (isActive) return COLORS.text.inverse;
     const colors = {
       'all': COLORS.primary,
       'available': COLORS.success,
@@ -160,6 +161,7 @@ export default function VendorProductsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <WovenBackground isDark={isDark} />
       <Header title={t('vendor.products_title')} subtitle={stall?.stall_name || t('vendor.manage_inventory')} />
 
       {/* Stats Overview - No Emojis */}
@@ -212,7 +214,7 @@ export default function VendorProductsScreen({ navigation }) {
           onPress={() => setShowAddModal(true)}
           activeOpacity={0.8}
         >
-          <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="add-circle-outline" size={20} color={COLORS.text.inverse} />
           <Text style={styles.addButtonText}>{t('vendor.add_new_product')}</Text>
         </TouchableOpacity>
 
@@ -330,6 +332,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
+    fontFamily: 'Baloo2_800ExtraBold',
     fontWeight: '800',
   },
   statLabel: {
@@ -371,7 +374,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.medium,
   },
   filterTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
 
   // ── Add Button ──
@@ -394,7 +397,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     elevation: 4,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -439,8 +442,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...TEXT_STYLES.h2,
     color: COLORS.text.dark,
     marginBottom: 4,
   },
@@ -457,7 +459,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   emptyAddButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -468,7 +470,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 14,
     fontWeight: '600',
   },

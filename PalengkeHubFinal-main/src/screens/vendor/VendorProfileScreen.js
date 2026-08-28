@@ -21,201 +21,21 @@ import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useColors, useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
 import * as ImagePicker from 'expo-image-picker';
 import { hapticLight, hapticSuccess } from '../../theme/motion';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
+import { WovenBackground } from '../../components/WovenBackground';
+import StallLocationCapture from '../../components/vendor/StallLocationCapture';
+import { fetchCurrentStallLocation } from '../../services/stallLocationService';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
 // ============================================================
 
-// ============================================================
-// GOOGLE MAPS COMPONENT - Web Version
-// ============================================================
-const GoogleMapsWeb = ({ latitude, longitude, onLocationSelect, onClose }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState({
-    lat: latitude || 13.9407,
-    lng: longitude || 121.1408,
-  });
-  const [mapLoaded, setMapLoaded] = useState(false);
-
-  // Google Maps API Key - You need to add your own key
-  const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
-
-  // Search for places
-  const searchPlaces = async (query) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&types=geocode&components=country:PH`
-      );
-      const data = await response.json();
-      
-      if (data.predictions) {
-        // Get details for each prediction
-        const results = await Promise.all(
-          data.predictions.slice(0, 5).map(async (prediction) => {
-            const detailsRes = await fetch(
-              `https://maps.googleapis.com/maps/api/place/details/json?place_id=${prediction.place_id}&key=${GOOGLE_MAPS_API_KEY}`
-            );
-            const details = await detailsRes.json();
-            const location = details.result?.geometry?.location;
-            return {
-              id: prediction.place_id,
-              description: prediction.description,
-              latitude: location?.lat || null,
-              longitude: location?.lng || null,
-            };
-          })
-        );
-        setSearchResults(results.filter(r => r.latitude !== null));
-      }
-    } catch (error) {
-      console.error('Error searching places:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle location selection from search
-  const selectSearchResult = (result) => {
-    setSelectedLocation({
-      lat: result.latitude,
-      lng: result.longitude,
-    });
-    setSearchQuery(result.description);
-    setSearchResults([]);
-    onLocationSelect(result.latitude, result.longitude, result.description);
-  };
-
-  return (
-    <View style={styles.mapContainer}>
-      {/* Header */}
-      <View style={styles.mapHeader}>
-        <Text style={styles.mapTitle}>Set Stall Location</Text>
-        <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-          <Ionicons name="close" size={24} color={COLORS.text.dark} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.mapSearchContainer}>
-        <Ionicons name="search-outline" size={20} color={COLORS.text.light} />
-        <TextInput
-          style={styles.mapSearchInput}
-          placeholder="Search for location..."
-          placeholderTextColor={COLORS.text.lighter}
-          value={searchQuery}
-          onChangeText={(text) => {
-            setSearchQuery(text);
-            searchPlaces(text);
-          }}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
-            <Ionicons name="close-circle" size={20} color={COLORS.text.light} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Search Results */}
-      {searchResults.length > 0 && (
-        <View style={styles.searchResults}>
-          {searchResults.map((result) => (
-            <TouchableOpacity
-              key={result.id}
-              style={styles.searchResultItem}
-              onPress={() => selectSearchResult(result)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="location-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.searchResultText} numberOfLines={1}>
-                {result.description}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Map Display - Web */}
-      <View style={styles.mapWebContainer}>
-        {!mapLoaded && (
-          <View style={styles.mapLoadingContainer}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.mapLoadingText}>Loading map...</Text>
-          </View>
-        )}
-        <iframe
-          src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_API_KEY}&q=${selectedLocation.lat},${selectedLocation.lng}&zoom=16`}
-          style={styles.mapIframe}
-          onLoad={() => setMapLoaded(true)}
-          title="Stall Location"
-        />
-      </View>
-
-      {/* Current Location Button */}
-      <TouchableOpacity
-        style={styles.mapCurrentLocationBtn}
-        onPress={async () => {
-          try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-              Alert.alert('Permission Denied', 'Allow location access to use this feature.');
-              return;
-            }
-            const location = await Location.getCurrentPositionAsync({});
-            const { latitude, longitude } = location.coords;
-            setSelectedLocation({ lat: latitude, lng: longitude });
-            
-            // Reverse geocode to get address
-            const response = await fetch(
-              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`
-            );
-            const data = await response.json();
-            const address = data.results[0]?.formatted_address || `${latitude}, ${longitude}`;
-            
-            onLocationSelect(latitude, longitude, address);
-            setSearchQuery(address);
-          } catch (error) {
-            console.error('Error getting location:', error);
-            Alert.alert('Error', 'Could not get your current location.');
-          }
-        }}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="location" size={20} color="#FFFFFF" />
-        <Text style={styles.mapCurrentLocationText}>Use Current Location</Text>
-      </TouchableOpacity>
-
-      {/* Confirm Button */}
-      <TouchableOpacity
-        style={styles.mapConfirmButton}
-        onPress={() => {
-          if (selectedLocation.lat && selectedLocation.lng) {
-            const address = searchQuery || `${selectedLocation.lat}, ${selectedLocation.lng}`;
-            onLocationSelect(selectedLocation.lat, selectedLocation.lng, address);
-            onClose();
-          }
-        }}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.mapConfirmText}>Confirm Location</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
 
 // ============================================================
 // MAIN COMPONENT
@@ -229,23 +49,22 @@ export default function VendorProfileScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showMapModal, setShowMapModal] = useState(false);
+  const [showLocationCapture, setShowLocationCapture] = useState(false);
+  const [stallLocation, setStallLocation] = useState(null); // current stall_locations row, or null if never captured
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  
+
   // Editable fields
   const [stallName, setStallName] = useState('');
   const [section, setSection] = useState('');
   const [locationNotes, setLocationNotes] = useState('');
   const [description, setDescription] = useState('');
-  const [latitude, setLatitude] = useState(null);
-  const [longitude, setLongitude] = useState(null);
   
   // UI states
   const [editModalVisible, setEditModalVisible] = useState(false);
     const [editingField, setEditingField] = useState(null);
 
   // ── Settings: theme / language / PIN login ──
-  const { themeMode, setTheme } = useTheme();
+  const { themeMode, setTheme, isDark } = useTheme();
   const { locale, changeLanguage } = useI18n();
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
@@ -265,7 +84,7 @@ export default function VendorProfileScreen({ navigation }) {
   }, []);
 
   // ── Change Profile Photo ──
-  // Mirrors the customer ProfileScreen flow: pick → uguu.se upload →
+  // Mirrors the customer ProfileScreen flow: pick → Supabase Storage upload →
   // profiles.avatar_url update → AuthContext refresh.
   const uploadAvatar = async () => {
     hapticLight();
@@ -291,23 +110,23 @@ export default function VendorProfileScreen({ navigation }) {
         // Determine file extension
         const ext = asset.fileName?.split('.').pop() || (asset.mimeType === 'image/png' ? 'png' : 'jpg');
         const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
+        const contentType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
 
-        // Upload to uguu.se (free permanent image host — no API key needed)
-        const formData = new FormData();
-        // On web, asset.file is a File; on native, use the uri object
-        formData.append('files[]', asset.file || { uri, name: fileName, type: asset.mimeType || 'image/jpeg' });
+        const blob = await (await fetch(uri)).blob();
+        const path = `avatars/${user.id}/${Date.now()}_${fileName}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('vendor_documents')
+          .upload(path, blob, { cacheControl: '3600', upsert: true, contentType });
+        if (uploadError) throw uploadError;
 
-        const uploadResponse = await fetch('https://uguu.se/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const uploadResult = await uploadResponse.json();
-        if (!uploadResult.success || !uploadResult.files?.length) {
-          throw new Error('Image host rejected the upload');
-        }
-
-        const avatarUrl = uploadResult.files[0].url;
+        // vendor_documents is a private bucket — a long-lived signed URL
+        // is used since getPublicUrl() 400s for any request without an
+        // auth header (which a plain <Image> tag never sends).
+        const { data: urlData, error: signError } = await supabase.storage
+          .from('vendor_documents')
+          .createSignedUrl(uploadData.path, SIGNED_URL_TTL_SECONDS);
+        if (signError) throw signError;
+        const avatarUrl = urlData.signedUrl;
 
         const { error } = await supabase
           .from('profiles')
@@ -339,15 +158,18 @@ export default function VendorProfileScreen({ navigation }) {
         .single();
       if (error && error.code !== 'PGRST116') throw error;
       setStall(data);
-      
+
       // Initialize editable fields
       if (data) {
         setStallName(data.stall_name || '');
         setSection(data.section || '');
         setLocationNotes(data.location_notes || '');
         setDescription(data.description || '');
-        setLatitude(data.latitude || null);
-        setLongitude(data.longitude || null);
+        try {
+          setStallLocation(await fetchCurrentStallLocation(data.id));
+        } catch (locError) {
+          console.warn('Error fetching stall location:', locError.message);
+        }
       }
     } catch (error) {
       console.error('Error fetching stall:', error);
@@ -510,46 +332,6 @@ export default function VendorProfileScreen({ navigation }) {
   };
 
   // ============================================================
-  // UPDATE LOCATION WITH LAT/LNG
-  // ============================================================
-  const updateLocation = async (lat, lng, address) => {
-    if (!stall?.id) return;
-    
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('stalls')
-        .update({
-          latitude: lat,
-          longitude: lng,
-          location_notes: address,
-        })
-        .eq('id', stall.id);
-      
-      if (error) throw error;
-      
-      // Update local state
-      setLatitude(lat);
-      setLongitude(lng);
-      setLocationNotes(address);
-      setStall(prev => ({ 
-        ...prev, 
-        latitude: lat, 
-        longitude: lng,
-        location_notes: address 
-      }));
-      
-      Alert.alert('Success', 'Stall location updated successfully!');
-    } catch (error) {
-      console.error('Error updating location:', error);
-      Alert.alert('Error', 'Failed to update location. Please try again.');
-    } finally {
-      setSaving(false);
-      setShowMapModal(false);
-    }
-  };
-
-  // ============================================================
   // OPEN EDIT MODAL
   // ============================================================
   const openEditModal = (field, currentValue, label) => {
@@ -657,7 +439,7 @@ export default function VendorProfileScreen({ navigation }) {
               activeOpacity={0.7}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={COLORS.text.inverse} />
               ) : (
                 <Text style={styles.modalSaveText}>Save</Text>
               )}
@@ -668,55 +450,6 @@ export default function VendorProfileScreen({ navigation }) {
     </Modal>
   );
 
-  // ============================================================
-  // RENDER MAP MODAL
-  // ============================================================
-  const renderMapModal = () => (
-    <Modal
-      visible={showMapModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowMapModal(false)}
-    >
-      <View style={styles.mapModalOverlay}>
-        <View style={styles.mapModalContainer}>
-          {Platform.OS === 'web' ? (
-            <GoogleMapsWeb
-              latitude={latitude}
-              longitude={longitude}
-              onLocationSelect={updateLocation}
-              onClose={() => setShowMapModal(false)}
-            />
-          ) : (
-            // Native version - you'll need react-native-maps
-            <View style={styles.mapNativeContainer}>
-              <View style={styles.mapHeader}>
-                <Text style={styles.mapTitle}>Set Stall Location</Text>
-                <TouchableOpacity onPress={() => setShowMapModal(false)} activeOpacity={0.7}>
-                  <Ionicons name="close" size={24} color={COLORS.text.dark} />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.mapNativePlaceholder}>
-                <Ionicons name="map-outline" size={64} color={COLORS.text.lighter} />
-                <Text style={styles.mapNativeText}>Map view coming soon for mobile</Text>
-                <Text style={styles.mapNativeSubtext}>
-                  Latitude: {latitude || 'Not set'}
-                  {'\n'}Longitude: {longitude || 'Not set'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.mapConfirmButton}
-                  onPress={() => setShowMapModal(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.mapConfirmText}>Close</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
 
   // ============================================================
   // INFO ROW COMPONENT
@@ -772,7 +505,8 @@ export default function VendorProfileScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Profile" subtitle="Account settings" showBack onBackPress={() => navigation.goBack()} />
+        <WovenBackground isDark={isDark} />
+      <Header title="Profile" subtitle="Account settings" showBack onBackPress={() => navigation.goBack()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -783,6 +517,7 @@ export default function VendorProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <WovenBackground isDark={isDark} />
       <Header title="Profile" subtitle="Account settings" showBack onBackPress={() => navigation.goBack()} />
 
       <ScrollView
@@ -814,7 +549,7 @@ export default function VendorProfileScreen({ navigation }) {
             )}
             {!uploadingAvatar && (
               <View style={styles.avatarCameraBadge}>
-                <Ionicons name="camera" size={14} color="#FFFFFF" />
+                <Ionicons name="camera" size={14} color={COLORS.text.inverse} />
               </View>
             )}
           </TouchableOpacity>
@@ -864,25 +599,54 @@ export default function VendorProfileScreen({ navigation }) {
             onPress={() => openEditModal('section', section, 'Section')}
           />
 
-          {/* Location - EDITABLE with Map */}
+          {/* Location - EDITABLE, opens the GPS capture flow */}
           <InfoRow
-            label="Location"
-            value={locationNotes || `${latitude ? `${latitude}, ${longitude}` : ''}`}
+            label="Stall Location"
+            value={
+              !stallLocation
+                ? 'Not set — tap to capture'
+                : stallLocation.reregister_reason
+                  ? 'Flagged for re-registration'
+                  : !stallLocation.verified_by_admin
+                    ? `Pending review (~${stallLocation.accuracy_meters != null ? Math.round(stallLocation.accuracy_meters) + 'm' : 'manual'})`
+                    : 'Verified'
+            }
             icon="location-outline"
             editable={true}
-            iconColor={locationNotes ? COLORS.success : COLORS.primary}
-            onPress={() => setShowMapModal(true)}
+            iconColor={
+              !stallLocation
+                ? COLORS.primary
+                : stallLocation.reregister_reason
+                  ? COLORS.error
+                  : !stallLocation.verified_by_admin
+                    ? COLORS.warning
+                    : COLORS.success
+            }
+            onPress={() => setShowLocationCapture(true)}
           />
 
-          {/* Latitude - Display Only */}
-          {latitude && (
+          {/* Coordinates - Display Only */}
+          {stallLocation && (
             <InfoRow
               label="Coordinates"
-              value={`${latitude?.toFixed(6)}, ${longitude?.toFixed(6)}`}
+              value={`${stallLocation.lat.toFixed(6)}, ${stallLocation.lng.toFixed(6)}`}
               icon="compass-outline"
               editable={false}
             />
           )}
+
+          {/* Directions Note - EDITABLE, the text complement to the GPS pin.
+              A covered market blocks GPS lock for most captures, so the
+              pin alone often only gets you to the building — this fills
+              the "which aisle, which side" gap a coordinate can't. */}
+          <InfoRow
+            label="Directions Note"
+            value={locationNotes || 'Not set — e.g. "3rd aisle, left side, near the fish section"'}
+            icon="walk-outline"
+            editable={true}
+            iconColor={locationNotes ? COLORS.success : COLORS.primary}
+            onPress={() => openEditModal('location_notes', locationNotes, 'Directions Note')}
+          />
 
           {/* Description - EDITABLE */}
           <InfoRow
@@ -896,7 +660,7 @@ export default function VendorProfileScreen({ navigation }) {
           {/* Status - NOT EDITABLE */}
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
-              <View style={[styles.infoIconContainer, { backgroundColor: stall?.is_temporarily_closed ? '#FEE2E2' : '#D1FAE5' }]}>
+              <View style={[styles.infoIconContainer, { backgroundColor: stall?.is_temporarily_closed ? COLORS.errorLight : COLORS.successLight }]}>
                 <Ionicons 
                   name={stall?.is_temporarily_closed ? 'close-circle-outline' : 'checkmark-circle-outline'} 
                   size={20} 
@@ -985,7 +749,7 @@ export default function VendorProfileScreen({ navigation }) {
             LOGOUT BUTTON
         ============================================================ */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
-          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="log-out-outline" size={20} color={COLORS.text.inverse} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
 
@@ -994,9 +758,16 @@ export default function VendorProfileScreen({ navigation }) {
 
       {/* Edit Modal */}
       {renderEditModal()}
-      
-            {/* Map Modal */}
-      {renderMapModal()}
+
+      {/* Stall Location Capture */}
+      <StallLocationCapture
+        visible={showLocationCapture}
+        stallId={stall?.id}
+        capturedBy="vendor"
+        reason={stallLocation?.reregister_reason || null}
+        onClose={() => setShowLocationCapture(false)}
+        onSaved={(saved) => setStallLocation(saved)}
+      />
 
       {/* Theme Picker Modal */}
       <Modal visible={showThemePicker} transparent animationType="slide" onRequestClose={() => setShowThemePicker(false)}>
@@ -1178,7 +949,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   avatarText: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   avatarCameraBadge: {
     position: 'absolute',
@@ -1200,8 +971,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   name: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...TEXT_STYLES.h1,
     color: COLORS.text.dark,
   },
   email: {
@@ -1257,8 +1027,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...TEXT_STYLES.h3,
     color: COLORS.text.dark,
   },
 
@@ -1337,7 +1106,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   menuBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
 
   // ── Logout ──
@@ -1355,7 +1124,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderColor: COLORS.error,
   },
   logoutText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -1436,7 +1205,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   modalSaveText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
 
   // ── Map Modal ──
@@ -1553,7 +1322,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: SPACING.md,
   },
   mapCurrentLocationText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1564,7 +1333,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
   },
   mapConfirmText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1641,7 +1410,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginTop: SPACING.xs,
   },
   pinPrimaryBtnText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontWeight: '700',
     fontSize: 15,
   },

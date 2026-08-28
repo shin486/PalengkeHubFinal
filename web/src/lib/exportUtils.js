@@ -181,6 +181,12 @@ export function calculateOrderStats(orders) {
 
 /**
  * Calculate product performance metrics.
+ *
+ * There is no order_items table — orders.items is a JSONB array
+ * embedded on each order (see CheckoutContent.js), and each entry
+ * identifies the product via `id` (or `product_id` on some older
+ * write paths), not a foreign key row. `orderItems` here is that
+ * JSONB flattened across orders, not a DB table result.
  */
 export function calculateProductPerformance(products, orderItems) {
   const productMap = {};
@@ -189,10 +195,11 @@ export function calculateProductPerformance(products, orderItems) {
   });
 
   (orderItems || []).forEach(item => {
-    if (productMap[item.product_id]) {
-      productMap[item.product_id].totalSold += item.quantity || 1;
-      productMap[item.product_id].totalRevenue += parseFloat(item.price || 0) * (item.quantity || 1);
-      productMap[item.product_id].orderCount += 1;
+    const productId = item.product_id || item.id;
+    if (productMap[productId]) {
+      productMap[productId].totalSold += item.quantity || 1;
+      productMap[productId].totalRevenue += parseFloat(item.price || 0) * (item.quantity || 1);
+      productMap[productId].orderCount += 1;
     }
   });
 

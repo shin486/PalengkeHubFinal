@@ -1,25 +1,28 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useColors } from '../contexts/ThemeContext';
 
 export const LoadingSpinner = ({ message = 'Loading...' }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#FF6B6B" />
+      <ActivityIndicator size="large" color={COLORS.primary} />
       <Text style={styles.text}>{message}</Text>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: COLORS.background,
   },
   text: {
     marginTop: 10,
-    color: '#666',
+    color: COLORS.text.tertiary,
     fontSize: 16,
   },
 });

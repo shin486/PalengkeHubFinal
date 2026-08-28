@@ -18,14 +18,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
+import { WovenBackground } from '../../components/WovenBackground';
 import { useAuth } from '../../contexts/AuthContext';
-import { useColors } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 import { ModernOrderCard } from '../../components/vendor/ModernOrderCard';
 import PaymentApproveModal from '../../components/vendor/PaymentApproveModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
-import { SPACING, RADIUS } from '../../theme/tokens';
+import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 
 // ============================================================
 // COLORS - Theme-aware (from ThemeContext)
@@ -43,7 +44,7 @@ const STATUS_TABS = [
 
 export default function VendorOrdersScreen({ navigation }) {
   const { user } = useAuth();
-  const COLORS = useColors();
+  const { colors: COLORS, isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
@@ -91,9 +92,11 @@ export default function VendorOrdersScreen({ navigation }) {
   };
 
   const handleUpdateStatus = async (orderId, newStatus) => {
-    const success = await updateOrderStatus(orderId, newStatus);
-    if (success) {
+    const result = await updateOrderStatus(orderId, newStatus);
+    if (result.success) {
       Alert.alert('Success', 'Order status updated');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to update order status. Please try again.');
     }
   };
 
@@ -102,7 +105,8 @@ export default function VendorOrdersScreen({ navigation }) {
       const order = orders.find(o => o.id === orderId);
       if (!order) throw new Error('Order not found');
 
-      await updateOrderStatus(orderId, 'cancelled');
+      const cancelResult = await updateOrderStatus(orderId, 'cancelled');
+      if (!cancelResult.success) throw new Error(cancelResult.error || 'Failed to cancel order');
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,
@@ -170,7 +174,8 @@ export default function VendorOrdersScreen({ navigation }) {
           .eq('id', conversationId);
       }
 
-      await updateOrderStatus(order.id, 'confirmed');
+      const confirmResult = await updateOrderStatus(order.id, 'confirmed');
+      if (!confirmResult.success) throw new Error(confirmResult.error || 'Failed to confirm order');
       Alert.alert('Success', 'Payment request sent to customer');
     } catch (error) {
       console.error('Request payment error:', error);
@@ -279,11 +284,11 @@ export default function VendorOrdersScreen({ navigation }) {
 
   //  Get icon color for tab
   const getTabIconColor = (key, isActive) => {
-    if (isActive) return '#FFFFFF';
+    if (isActive) return COLORS.text.inverse;
     const colors = {
       'pending': COLORS.warning,
       'confirmed': COLORS.info,
-      'preparing': COLORS.purple,
+      'preparing': COLORS.primaryDark,
       'ready': COLORS.success,
       'completed': COLORS.success,
       'cancelled': COLORS.error,
@@ -293,6 +298,7 @@ export default function VendorOrdersScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <WovenBackground isDark={isDark} />
       <Header title="Orders" subtitle={stall?.stall_name || 'Manage your orders'} />
 
       {/* Status Tabs - No Emojis */}
@@ -391,7 +397,7 @@ export default function VendorOrdersScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 {processing ? (
-                  <ActivityIndicator size="small" color="white" />
+                  <ActivityIndicator size="small" color={COLORS.text.inverse} />
                 ) : (
                   <Text style={styles.modalConfirmText}>Confirm Reject</Text>
                 )}
@@ -462,7 +468,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.medium,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   tabBadge: {
     paddingHorizontal: 6,
@@ -473,12 +479,12 @@ const createStyles = (COLORS) => StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   tabBadgeActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.text.inverse,
   },
   tabBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   tabBadgeTextActive: {
     color: COLORS.primary,
@@ -507,8 +513,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...TEXT_STYLES.h2,
     color: COLORS.text.dark,
     marginBottom: 4,
   },
@@ -551,8 +556,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...TEXT_STYLES.h2,
     color: COLORS.text.dark,
   },
   modalSubtitle: {
@@ -604,6 +608,6 @@ const createStyles = (COLORS) => StyleSheet.create({
   modalConfirmText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
 });

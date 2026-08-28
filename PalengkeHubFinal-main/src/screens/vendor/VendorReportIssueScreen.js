@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,13 +18,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 
 export default function VendorReportIssueScreen({ navigation, route }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [selectedType, setSelectedType] = useState(route.params?.type || null);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   // Customer selection states
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerModalVisible, setCustomerModalVisible] = useState(false);
@@ -50,6 +53,8 @@ export default function VendorReportIssueScreen({ navigation, route }) {
     }
   }, [route.params]);
 
+  // Each report type keeps its own distinct category color (not the brand
+  // color) so they stay visually distinguishable from one another.
   const reportTypes = [
     { id: 'customer_behavior', label: 'Customer Behavior', icon: 'person', color: '#EF4444' },
     { id: 'order_issue', label: 'Order Issue', icon: 'clipboard', color: '#F59E0B' },
@@ -61,7 +66,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
   // Fetch customers who have ordered from this vendor
   const fetchCustomers = async () => {
     if (!user?.id) return;
-    
+
     setLoadingCustomers(true);
     try {
       // Get stall first (vendor's stall)
@@ -107,11 +112,11 @@ export default function VendorReportIssueScreen({ navigation, route }) {
       // Deduplicate customers
       const uniqueCustomers = [];
       const seenIds = new Set();
-      
+
       orders?.forEach(order => {
         // The profiles data might be nested or directly available
         let customer = order.profiles;
-        
+
         // If profiles is not available, try to get from order directly
         if (!customer && order.consumer_id) {
           customer = {
@@ -120,7 +125,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
             email: null,
           };
         }
-        
+
         if (customer && customer.id && !seenIds.has(customer.id)) {
           seenIds.add(customer.id);
           uniqueCustomers.push({
@@ -142,13 +147,13 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
         if (!consumerError && consumerOrders) {
           const uniqueConsumerIds = [...new Set(consumerOrders.map(o => o.consumer_id))];
-          
+
           if (uniqueConsumerIds.length > 0) {
             const { data: consumerProfiles } = await supabase
               .from('profiles')
               .select('id, full_name, email')
               .in('id', uniqueConsumerIds);
-            
+
             if (consumerProfiles) {
               consumerProfiles.forEach(profile => {
                 uniqueCustomers.push({
@@ -221,7 +226,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
           },
         ]
       );
-      
+
       // Reset form
       setSelectedType(null);
       setSelectedCustomer(null);
@@ -263,13 +268,13 @@ export default function VendorReportIssueScreen({ navigation, route }) {
   );
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView>
         <LinearGradient
-          colors={['#DC2626', '#EF4444']}
+          colors={[COLORS.primary, COLORS.primaryLight]}
           style={styles.header}
         >
           <Text style={styles.headerTitle}>Report a Customer</Text>
@@ -281,7 +286,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
         {/* Customer Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Customer *</Text>
-          
+
           {selectedCustomer ? (
             <View style={styles.selectedCustomerContainer}>
               <View style={styles.selectedCustomerInfo}>
@@ -295,7 +300,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
                   <Text style={styles.selectedCustomerEmail}>{selectedCustomer.email}</Text>
                 </View>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.changeCustomerButton}
                 onPress={() => {
                   setSelectedCustomer(null);
@@ -306,14 +311,14 @@ export default function VendorReportIssueScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.selectCustomerButton}
               onPress={() => {
                 fetchCustomers();
                 setCustomerModalVisible(true);
               }}
             >
-              <Ionicons name="person" size={20} color="#9CA3AF" style={styles.selectCustomerIcon} />
+              <Ionicons name="person" size={20} color={COLORS.text.quaternary} style={styles.selectCustomerIcon} />
               <Text style={styles.selectCustomerText}>Select a customer to report</Text>
             </TouchableOpacity>
           )}
@@ -322,6 +327,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
           <TextInput
             style={[styles.input, styles.orderInput]}
             placeholder="Order ID (Optional)"
+            placeholderTextColor={COLORS.text.quaternary}
             value={orderId}
             onChangeText={setOrderId}
           />
@@ -343,7 +349,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
                 ]}
                 onPress={() => setSelectedType(type.id)}
               >
-                <Ionicons name={type.icon} size={24} color={selectedType === type.id ? '#FFFFFF' : '#DC2626'} />
+                <Ionicons name={type.icon} size={24} color={selectedType === type.id ? COLORS.text.inverse : COLORS.primary} />
                 <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelActive]}>{type.label}</Text>
               </TouchableOpacity>
             ))}
@@ -356,6 +362,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
           <TextInput
             style={styles.textArea}
             placeholder="Please describe the issue in detail..."
+            placeholderTextColor={COLORS.text.quaternary}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -374,11 +381,11 @@ export default function VendorReportIssueScreen({ navigation, route }) {
           disabled={loading}
         >
           <LinearGradient
-            colors={['#DC2626', '#EF4444']}
+            colors={[COLORS.primary, COLORS.primaryLight]}
             style={styles.submitGradient}
           >
             {loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={COLORS.text.inverse} />
             ) : (
               <Text style={styles.submitText}>Submit Report</Text>
             )}
@@ -387,7 +394,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
         {/* Info Note */}
         <View style={styles.infoNote}>
-          <Ionicons name="information-circle-outline" size={16} color="#3B82F6" style={styles.infoIcon} />
+          <Ionicons name="information-circle-outline" size={16} color={COLORS.info} style={styles.infoIcon} />
           <Text style={styles.infoText}>
             False reports may result in account action. Please only report genuine issues.
           </Text>
@@ -404,7 +411,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Customer</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setCustomerModalVisible(false)}
             >
@@ -414,10 +421,11 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
-            <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <Ionicons name="search" size={18} color={COLORS.text.quaternary} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search customers..."
+              placeholderTextColor={COLORS.text.quaternary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -425,12 +433,12 @@ export default function VendorReportIssueScreen({ navigation, route }) {
 
           {loadingCustomers ? (
             <View style={styles.modalLoading}>
-              <ActivityIndicator size="large" color="#DC2626" />
+              <ActivityIndicator size="large" color={COLORS.primary} />
               <Text style={styles.modalLoadingText}>Loading customers...</Text>
             </View>
           ) : customers.length === 0 ? (
             <View style={styles.modalEmpty}>
-              <Ionicons name="mail-open-outline" size={48} color="#9CA3AF" />
+              <Ionicons name="mail-open-outline" size={48} color={COLORS.text.quaternary} />
               <Text style={styles.modalEmptyTitle}>No customers found</Text>
               <Text style={styles.modalEmptyText}>
                 Customers who have ordered from you will appear here
@@ -438,7 +446,7 @@ export default function VendorReportIssueScreen({ navigation, route }) {
             </View>
           ) : (
             <FlatList
-              data={customers.filter(c => 
+              data={customers.filter(c =>
                 c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 c.email.toLowerCase().includes(searchQuery.toLowerCase())
               )}
@@ -453,10 +461,10 @@ export default function VendorReportIssueScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   header: {
     padding: 24,
@@ -467,7 +475,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
     marginBottom: 8,
   },
   headerSubtitle: {
@@ -475,7 +483,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
   },
   section: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     margin: 16,
     padding: 16,
     borderRadius: 16,
@@ -488,7 +496,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 12,
   },
   // Customer Selection Styles
@@ -496,12 +504,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     padding: 16,
     borderRadius: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     borderStyle: 'dashed',
   },
   selectCustomerIcon: {
@@ -509,17 +517,17 @@ const styles = StyleSheet.create({
   },
   selectCustomerText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   selectedCustomerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: COLORS.successLight,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1FAE5',
+    borderColor: COLORS.success,
   },
   selectedCustomerInfo: {
     flexDirection: 'row',
@@ -530,33 +538,33 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   customerAvatarSmallText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   selectedCustomerName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   selectedCustomerEmail: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   changeCustomerButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     borderRadius: 8,
   },
   changeCustomerText: {
     fontSize: 12,
-    color: 'white',
+    color: COLORS.text.inverse,
     fontWeight: '500',
   },
   orderInput: {
@@ -564,17 +572,17 @@ const styles = StyleSheet.create({
   },
   orderNumberText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 4,
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   typesGrid: {
     flexDirection: 'row',
@@ -583,15 +591,15 @@ const styles = StyleSheet.create({
   },
   typeCard: {
     width: '30%',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   typeCardActive: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: COLORS.primary,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: COLORS.primaryDark,
   },
   typeIcon: {
     fontSize: 28,
@@ -600,21 +608,25 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#374151',
+    color: COLORS.text.secondary,
     textAlign: 'center',
   },
+  typeLabelActive: {
+    color: COLORS.text.inverse,
+  },
   textArea: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
+    color: COLORS.text.primary,
     minHeight: 120,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   helperText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 8,
   },
   submitButton: {
@@ -627,13 +639,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitText: {
-    color: 'white',
+    color: COLORS.text.inverse,
     fontSize: 18,
     fontWeight: '600',
   },
   infoNote: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: COLORS.infoLight,
     marginHorizontal: 16,
     marginBottom: 32,
     padding: 16,
@@ -646,13 +658,13 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: '#92400E',
+    color: COLORS.info,
     lineHeight: 18,
   },
   // Modal Styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -660,14 +672,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingTop: 48,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   modalCloseButton: {
     paddingHorizontal: 12,
@@ -675,18 +687,18 @@ const styles = StyleSheet.create({
   },
   modalCloseText: {
     fontSize: 14,
-    color: '#DC2626',
+    color: COLORS.primary,
     fontWeight: '500',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     margin: 16,
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   searchIcon: {
     fontSize: 16,
@@ -696,6 +708,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 14,
+    color: COLORS.text.primary,
   },
   customersList: {
     paddingHorizontal: 16,
@@ -703,22 +716,22 @@ const styles = StyleSheet.create({
   customerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
   },
   customerItemSelected: {
-    borderColor: '#DC2626',
-    backgroundColor: '#FEF2F2',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.accentSoft,
   },
   customerAvatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -726,7 +739,7 @@ const styles = StyleSheet.create({
   customerAvatarText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   customerInfo: {
     flex: 1,
@@ -734,16 +747,16 @@ const styles = StyleSheet.create({
   customerName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   customerEmail: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginTop: 2,
   },
   checkmark: {
     fontSize: 20,
-    color: '#10B981',
+    color: COLORS.success,
     fontWeight: 'bold',
   },
   modalLoading: {
@@ -753,7 +766,7 @@ const styles = StyleSheet.create({
   },
   modalLoadingText: {
     marginTop: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   modalEmpty: {
     flex: 1,
@@ -768,12 +781,12 @@ const styles = StyleSheet.create({
   modalEmptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   modalEmptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
   },
 });

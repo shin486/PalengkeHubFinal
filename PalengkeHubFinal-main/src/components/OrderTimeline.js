@@ -1,29 +1,29 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useColors } from '../contexts/ThemeContext';
 
 const STEP_ORDER = ['pending', 'confirmed', 'preparing', 'ready', 'completed'];
 
-const STEP_CONFIG = {
-  pending:  { label: 'Ordered',   icon: 'cart-outline',          color: '#F59E0B' },
-  confirmed:{ label: 'Confirmed', icon: 'checkmark-circle',      color: '#3B82F6' },
-  preparing:{ label: 'Preparing', icon: 'restaurant-outline',    color: '#8B5CF6' },
-  ready:    { label: 'Ready',     icon: 'flag',                  color: '#10B981' },
-  completed:{ label: 'Complete',  icon: 'checkmark-done-circle', color: '#22C55E' },
-};
+export const OrderTimeline = ({ status }) => {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
 
-const CANCELLED_CONFIG = {
-  cancelled: { label: 'Cancelled', icon: 'close-circle', color: '#EF4444' },
-};
+  const STEP_CONFIG = {
+    pending: { label: 'Ordered', icon: 'cart-outline', color: COLORS.warning },
+    confirmed: { label: 'Confirmed', icon: 'checkmark-circle', color: COLORS.info },
+    preparing: { label: 'Preparing', icon: 'restaurant-outline', color: '#8B5CF6' },
+    ready: { label: 'Ready', icon: 'flag', color: COLORS.success },
+    completed: { label: 'Complete', icon: 'checkmark-done-circle', color: COLORS.success },
+  };
 
-export const OrderTimeline = ({ status, colors = {} }) => {
   if (status === 'cancelled') {
-    const cfg = CANCELLED_CONFIG.cancelled;
+    const cfg = { label: 'Cancelled', icon: 'close-circle', color: COLORS.error };
     return (
-      <View style={[styles.container, { backgroundColor: '#FEF2F2', borderRadius: 12 }]}>
+      <View style={[styles.container, { backgroundColor: COLORS.errorLight, borderRadius: 12 }]}>
         <View style={styles.cancelledRow}>
           <View style={[styles.cancelledDot, { backgroundColor: cfg.color }]}>
-            <Ionicons name={cfg.icon} size={16} color="#fff" />
+            <Ionicons name={cfg.icon} size={16} color={COLORS.text.inverse} />
           </View>
           <Text style={[styles.label, { color: cfg.color }]}>{cfg.label}</Text>
         </View>
@@ -38,8 +38,8 @@ export const OrderTimeline = ({ status, colors = {} }) => {
     <View style={styles.container}>
       {STEP_ORDER.map((step, idx) => {
         const cfg = STEP_CONFIG[step];
-        const isPast   = idx < currentIdx;
-        const isCurrent= idx === currentIdx;
+        const isPast = idx < currentIdx;
+        const isCurrent = idx === currentIdx;
         const isFuture = idx > currentIdx;
 
         return (
@@ -47,17 +47,17 @@ export const OrderTimeline = ({ status, colors = {} }) => {
             {/* Line + Dot */}
             <View style={styles.lineSection}>
               {idx > 0 && (
-                <View style={[styles.line, { backgroundColor: isPast || isCurrent ? cfg.color : '#E5E7EB' }]} />
+                <View style={[styles.line, { backgroundColor: isPast || isCurrent ? cfg.color : COLORS.border }]} />
               )}
               <View style={[
                 styles.dot,
-                { backgroundColor: isPast || isCurrent ? cfg.color : '#E5E7EB' },
+                { backgroundColor: isPast || isCurrent ? cfg.color : COLORS.border },
                 isCurrent && styles.dotCurrent,
               ]}>
                 {isPast ? (
-                  <Ionicons name="checkmark" size={12} color="#fff" />
+                  <Ionicons name="checkmark" size={12} color={COLORS.text.inverse} />
                 ) : (
-                  <Ionicons name={cfg.icon} size={isCurrent ? 16 : 12} color={isCurrent ? '#fff' : '#9CA3AF'} />
+                  <Ionicons name={cfg.icon} size={isCurrent ? 16 : 12} color={isCurrent ? COLORS.text.inverse : COLORS.text.quaternary} />
                 )}
               </View>
             </View>
@@ -65,7 +65,7 @@ export const OrderTimeline = ({ status, colors = {} }) => {
             <View style={styles.labelSection}>
               <Text style={[
                 styles.label,
-                { color: isPast || isCurrent ? cfg.color : '#9CA3AF' },
+                { color: isPast || isCurrent ? cfg.color : COLORS.text.quaternary },
                 isFuture && styles.futureLabel,
               ]}>
                 {cfg.label}
@@ -78,7 +78,7 @@ export const OrderTimeline = ({ status, colors = {} }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     paddingVertical: 12,
     paddingHorizontal: 8,

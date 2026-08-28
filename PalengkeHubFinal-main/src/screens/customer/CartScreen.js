@@ -87,7 +87,7 @@ export default function CartScreen({ navigation }) {
         await removeItem(item.product_id);
       }
     }
-    Alert.alert('Cart Updated', 'Items from closed stalls have been removed.');
+    Alert.alert(t('cart.cart_updated_title'), t('cart.cart_updated_body'));
     await checkStallStatus();
   };
 
@@ -138,11 +138,11 @@ export default function CartScreen({ navigation }) {
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Add items to your cart first');
+      Alert.alert(t('checkout.empty_cart_title'), t('checkout.empty_cart_body'));
       return;
     }
     if (hasClosedStall) {
-      Alert.alert('Closed Stalls', 'Please remove items from closed stalls before proceeding.');
+      Alert.alert(t('cart.closed_stalls_title'), t('cart.closed_stalls_body'));
       return;
     }
     setActiveTab(TABS.CHECKOUT);
@@ -152,7 +152,14 @@ export default function CartScreen({ navigation }) {
     setActiveTab(TABS.CART);
   };
 
-  if (cart.length === 0) {
+  // Scoped to the Cart tab on purpose: a successful order placement
+  // empties the cart as its own normal side effect (CheckoutContent's
+  // clearCart()), while the customer is still on the Checkout tab about
+  // to see the GCash payment modal. Without the tab check, this early
+  // return fired the instant the cart emptied and unmounted the whole
+  // checkout flow — modal included — before any payment step showed,
+  // for every order (not just multi-vendor ones).
+  if (cart.length === 0 && activeTab !== TABS.CHECKOUT) {
     return (
       <EmptyState
         icon="cart-outline"
@@ -304,7 +311,7 @@ export default function CartScreen({ navigation }) {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
         >
           {renderCartContent()}
           <View style={styles.bottomSpacer} />

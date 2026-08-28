@@ -39,11 +39,17 @@ export const chatService = {
           id,
           stall_number,
           stall_name,
-          section
+          section,
+          image_url
         )
       `)
       .eq('customer_id', customerId)
-      .order('updated_at', { ascending: false });
+      // last_message_time is what sendMessage actually stamps on every
+      // new message (updated_at only started tracking it just now, so
+      // existing conversations from before that fix would still sort
+      // wrong by updated_at alone). Postgres puts NULLs last on a DESC
+      // sort, so a conversation with no messages yet doesn't jump to top.
+      .order('last_message_time', { ascending: false, nullsFirst: false });
 
     if (error) throw error;
     return data;
@@ -65,11 +71,12 @@ export const chatService = {
         customer:customer_id (
           id,
           full_name,
-          email
+          email,
+          avatar_url
         )
       `)
       .eq('stall_id', stall.id)
-      .order('updated_at', { ascending: false });
+      .order('last_message_time', { ascending: false, nullsFirst: false });
 
     if (error) throw error;
     return data;
@@ -116,11 +123,31 @@ export const chatService = {
 
       console.log('chatService.sendMessage inserted message', data);
 
+      // getCustomerConversations/getVendorConversations both sort by
+      // updated_at — a plain column update doesn't touch it on its own
+      // (no DB trigger for that here), so the chat list would drift out
+      // of sync with actual activity unless this sets it explicitly too.
+      //
+      // Bump the RECIPIENT's unread count too — this is what the vendor
+      // bottom-nav chat badge (and the customer equivalent) reads. Without
+      // this the badge UI was fully wired up but had no signal to show:
+      // only markAsRead() ever touched these columns, always resetting
+      // them to 0, so a new message never made the count go up.
+      const recipientField = dbSenderRole === 'customer' ? 'vendor_unread_count' : 'customer_unread_count';
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select(recipientField)
+        .eq('id', conversationId)
+        .single();
+
+      const nowIso = new Date().toISOString();
       const { error: conversationError } = await supabase
         .from('conversations')
         .update({
           last_message: message,
-          last_message_time: new Date().toISOString(),
+          last_message_time: nowIso,
+          updated_at: nowIso,
+          [recipientField]: (convRow?.[recipientField] || 0) + 1,
         })
         .eq('id', conversationId);
 
@@ -180,11 +207,14 @@ export const chatService = {
         return { url: null, error: error && error.message ? error.message : 'Storage upload failed' };
       }
 
-            // Read side: use a SIGNED URL (valid 7 days) so private-bucket objects
-      // display even though vendor_documents is not publicly readable.
+            // Read side: use a SIGNED URL so private-bucket objects display even
+      // though vendor_documents is not publicly readable. Chat images are
+      // part of permanent order history, so use a long (effectively
+      // permanent) expiry rather than 7 days — a chat photo shouldn't turn
+      // into a broken image a week after it was sent.
       var signed = await supabase.storage
         .from('vendor_documents')
-        .createSignedUrl(data.path, 7 * 24 * 60 * 60);
+        .createSignedUrl(data.path, 10 * 365 * 24 * 60 * 60);
       var url = signed && signed.data && signed.data.signedUrl ? signed.data.signedUrl : null;
       if (!url) {
         return { url: null, error: (signed && signed.error ? signed.error.message : 'Could not build a signed URL') };
@@ -223,11 +253,19 @@ export const chatService = {
       throw error;
     }
 
+    const recipientField = dbSenderRole === 'customer' ? 'vendor_unread_count' : 'customer_unread_count';
+    const { data: convRow } = await supabase
+      .from('conversations')
+      .select(recipientField)
+      .eq('id', conversationId)
+      .single();
+
     await supabase
       .from('conversations')
       .update({
         last_message: 'Sent an image',
         last_message_time: new Date().toISOString(),
+        [recipientField]: (convRow?.[recipientField] || 0) + 1,
       })
       .eq('id', conversationId);
 

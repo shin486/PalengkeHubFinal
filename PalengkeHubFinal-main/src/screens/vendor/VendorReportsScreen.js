@@ -183,7 +183,7 @@ export default function VendorReportsScreen({ navigation }) {
   if (loading && !refreshing) {
     return (
       <View style={styles.container}>
-        <Header title="Reports" subtitle="Business analytics" />
+        <Header title="Reports" subtitle="Business analytics" showBack onBackPress={() => navigation.goBack()} />
         <VendorSkeletonList count={5} />
       </View>
     );
@@ -191,7 +191,7 @@ export default function VendorReportsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Header title="Reports" subtitle={stall?.stall_name || 'Business analytics'} />
+      <Header title="Reports" subtitle={stall?.stall_name || 'Business analytics'} showBack onBackPress={() => navigation.goBack()} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

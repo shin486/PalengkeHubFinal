@@ -27,6 +27,7 @@ export const Header = ({
   showBack = false,
   onBackPress,
   showNotifications = false,
+  notificationCount = 0,
   showCart = false,
   cartCount = 0,
   onNotificationPress,
@@ -51,7 +52,7 @@ export const Header = ({
 
   return (
     <>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.surface} />
       <View
         style={[
           styles.header,
@@ -107,6 +108,13 @@ export const Header = ({
                   activeOpacity={0.7}
                 >
                   <Ionicons name="notifications-outline" size={22} color={COLORS.text.primary} />
+                  {notificationCount > 0 && (
+                    <View style={styles.cartBadge}>
+                      <Text style={styles.cartBadgeText}>
+                        {notificationCount > 9 ? '9+' : notificationCount}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               )}
 

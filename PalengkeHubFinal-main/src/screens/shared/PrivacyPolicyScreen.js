@@ -2,7 +2,7 @@
 // Shared Privacy & Policy screen used by BOTH Customer and Vendor profiles.
 // Role-specific content is chosen via route.params.role ('customer' | 'vendor').
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../../components/Header';
@@ -93,6 +93,29 @@ export default function PrivacyPolicyScreen({ navigation, route }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const role = route?.params?.role === 'vendor' ? 'vendor' : 'customer';
   const data = CONTENT[role];
+
+  // Same fix as HelpSupportScreen.js — the global header is driven by a
+  // hand-tracked activeRouteName that this screen never updated, so it
+  // kept showing the previous screen's title ("My Profile") stacked
+  // above this screen's own header.
+  useEffect(() => {
+    const updateRoute = () => {
+      if (global.updateRouteName) global.updateRouteName('PrivacyPolicy');
+      if (global.setActiveRouteName) global.setActiveRouteName('PrivacyPolicy');
+    };
+    const resetRoute = () => {
+      if (global.updateRouteName) global.updateRouteName('Profile');
+      if (global.setActiveRouteName) global.setActiveRouteName('Profile');
+    };
+    updateRoute();
+    const unsubscribeFocus = navigation.addListener('focus', updateRoute);
+    const unsubscribeBlur = navigation.addListener('blur', resetRoute);
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+      resetRoute();
+    };
+  }, [navigation]);
 
   return (
     <View style={styles.container}>

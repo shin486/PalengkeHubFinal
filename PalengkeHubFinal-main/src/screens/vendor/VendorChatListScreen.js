@@ -197,7 +197,7 @@ export default function VendorChatListScreen({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle={COLORS.statusBar} backgroundColor={COLORS.background} />
+        <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Messages</Text>
         </View>
@@ -314,7 +314,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   avatarText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   unreadBadge: {
     position: 'absolute',
@@ -333,7 +333,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   unreadBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
   },
   chatContent: {
     flex: 1,

@@ -10,6 +10,7 @@ import {
   RefreshControl,
   SafeAreaView,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { chatService } from '../../services/chatService';
@@ -70,9 +71,13 @@ export default function ChatListScreen({ navigation }) {
         stall: item.stall,
       })}
     >
-      <View style={styles.avatarContainer}>
-        <Ionicons name="storefront-outline" size={18} />
-      </View>
+      {item.stall?.image_url ? (
+        <Image source={{ uri: item.stall.image_url }} style={styles.avatarImage} />
+      ) : (
+        <View style={styles.avatarContainer}>
+          <Ionicons name="storefront-outline" size={18} color={COLORS.text.tertiary} />
+        </View>
+      )}
       <View style={styles.conversationInfo}>
         <Text style={styles.stallName}>
           {item.stall?.stall_name || `Stall #${item.stall?.stall_number}`}
@@ -139,6 +144,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+    backgroundColor: COLORS.surfaceSecondary,
   },
   avatarEmoji: { fontSize: 24 },
   conversationInfo: { flex: 1 },

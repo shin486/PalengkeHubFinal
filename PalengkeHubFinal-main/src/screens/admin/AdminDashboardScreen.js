@@ -566,6 +566,7 @@ const Sidebar = ({
     { id: 'overview', label: 'Dashboard', icon: 'dashboard' },
     { id: 'applications', label: 'Applications', icon: 'description' },
     { id: 'stalls', label: 'Stalls', icon: 'storefront' },
+    { id: 'stall_locations', label: 'Stall Locations', icon: 'my-location' },
     { id: 'products', label: 'Products', icon: 'inventory' },
     { id: 'orders', label: 'Orders', icon: 'shopping-cart' },
     { id: 'users', label: 'Users', icon: 'people' },
@@ -3511,6 +3512,18 @@ export default function AdminDashboardScreen({ navigation }) {
         return renderComplaints();
       case 'chats':
         return renderChats();
+      case 'stall_locations':
+        return (
+          <TouchableOpacity
+            style={{ padding: 20, alignItems: 'center' }}
+            onPress={() => navigation.navigate('AdminStallLocations')}
+          >
+            <MaterialIcons name="my-location" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, color: '#666', marginTop: 10 }}>
+              Navigate to Stall Locations Screen
+            </Text>
+          </TouchableOpacity>
+        );
       case 'price_monitoring':
         return (
           <TouchableOpacity
@@ -4637,16 +4650,23 @@ const styles = StyleSheet.create({
   // Background
   bgContainer: {
     flex: 1,
+    backgroundColor: '#F2E7D6',
   },
-  bgContainerDark: {},
+  bgContainerDark: {
+    backgroundColor: '#17100A',
+  },
+  // Sized to the source photo's own aspect ratio instead of stretched
+  // full-bleed — that stretch was cropping it into an extreme, "too
+  // zoomed in" close-up. The overlay below is opaque enough (0.88/0.92)
+  // that this is mostly moot visually, but it's the same real bug as the
+  // Login screen's identical background image.
   fullScreenBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
     width: '100%',
-    height: '100%',
+    aspectRatio: 3552 / 2664,
   },
   overlay: {
     position: 'absolute',

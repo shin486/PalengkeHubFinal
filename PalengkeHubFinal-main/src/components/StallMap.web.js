@@ -1,16 +1,20 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Linking, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useColors } from '../contexts/ThemeContext';
 
-export default function StallMap({ 
-  latitude, 
-  longitude, 
-  stallName, 
-  stallNumber, 
-  section, 
+export default function StallMap({
+  latitude,
+  longitude,
+  stallName,
+  stallNumber,
+  section,
   height = 200,
-  interactive = true 
+  interactive = true
 }) {
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
   const openInGoogleMaps = () => {
     if (!latitude || !longitude) {
       return;
@@ -23,7 +27,7 @@ export default function StallMap({
   if (!latitude || !longitude) {
     return (
       <View style={[styles.placeholderContainer, { height }]}>
-        <Ionicons name="location-outline" size={28} color="#9CA3AF" />
+        <Ionicons name="location-outline" size={28} color={COLORS.text.quaternary} />
         <Text style={styles.placeholderText}>Location not available</Text>
         <Text style={styles.placeholderSubtext}>Stall location coming soon</Text>
       </View>
@@ -31,14 +35,14 @@ export default function StallMap({
   }
 
   return (
-    <TouchableOpacity 
-      style={[styles.container, { height }]} 
+    <TouchableOpacity
+      style={[styles.container, { height }]}
       onPress={openInGoogleMaps}
       disabled={!interactive}
       activeOpacity={0.7}
     >
       <View style={styles.mapPlaceholder}>
-        <Ionicons name="map-outline" size={40} color="#DC2626" />
+        <Ionicons name="map-outline" size={40} color={COLORS.primary} />
         <Text style={styles.mapTitle}>{stallName || 'Stall Location'}</Text>
         <Text style={styles.mapSubtitle}>
           {stallNumber ? `Stall #${stallNumber}` : ''} {section ? `- ${section}` : ''}
@@ -51,18 +55,18 @@ export default function StallMap({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     width: '100%',
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.surfaceSecondary,
   },
   mapPlaceholder: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#e0e7ff',
+    backgroundColor: COLORS.accentSoft,
     padding: 16,
   },
   mapEmoji: {
@@ -72,29 +76,29 @@ const styles = StyleSheet.create({
   mapTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1e3a8a',
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   mapSubtitle: {
     fontSize: 12,
-    color: '#3b82f6',
+    color: COLORS.text.secondary,
     marginBottom: 12,
     textAlign: 'center',
   },
   mapButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   mapButtonText: {
-    color: 'white',
+    color: COLORS.text.inverse,
     fontSize: 12,
     fontWeight: '500',
   },
   placeholderContainer: {
     width: '100%',
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -103,11 +107,11 @@ const styles = StyleSheet.create({
   placeholderText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF6B6B',
+    color: COLORS.primary,
     marginBottom: 4,
   },
   placeholderSubtext: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
 });

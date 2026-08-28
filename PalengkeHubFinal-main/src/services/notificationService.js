@@ -1,5 +1,36 @@
 import { Platform, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
+
+// Announcements are global broadcasts (no per-user row in the DB), so
+// "read" for them can only be tracked locally on-device. Without this,
+// the Home screen's bell dot ("there's something new") and the
+// Notifications screen's unread styling had no way to agree with each
+// other or survive a screen change — mark-all-read cleared the in-memory
+// list on NotificationScreen but the dot on Home came from a completely
+// separate fetch with no concept of "already seen".
+const READ_ANNOUNCEMENTS_KEY_PREFIX = '@palengkehub_read_announcements_';
+
+export const getReadAnnouncementIds = async (userId) => {
+  if (!userId) return [];
+  try {
+    const raw = await AsyncStorage.getItem(READ_ANNOUNCEMENTS_KEY_PREFIX + userId);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const markAnnouncementsReadLocally = async (userId, ids) => {
+  if (!userId || !ids?.length) return;
+  try {
+    const existing = await getReadAnnouncementIds(userId);
+    const merged = Array.from(new Set([...existing, ...ids]));
+    await AsyncStorage.setItem(READ_ANNOUNCEMENTS_KEY_PREFIX + userId, JSON.stringify(merged));
+  } catch (e) {
+    console.warn('Error saving read announcements:', e);
+  }
+};
 
 // expo-notifications is only available on native — dynamic require avoids web build errors
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -195,6 +226,64 @@ export const notifyNewPromotion = async (stallId, productName, discount) => {
   }
 };
 
+// --- Fetch a user's stored notifications (the table sendPushNotification
+// already inserts into — these functions never existed even though
+// NotificationScreen.js has called them from day one) ---
+export const getNotifications = async (userId) => {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) {
+    console.warn('getNotifications failed:', error.message);
+    return [];
+  }
+  return data || [];
+};
+
+export const getUnreadCount = async (userId) => {
+  if (!userId) return 0;
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+  if (error) {
+    console.warn('getUnreadCount failed:', error.message);
+    return 0;
+  }
+  return count || 0;
+};
+
+export const markAsRead = async (notificationId) => {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', notificationId);
+  if (error) console.warn('markAsRead failed:', error.message);
+};
+
+export const markAllAsRead = async (userId) => {
+  if (!userId) return;
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+  if (error) console.warn('markAllAsRead failed:', error.message);
+};
+
+export const deleteNotification = async (notificationId) => {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', notificationId);
+  if (error) console.warn('deleteNotification failed:', error.message);
+};
+
 // --- Setup notification listeners ---
 export const setupNotificationListeners = (onNotificationReceived, onNotificationResponse) => {
   if (!isNative || !Notifications) return () => {};
@@ -215,11 +304,23 @@ export const setupNotificationListeners = (onNotificationReceived, onNotificatio
   };
 };
 
-export default {
+// NotificationScreen.js imports this exact named object — it never
+// existed before, which is why every call inside it threw and was
+// silently swallowed by that screen's try/catch.
+export const notificationService = {
   requestNotificationPermission,
   registerPushToken,
   sendPushNotification,
   notifyOrderUpdate,
   notifyNewPromotion,
   setupNotificationListeners,
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  getReadAnnouncementIds,
+  markAnnouncementsReadLocally,
 };
+
+export default notificationService;

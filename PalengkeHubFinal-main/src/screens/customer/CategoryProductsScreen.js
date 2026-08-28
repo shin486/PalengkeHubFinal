@@ -293,7 +293,9 @@ export default function CategoryProductsScreen({ route, navigation }) {
             id,
             stall_name,
             stall_number,
-            section
+            section,
+            gcash_qr_url,
+            gcash_number
           )
         `)
         .eq('category', categoryName)
@@ -471,7 +473,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
         <SkeletonLoader />
       </View>
     );
@@ -491,8 +493,8 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
+
       {/* ============================================================
           HEADER
       ============================================================ */}

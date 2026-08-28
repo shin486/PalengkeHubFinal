@@ -207,14 +207,14 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                   style={[styles.actionBtn, styles.approveBtn]}
                   onPress={() => onPaymentApprove(order)}
                 >
-                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                  <Ionicons name="checkmark" size={14} color={vendorColors.text.white} />
                   <Text style={styles.actionBtnText}>Approve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.rejectPaymentBtn]}
                   onPress={() => onPaymentReject(order)}
                 >
-                  <Ionicons name="close" size={14} color="#FFF" />
+                  <Ionicons name="close" size={14} color={vendorColors.text.white} />
                   <Text style={styles.actionBtnText}>Reject</Text>
                 </TouchableOpacity>
               </>
@@ -223,7 +223,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {/* Propose change */}
             {canProposeChange && onProposeChange && (
               <TouchableOpacity style={[styles.actionBtn, styles.proposeBtn]} onPress={() => onProposeChange(order)}>
-                <Ionicons name="create-outline" size={14} color="#FFF" />
+                <Ionicons name="create-outline" size={14} color={vendorColors.text.white} />
                 <Text style={styles.actionBtnText}>Negotiate</Text>
               </TouchableOpacity>
             )}
@@ -231,7 +231,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {/* Request payment */}
             {canRequestPayment && onRequestPayment && (
               <TouchableOpacity style={[styles.actionBtn, styles.paymentBtn]} onPress={() => onRequestPayment(order)}>
-                <Ionicons name="card-outline" size={14} color="#FFF" />
+                <Ionicons name="card-outline" size={14} color={vendorColors.text.white} />
                 <Text style={styles.actionBtnText}>Request Pay</Text>
               </TouchableOpacity>
             )}
@@ -239,7 +239,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {/* Reject */}
             {canReject && (
               <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => setShowRejectModal(true)}>
-                <Ionicons name="close" size={14} color="#FFF" />
+                <Ionicons name="close" size={14} color={vendorColors.text.white} />
                 <Text style={styles.actionBtnText}>Reject</Text>
               </TouchableOpacity>
             )}
@@ -250,7 +250,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                 style={[styles.actionBtn, styles.updateBtn]}
                 onPress={() => onUpdateStatus(order.id, nextStep.status)}
               >
-                <Ionicons name="checkmark-done" size={14} color="#FFF" />
+                <Ionicons name="checkmark-done" size={14} color={vendorColors.text.white} />
                 <Text style={styles.actionBtnText}>{nextStep.label}</Text>
               </TouchableOpacity>
             )}
@@ -281,7 +281,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
                 <TextInput
                   style={styles.customInput}
                   placeholder="Type your reason here..."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={vendorColors.text.lighter}
                   value={customMessage}
                   onChangeText={setCustomMessage}
                   multiline
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   actionBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFF',
+    color: vendorColors.text.white,
   },
   approveBtn: {
     backgroundColor: vendorColors.success,

@@ -549,7 +549,9 @@ export default function SearchScreen({ navigation }) {
               stall_number,
               stall_name,
               section,
-              average_rating
+              average_rating,
+              gcash_qr_url,
+              gcash_number
             )
           `)
           .or(buildSearchFilter(searchTerm))
@@ -635,7 +637,7 @@ export default function SearchScreen({ navigation }) {
               .from('products')
               .select(`
                 id, name, price, unit, stall_id,
-                stalls!inner (id, stall_number, stall_name, section, average_rating)
+                stalls!inner (id, stall_number, stall_name, section, average_rating, gcash_qr_url, gcash_number)
               `)
               .eq('is_available', true)
               .or(buildSearchFilter(closest))
@@ -854,8 +856,12 @@ export default function SearchScreen({ navigation }) {
             onPress={() => addToCartFromComparison(product, stall, quantities[product.id] || 1)}
             activeOpacity={0.8}
           >
+            {/* A distinct cart icon, not the same "+" the quantity stepper
+                just used two inches to the left — two identical plus signs
+                side by side (one for quantity, one for add-to-cart) is
+                exactly what read as duplicated/misleading. */}
             <Ionicons
-              name={addedProductId === product.id ? 'checkmark' : 'add'}
+              name={addedProductId === product.id ? 'checkmark' : 'cart'}
               size={16}
               color={COLORS.onPrimary}
             />
@@ -954,7 +960,7 @@ export default function SearchScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>

@@ -29,7 +29,8 @@ import { PriceTrendBadge } from './PriceTrendBadge';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { PriceText } from './ui/PriceText';
-import { RADIUS, LAYOUT } from '../theme/tokens';
+import { VerdictChip } from './ui/VerdictChip';
+import { RADIUS, LAYOUT, SPACING, TYPE } from '../theme/tokens';
 
 const IMAGE_FADE = 180;
 
@@ -48,6 +49,17 @@ export const ProductCard = ({
   showVoice = true,
   style,
   imageStyle,
+  // Optional, all opt-in — every existing caller renders exactly as
+  // before if it doesn't pass these. verdict/rating come from real
+  // computed data (never fabricated); compareCount + onComparePress
+  // together swap the footer button for "Ikumpara (N)" instead of
+  // Add to Cart, since a card offering a comparison isn't also asking
+  // for a cart add in the same breath.
+  verdict,
+  rating,
+  ratingCount,
+  compareCount,
+  onComparePress,
 }) => {
   const COLORS = useColors();
   const fav = useFavorites();
@@ -169,15 +181,28 @@ export const ProductCard = ({
             )}
           </View>
 
-          <PriceText
-            price={safePrice}
-            unit={product?.unit}
-            originalPrice={hasOriginal ? originalPrice : null}
-            style={styles.priceRow}
-          />
+          <View style={styles.priceVerdictRow}>
+            <PriceText
+              price={safePrice}
+              unit={product?.unit}
+              originalPrice={hasOriginal ? originalPrice : null}
+              style={styles.priceRow}
+            />
+            {verdict ? <VerdictChip verdict={verdict} /> : null}
+          </View>
 
           {priceTrend ? (
             <PriceTrendBadge currentPrice={safePrice} previousPrice={priceTrend.previous_price} />
+          ) : null}
+
+          {rating != null ? (
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={12} color={COLORS.gold} />
+              <Text style={[styles.ratingText, { color: COLORS.text.primary }]}>{Number(rating).toFixed(1)}</Text>
+              {ratingCount != null ? (
+                <Text style={[styles.ratingCount, { color: COLORS.text.tertiary }]}>({ratingCount})</Text>
+              ) : null}
+            </View>
           ) : null}
 
           {stall ? (
@@ -189,16 +214,29 @@ export const ProductCard = ({
             </View>
           ) : null}
 
-          <Button
-            variant="secondary"
-            size="sm"
-            shape="square"
-            fullWidth
-            onPress={onAddToCart}
-            style={styles.addButton}
-          >
-            Idagdag sa Kart
-          </Button>
+          {compareCount > 1 && onComparePress ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              shape="square"
+              fullWidth
+              onPress={onComparePress}
+              style={styles.addButton}
+            >
+              {`Ikumpara (${compareCount})`}
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              shape="square"
+              fullWidth
+              onPress={onAddToCart}
+              style={styles.addButton}
+            >
+              Idagdag sa Kart
+            </Button>
+          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -274,8 +312,27 @@ const styles = StyleSheet.create({
     padding: 2,
     marginLeft: 4,
   },
+  priceVerdictRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
   priceRow: {
     marginBottom: 2,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 6,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  ratingCount: {
+    fontSize: 11,
   },
   stallRow: {
     flexDirection: 'row',

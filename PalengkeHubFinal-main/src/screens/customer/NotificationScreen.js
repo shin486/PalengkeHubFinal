@@ -12,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
@@ -27,13 +28,14 @@ export default function NotificationScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Announcements are global broadcasts, not per-account — a guest browsing
+  // without signing in should still see them. Only the personal notifications
+  // list and unread count need a real user.id.
   const loadNotifications = useCallback(async () => {
-    if (!user?.id) return;
-
     try {
       setLoading(true);
-      const data = await notificationService.getNotifications(user.id);
-      
+      const data = user?.id ? await notificationService.getNotifications(user.id) : [];
+
       // Announcements targeted at customers.
       // Live schema: target_audience is text[]; null expires_at = still active.
       let announcementItems = [];
@@ -46,12 +48,16 @@ export default function NotificationScreen({ navigation }) {
           .or(`expires_at.is.null,expires_at.gte.${nowIso}`)
           .order('created_at', { ascending: false })
           .limit(20);
+        // Announcements have no per-user row in the DB — "read" is tracked
+        // locally on-device (see notificationService.getReadAnnouncementIds)
+        // so it survives navigating away and agrees with the Home bell dot.
+        const readIds = user?.id ? await notificationService.getReadAnnouncementIds(user.id) : [];
         announcementItems = (anns || []).map(ann => ({
           id: `ann-${ann.id}`,
           title: ann.title,
           message: ann.content,
           type: 'announcement',
-          is_read: false,
+          is_read: readIds.includes(ann.id),
           created_at: ann.created_at,
           is_announcement: true,
         }));
@@ -63,9 +69,11 @@ export default function NotificationScreen({ navigation }) {
         (a, b) => new Date(b.created_at) - new Date(a.created_at)
       );
       setNotifications(all);
-      
-      const count = await notificationService.getUnreadCount(user.id);
-      setUnreadCount(count);
+
+      if (user?.id) {
+        const count = await notificationService.getUnreadCount(user.id);
+        setUnreadCount(count);
+      }
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {
@@ -75,7 +83,11 @@ export default function NotificationScreen({ navigation }) {
 
   useEffect(() => {
     loadNotifications();
-    
+
+    // Guests have no user_id row to subscribe against — skip the channel
+    // rather than open one with a literal "eq.undefined" filter.
+    if (!user?.id) return;
+
     const subscription = supabase
       .channel('notifications')
       .on(
@@ -84,7 +96,7 @@ export default function NotificationScreen({ navigation }) {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user?.id}`,
+          filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
           setNotifications(prev => [payload.new, ...prev]);
@@ -105,8 +117,16 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const handleMarkAsRead = async (notificationId) => {
-    // Announcements aren't per-user rows — mark locally only
-    if (!String(notificationId).startsWith('ann-')) {
+    const idStr = String(notificationId);
+    // Announcements aren't per-user rows — persist "read" locally instead
+    // (see notificationService.markAnnouncementsReadLocally) so it survives
+    // navigation and agrees with the Home screen's bell dot.
+    if (idStr.startsWith('ann-')) {
+      const realId = Number(idStr.slice(4));
+      if (user?.id && Number.isFinite(realId)) {
+        await notificationService.markAnnouncementsReadLocally(user.id, [realId]);
+      }
+    } else {
       await notificationService.markAsRead(notificationId);
     }
     setNotifications(prev =>
@@ -114,29 +134,52 @@ export default function NotificationScreen({ navigation }) {
         notif.id === notificationId ? { ...notif, is_read: true } : notif
       )
     );
-    if (!String(notificationId).startsWith('ann-')) {
+    if (!idStr.startsWith('ann-')) {
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
   };
 
+  // unreadCount only tracks the real `notifications` table — announcements
+  // are global broadcasts with no per-user is_read row, so they're always
+  // stamped is_read:false locally (see loadNotifications) and never counted
+  // here. That left this button permanently disabled ("All caught up")
+  // whenever the only unread-looking item was an announcement, even though
+  // it visibly showed as unread in the list below. Gate on the actual
+  // rendered list instead of the DB-only count.
+  const hasUnread = notifications.some(n => !n.is_read);
+
   const handleMarkAllAsRead = async () => {
-    if (unreadCount === 0) return;
-    
+    if (!hasUnread) return;
+
+    const applyMarkAllAsRead = async () => {
+      await notificationService.markAllAsRead(user.id);
+      const unreadAnnouncementIds = notifications
+        .filter(n => n.is_announcement && !n.is_read)
+        .map(n => Number(String(n.id).slice(4)))
+        .filter(Number.isFinite);
+      if (user?.id && unreadAnnouncementIds.length) {
+        await notificationService.markAnnouncementsReadLocally(user.id, unreadAnnouncementIds);
+      }
+      setNotifications(prev =>
+        prev.map(notif => ({ ...notif, is_read: true }))
+      );
+      setUnreadCount(0);
+    };
+
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to mark all notifications as read?')) {
+        await applyMarkAllAsRead();
+      }
+      return;
+    }
+
     Alert.alert(
       'Mark All as Read',
       'Are you sure you want to mark all notifications as read?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark All',
-          onPress: async () => {
-            await notificationService.markAllAsRead(user.id);
-            setNotifications(prev =>
-              prev.map(notif => ({ ...notif, is_read: true }))
-            );
-            setUnreadCount(0);
-          },
-        },
+        { text: 'Mark All', onPress: applyMarkAllAsRead },
       ]
     );
   };
@@ -177,9 +220,11 @@ export default function NotificationScreen({ navigation }) {
     if (notification.type === 'order') {
       navigation.navigate('Orders');
     } else if (notification.type === 'chat') {
-      navigation.navigate('ChatList');
+      navigation.navigate('Chats');
     } else if (notification.type === 'price_drop') {
       navigation.navigate('Search');
+    } else if (notification.type === 'vendor_resubmission') {
+      navigation.navigate('VendorApplicationStatus', { applicationId: notification.data?.vendor_application_id });
     } else {
       navigation.navigate('Orders');
     }
@@ -200,6 +245,8 @@ export default function NotificationScreen({ navigation }) {
         return 'megaphone-outline';
       case 'chat':
         return 'chatbubble-outline';
+      case 'vendor_resubmission':
+        return 'document-text-outline';
       default:
         return 'notifications-outline';
     }
@@ -257,30 +304,22 @@ export default function NotificationScreen({ navigation }) {
     );
   };
 
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          <View style={styles.placeholder} />
-        </View>
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.surface} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.text.inverse} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      
-      
-      {notifications.length === 0 ? (
+      ) : notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <LinearGradient
             colors={[COLORS.accentSoft, COLORS.surface]}
@@ -295,16 +334,21 @@ export default function NotificationScreen({ navigation }) {
         </View>
       ) : (
         <>
-          {unreadCount > 0 && (
-            <TouchableOpacity style={styles.markAllButton} onPress={handleMarkAllAsRead}>
-              <LinearGradient
-                colors={[COLORS.primary, COLORS.primary]}
-                style={styles.markAllGradient}
-              >
-                <Text style={styles.markAllText}>Mark all as read</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
+          {/* Always visible (disabled at zero) rather than vanishing —
+              a button that disappears once you've caught up reads as
+              "missing," not "done." */}
+          <TouchableOpacity
+            style={[styles.markAllButton, !hasUnread && styles.markAllButtonDisabled]}
+            onPress={handleMarkAllAsRead}
+            disabled={!hasUnread}
+          >
+            <LinearGradient
+              colors={!hasUnread ? [COLORS.text.lighter, COLORS.text.lighter] : [COLORS.primary, COLORS.primary]}
+              style={styles.markAllGradient}
+            >
+              <Text style={styles.markAllText}>{!hasUnread ? 'All caught up' : 'Mark all as read'}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
           
           <FlatList
             data={notifications}
@@ -349,6 +393,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 50,
     paddingBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   backButton: {
     width: 40,
@@ -356,17 +403,12 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  backText: {
-    fontSize: 24,
-    color: COLORS.text.inverse,
-    fontWeight: '600',
+    backgroundColor: COLORS.wickerSoft,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: COLORS.text.inverse,
+    color: COLORS.text.primary,
   },
   placeholder: {
     width: 40,
@@ -411,6 +453,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     alignSelf: 'flex-end',
+  },
+  markAllButtonDisabled: {
+    opacity: 0.6,
   },
   markAllGradient: {
     paddingHorizontal: 16,

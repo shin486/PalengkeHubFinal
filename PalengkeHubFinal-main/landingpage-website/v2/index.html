@@ -376,9 +376,14 @@ h1.hero-h1{
 .band-head .sec-lead{color:var(--on-dark-2)}
 .band .kicker{background:rgba(232,131,58,.16);border-color:rgba(232,131,58,.45);color:var(--brand)}
 .rail{display:flex;gap:var(--s-xl);margin-top:var(--s-xxxl);width:max-content;will-change:transform}
-.rail-clip{overflow:hidden;margin-inline:calc(var(--gutter) * -1);padding-inline:var(--gutter);
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
-          mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+/* Full-bleed on purpose, not nested in .wrap-wide like the heading above
+   it — that 1280px max-width column was the actual bug: the dark .band
+   section runs the full browser width, but the cards were capped to the
+   centered content column, so on any screen wider than ~1280px there was
+   a permanent gap between the last visible card and the true edge. */
+.rail-clip{width:100%;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);
+          mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
 .cat{
   display:flex;align-items:center;gap:var(--s-md);flex:none;
   background:rgba(242,231,214,.06);border:var(--border-w) solid rgba(226,186,135,.28);
@@ -388,8 +393,10 @@ h1.hero-h1{
 .cat b{display:block;font-family:var(--f-display);font-size:var(--fs-h3);font-weight:var(--fw-bold);white-space:nowrap}
 .cat span{display:block;font-size:var(--fs-caption);color:var(--on-dark-3);white-space:nowrap}
 @media (prefers-reduced-motion:no-preference){
+  /* -25% of 4 copies is exactly one set-width, same distance the old -50%
+     of 2 copies covered — so the duration stays the same speed, not 2x. */
   .rail-anim{animation:railslide 42s linear infinite}
-  @keyframes railslide{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+  @keyframes railslide{from{transform:translate3d(0,0,0)}to{transform:translate3d(-25%,0,0)}}
 }
 
 /* ============================================================
@@ -400,9 +407,21 @@ h1.hero-h1{
    ============================================================ */
 .story{position:relative;background:var(--card-2);border-block:var(--border-w) solid var(--line)}
 .story-stage{display:flex;flex-direction:column;gap:var(--s-xxl);margin-top:clamp(28px,4vw,48px)}
+/* Static on mobile: below 900px the phone and the beats stack in one
+   column with no side-by-side grid to give the phone its own lane. A
+   pinned/curtained phone was tried here (sticky + full-width mask fade)
+   and every clipping/gap bug it caused got fixed, but the pin-and-fade
+   effect itself just doesn't read cleanly on a single narrow column —
+   so it's a plain static block above the beats instead: nothing to
+   overlap, nothing to fade, always fully readable. Sticky only kicks in
+   at the min-width:900px grid below, where the phone gets its own column
+   and never overlaps beat text in the first place. */
+.story-stage .phone-pin{
+  width:100%;
+  display:flex;justify-content:center;
+}
 .story-stage .phone{
-  position:sticky;top:82px;z-index:2;
-  width:186px;align-self:center;
+  width:186px;
 }
 .beats{display:grid;gap:var(--s-xl)}
 .beat{
@@ -464,7 +483,13 @@ h1.hero-h1{
     display:grid;grid-template-columns:min(360px,32%) 1fr;
     gap:clamp(40px,6vw,96px);align-items:start;margin-top:clamp(36px,4vw,56px);
   }
-  .story-stage .phone{width:100%;align-self:start;top:calc(50svh - 372px)}
+  /* Desktop has its own column for the phone (no beats ever scroll under
+     it), so none of the mobile curtain trick applies here — undo it. */
+  .story-stage .phone-pin{
+    position:sticky;align-self:start;top:calc(50svh - 372px);
+    width:100%;display:block;background:none;padding-block:0;
+  }
+  .story-stage .phone{width:100%}
   .beats{gap:0}
   .beat{
     min-height:52svh;display:flex;flex-direction:column;justify-content:center;
@@ -742,6 +767,8 @@ html{scroll-behavior:smooth}
       <a href="#paano">Paano Gumana</a>
       <a href="#location">Location</a>
       <a href="#faq">FAQ</a>
+      <a href="../about.html">About</a>
+      <a href="../contact.html">Contact</a>
     </nav>
     <a class="btn btn-primary" href="../PalengkeHub.apk" download="PalengkeHub.apk">Download App</a>
     <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navPanel" aria-label="Open menu">
@@ -754,6 +781,8 @@ html{scroll-behavior:smooth}
     <a href="#paano">Paano Gumana</a>
     <a href="#location">Location</a>
     <a href="#faq">FAQ</a>
+    <a href="../about.html">About</a>
+    <a href="../contact.html">Contact</a>
     <a class="btn btn-primary" href="../PalengkeHub.apk" download="PalengkeHub.apk">Download App</a>
   </div>
 </header>
@@ -798,6 +827,10 @@ html{scroll-behavior:smooth}
         <div>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           Pickup sa mismong stall
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 6-6"/></svg>
+          Less hassle sa siksikan sa palengke at mahabang pila!
         </div>
       </div>
 
@@ -852,7 +885,7 @@ html{scroll-behavior:smooth}
     <p class="sec-lead rev">Gulay, karne, isda, prutas, manok at bigas mula sa mga verified na stall ng Lipa City Public Market. Hindi na kailangang mag-hop sa iba't ibang page o mag-chat ng isa isa.</p>
   </div>
 
-  <div class="wrap-wide rail-clip">
+  <div class="rail-clip">
     <div class="rail rail-anim" id="rail">
       <div class="cat"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
       <div class="cat"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
@@ -860,6 +893,23 @@ html{scroll-behavior:smooth}
       <div class="cat"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
       <div class="cat"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
       <div class="cat"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
+      <!-- The loop translates by -25% (see @keyframes railslide), so it
+           needs 4 copies of the set, not 2 — with only 2, one full set's
+           width can be narrower than a wide desktop viewport, and the
+           strip visibly runs out of cards before the loop catches up.
+           That gap on the right was this, not an animation bug. -->
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-fruits.webp" width="56" height="56" alt=""><div><b>Prutas</b><span>Fruits</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-poultry.webp" width="56" height="56" alt=""><div><b>Manok at Itlog</b><span>Poultry</span></div></div>
+      <div class="cat" aria-hidden="true"><img src="./assets/cat-rice.webp" width="56" height="56" alt=""><div><b>Bigas</b><span>Rice</span></div></div>
       <div class="cat" aria-hidden="true"><img src="./assets/cat-vegetables.webp" width="56" height="56" alt=""><div><b>Gulay</b><span>Vegetables</span></div></div>
       <div class="cat" aria-hidden="true"><img src="./assets/cat-meat.webp" width="56" height="56" alt=""><div><b>Karne</b><span>Meat</span></div></div>
       <div class="cat" aria-hidden="true"><img src="./assets/cat-fish.webp" width="56" height="56" alt=""><div><b>Isda</b><span>Fish</span></div></div>
@@ -881,12 +931,14 @@ html{scroll-behavior:smooth}
     <p class="sec-lead rev">Tatlong bagay lang ang kailangan mong tandaan: hanapin, ikumpara, sunduin. Ang nasa telepono sa tabi ay ang totoong app, hindi drawing.</p>
 
     <div class="story-stage" id="storyStage">
-      <div class="phone" id="storyPhone" aria-hidden="true">
-        <div class="screen">
-          <img class="screen-hdr" src="./assets/app-header.webp" width="375" height="162" alt="" loading="lazy">
-          <div class="screen-body"><img class="screen-strip" src="./assets/app-strip.webp" width="375" height="1940" alt="" loading="lazy"></div>
-          <img class="screen-tab" src="./assets/app-tabbar.webp" width="375" height="60" alt="" loading="lazy">
-          <div class="screen-glare"></div>
+      <div class="phone-pin">
+        <div class="phone" id="storyPhone" aria-hidden="true">
+          <div class="screen">
+            <img class="screen-hdr" src="./assets/app-header.webp" width="375" height="162" alt="" loading="lazy">
+            <div class="screen-body"><img class="screen-strip" src="./assets/app-strip.webp" width="375" height="1940" alt="" loading="lazy"></div>
+            <img class="screen-tab" src="./assets/app-tabbar.webp" width="375" height="60" alt="" loading="lazy">
+            <div class="screen-glare"></div>
+          </div>
         </div>
       </div>
 

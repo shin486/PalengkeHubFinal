@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,10 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useColors } from '../../contexts/ThemeContext';
 import { Header } from '../../components/Header';
 
 export default function VendorRatingsScreen({ navigation }) {
   const { user } = useAuth();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [ratings, setRatings] = useState([]);
   const [productRatings, setProductRatings] = useState([]);
@@ -56,7 +59,7 @@ export default function VendorRatingsScreen({ navigation }) {
     if (!stall?.id) return;
     try {
       setLoading(true);
-      
+
       // Fetch all ratings for this stall with product and customer info
       const { data, error } = await supabase
         .from('ratings')
@@ -91,7 +94,7 @@ export default function VendorRatingsScreen({ navigation }) {
           product.averageRating = product.sumRatings / product.totalRatings;
         }
       });
-      
+
       const productData = Array.from(productMap.values())
         .sort((a, b) => b.averageRating - a.averageRating);
       setProductRatings(productData);
@@ -115,7 +118,7 @@ export default function VendorRatingsScreen({ navigation }) {
     try {
       const { error } = await supabase
         .from('ratings')
-        .update({ 
+        .update({
           vendor_reply: replyText.trim(),
           vendor_reply_at: new Date().toISOString(),
           vendor_reply_read: false
@@ -292,7 +295,7 @@ export default function VendorRatingsScreen({ navigation }) {
             setReplyModalVisible(true);
           }}
         >
-          <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.replyGradient}>
+          <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.replyGradient}>
             <Text style={styles.replyButtonText}>Reply to Review</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -310,7 +313,7 @@ export default function VendorRatingsScreen({ navigation }) {
   if (loading && !refreshing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#DC2626" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading ratings...</Text>
       </View>
     );
@@ -323,9 +326,9 @@ export default function VendorRatingsScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Header title="Rating Insights" subtitle={stall?.stall_name || 'View customer feedback'} showBack />
-      
+
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC2626']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
         {/* Summary Stats */}
         <View style={styles.summaryContainer}>
@@ -352,7 +355,7 @@ export default function VendorRatingsScreen({ navigation }) {
               <View key={star} style={styles.distributionRow}>
                 <Text style={styles.distributionStar}>{star} </Text>
                 <View style={styles.distributionBarContainer}>
-                  <View style={[styles.distributionBar, { width: `${percentage}%`, backgroundColor: star >= 4 ? '#10B981' : star === 3 ? '#F59E0B' : '#EF4444' }]} />
+                  <View style={[styles.distributionBar, { width: `${percentage}%`, backgroundColor: star >= 4 ? COLORS.success : star === 3 ? COLORS.warning : COLORS.error }]} />
                 </View>
                 <Text style={styles.distributionCount}>{count}</Text>
               </View>
@@ -385,10 +388,10 @@ export default function VendorRatingsScreen({ navigation }) {
             <Text style={styles.sectionTitle}>Customer Reviews</Text>
           </View>
           {renderStarFilter()}
-          
+
           {filteredRatings().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="star" size={40} color="#F59E0B" />
+              <Ionicons name="star" size={40} color={COLORS.warning} />
               <Text style={styles.emptyTitle}>No reviews yet</Text>
               <Text style={styles.emptyText}>When customers leave reviews, they'll appear here</Text>
             </View>
@@ -416,28 +419,28 @@ export default function VendorRatingsScreen({ navigation }) {
             <Text style={styles.modalSubtitle}>
               Respond to {selectedRating?.consumer?.full_name || 'customer'}
             </Text>
-            
+
             <View style={styles.modalRating}>
               {getStarRating(selectedRating?.rating || 0)}
             </View>
-            
+
             {selectedRating?.review && (
               <View style={styles.modalOriginalReview}>
                 <Text style={styles.modalOriginalLabel}>Original review:</Text>
                 <Text style={styles.modalOriginalText}>"{selectedRating.review}"</Text>
               </View>
             )}
-            
+
             <TextInput
               style={styles.replyInput}
               placeholder="Type your reply here..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.text.quaternary}
               value={replyText}
               onChangeText={setReplyText}
               multiline
               numberOfLines={4}
             />
-            
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelModalButton}
@@ -445,13 +448,13 @@ export default function VendorRatingsScreen({ navigation }) {
               >
                 <Text style={styles.cancelModalText}>Cancel</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.submitModalButton, submittingReply && styles.disabledButton]}
                 onPress={submitReply}
                 disabled={submittingReply}
               >
-                <LinearGradient colors={['#DC2626', '#EF4444']} style={styles.submitGradient}>
+                <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.submitGradient}>
                   <Text style={styles.submitButtonText}>
                     {submittingReply ? 'Sending...' : 'Send Reply'}
                   </Text>
@@ -465,19 +468,20 @@ export default function VendorRatingsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   loadingText: {
     marginTop: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   summaryContainer: {
     flexDirection: 'row',
@@ -487,7 +491,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
@@ -500,7 +504,7 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   summaryStars: {
     flexDirection: 'row',
@@ -508,10 +512,10 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   section: {
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     marginHorizontal: 16,
     marginTop: 16,
     padding: 16,
@@ -525,7 +529,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 16,
   },
   sectionHeader: {
@@ -539,10 +543,10 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   starFilled: {
-    color: '#F59E0B',
+    color: COLORS.warning,
   },
   starEmpty: {
-    color: '#D1D5DB',
+    color: COLORS.border,
   },
   distributionRow: {
     flexDirection: 'row',
@@ -552,12 +556,12 @@ const styles = StyleSheet.create({
   distributionStar: {
     width: 40,
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   distributionBarContainer: {
     flex: 1,
     height: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: 4,
     marginHorizontal: 8,
     overflow: 'hidden',
@@ -569,11 +573,11 @@ const styles = StyleSheet.create({
   distributionCount: {
     width: 30,
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'right',
   },
   productRatingCard: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -581,7 +585,7 @@ const styles = StyleSheet.create({
   productRatingName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 6,
   },
   productRatingRow: {
@@ -595,12 +599,12 @@ const styles = StyleSheet.create({
   productRatingScore: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#DC2626',
+    color: COLORS.primary,
     marginRight: 4,
   },
   productRatingCount: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   filterContainer: {
     flexDirection: 'row',
@@ -610,26 +614,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     marginRight: 8,
   },
   filterChipActive: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.primary,
   },
   filterChipText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
   },
   filterChipTextActive: {
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   filterCount: {
     fontSize: 10,
   },
   ratingCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: COLORS.borderLight,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -649,47 +653,47 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
   customerAvatarText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   customerName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
   },
   ratingDate: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
     marginTop: 2,
   },
   ratingStars: {
     flexDirection: 'row',
   },
   productInfo: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 8,
     padding: 8,
     marginBottom: 10,
   },
   productLabel: {
     fontSize: 10,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 2,
   },
   productName: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#1F2937',
+    color: COLORS.text.primary,
   },
   productPrice: {
     fontSize: 11,
-    color: '#DC2626',
+    color: COLORS.primary,
     marginTop: 2,
   },
   reviewContainer: {
@@ -698,16 +702,16 @@ const styles = StyleSheet.create({
   reviewLabel: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 4,
   },
   reviewText: {
     fontSize: 13,
-    color: '#374151',
+    color: COLORS.text.secondary,
     lineHeight: 18,
   },
   replyContainer: {
-    backgroundColor: '#FEF3F2',
+    backgroundColor: COLORS.accentSoft,
     borderRadius: 8,
     padding: 10,
     marginBottom: 10,
@@ -721,15 +725,15 @@ const styles = StyleSheet.create({
   replyLabel: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#DC2626',
+    color: COLORS.primary,
   },
   replyDate: {
     fontSize: 9,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   replyText: {
     fontSize: 12,
-    color: '#374151',
+    color: COLORS.text.secondary,
   },
   replyButton: {
     borderRadius: 8,
@@ -743,7 +747,7 @@ const styles = StyleSheet.create({
   replyButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
   deleteButton: {
     alignItems: 'center',
@@ -751,7 +755,7 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.text.quaternary,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -765,12 +769,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   emptyText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     textAlign: 'center',
   },
   modalOverlay: {
@@ -781,20 +785,20 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '85%',
-    backgroundColor: 'white',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 20,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: COLORS.text.primary,
     marginBottom: 4,
     textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -804,28 +808,28 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalOriginalReview: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
     borderRadius: 8,
     padding: 10,
     marginBottom: 16,
   },
   modalOriginalLabel: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     marginBottom: 4,
   },
   modalOriginalText: {
     fontSize: 13,
-    color: '#374151',
+    color: COLORS.text.secondary,
     fontStyle: 'italic',
   },
   replyInput: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: COLORS.text.primary,
     textAlignVertical: 'top',
     minHeight: 80,
     marginBottom: 16,
@@ -836,14 +840,14 @@ const styles = StyleSheet.create({
   },
   cancelModalButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.surfaceSecondary,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: 'center',
   },
   cancelModalText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.text.tertiary,
     fontWeight: '500',
   },
   submitModalButton: {
@@ -861,6 +865,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'white',
+    color: COLORS.text.inverse,
   },
 });

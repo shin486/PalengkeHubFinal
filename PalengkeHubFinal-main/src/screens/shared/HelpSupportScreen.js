@@ -3,7 +3,7 @@
 // Navigate with { role: 'customer' } or { role: 'vendor' } route params to get
 // role-tailored FAQs, contact channels, and troubleshooting guides.
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../../components/Header';
@@ -142,6 +142,32 @@ export default function HelpSupportScreen({ navigation, route }) {
   const [openFaq, setOpenFaq] = useState(-1);
   const [openGuide, setOpenGuide] = useState(-1);
   const [emailSent, setEmailSent] = useState(false);
+
+  // App.js's global header is driven by a hand-tracked `activeRouteName`,
+  // not React Navigation's real current route — screens have to set it
+  // themselves on focus (see ChatDetailScreen.js for the original
+  // pattern). This screen never did, so activeRouteName stayed stuck on
+  // whatever screen you navigated from (usually "Profile"), and the
+  // global header rendered THAT screen's title ("My Profile") stacked
+  // above this screen's own "Help & Support" header.
+  useEffect(() => {
+    const updateRoute = () => {
+      if (global.updateRouteName) global.updateRouteName('HelpSupport');
+      if (global.setActiveRouteName) global.setActiveRouteName('HelpSupport');
+    };
+    const resetRoute = () => {
+      if (global.updateRouteName) global.updateRouteName('Profile');
+      if (global.setActiveRouteName) global.setActiveRouteName('Profile');
+    };
+    updateRoute();
+    const unsubscribeFocus = navigation.addListener('focus', updateRoute);
+    const unsubscribeBlur = navigation.addListener('blur', resetRoute);
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+      resetRoute();
+    };
+  }, [navigation]);
 
   const openChat = () => {
     if (role === 'vendor') {

@@ -51,8 +51,8 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
             <Switch
               value={product.is_available}
               onValueChange={() => onToggleAvailability(product)}
-              trackColor={{ false: '#D1D5DB', true: vendorColors.success }}
-              thumbColor="#FFFFFF"
+              trackColor={{ false: vendorColors.borderLight, true: vendorColors.success }}
+              thumbColor={vendorColors.text.white}
               size="small"
               style={styles.switch}
             />
@@ -143,7 +143,8 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: 'Nunito_700Bold',
+    fontWeight: '700',
     color: vendorColors.text.primary,
     marginRight: 8,
   },
@@ -157,7 +158,8 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontFamily: 'Baloo2_800ExtraBold',
+    fontWeight: '800',
     color: vendorColors.primary,
   },
   unit: {

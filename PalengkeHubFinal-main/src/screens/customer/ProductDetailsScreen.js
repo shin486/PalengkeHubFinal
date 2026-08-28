@@ -376,7 +376,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
             average_rating,
             total_ratings,
             image_url,
-            is_temporarily_closed
+            is_temporarily_closed,
+            gcash_qr_url,
+            gcash_number
           )
         `)
         .eq('id', productId)
@@ -804,16 +806,16 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   return (
     <View style={styles.screenContainer}>
+    {/* Back Button — a sibling of the ScrollView, not a child, so it stays
+        fixed on screen instead of scrolling away with the content. */}
+    <TouchableOpacity
+      style={styles.backArrow}
+      onPress={() => navigation.goBack()}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="arrow-back" size={22} color={COLORS.onInk} />
+    </TouchableOpacity>
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-      {/* Back Button */}
-      <TouchableOpacity
-        style={styles.backArrow}
-        onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="arrow-back" size={22} color={COLORS.onInk} />
-      </TouchableOpacity>
-
       {/* Product Image — full bleed, bottom corners only */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
