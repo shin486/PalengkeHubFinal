@@ -1,9 +1,9 @@
 // Voice service — speech-to-text (voice search) + text-to-speech (read aloud).
-// Works on web (browser SpeechRecognition / SpeechSynthesis) and falls back
-// gracefully on native (expo-speech for TTS; expo-speech-recognition if installed).
+// Both web and native (Android/iOS) speech recognition are driven through the
+// same Web Speech API shape: the real browser API on web, and
+// expo-speech-recognition's ExpoWebSpeechRecognition polyfill on native — so
+// there's exactly one consumer code path instead of three drifting ones.
 import { Platform } from 'react-native';
-import { SpeechRecognition as CapacitorSpeechRecognition } from '@capacitor-community/speech-recognition';
-import { Capacitor } from '@capacitor/core';
 
 // ── Text-to-speech ──
 let ExpoSpeech = null;
@@ -56,177 +56,115 @@ export const stopSpeaking = () => {
 };
 
 // ── Voice input (speech-to-text) ──
-let NativeVoice = null;
+let ExpoWebSpeechRecognition = null;
+let ExpoSpeechRecognitionModule = null;
 try {
-  NativeVoice = require('expo-speech-recognition');
+  const mod = require('expo-speech-recognition');
+  ExpoWebSpeechRecognition = mod.ExpoWebSpeechRecognition;
+  ExpoSpeechRecognitionModule = mod.ExpoSpeechRecognitionModule;
 } catch (e) {
-  NativeVoice = null;
+  ExpoWebSpeechRecognition = null;
+  ExpoSpeechRecognitionModule = null;
 }
 
-// Capacitor native runtime: the Android app loads this web bundle inside a
-// Capacitor WebView, where the browser SpeechRecognition API does not exist.
-// In that case use the @capacitor-community/speech-recognition plugin.
-const isCapacitorNative = () => {
-  try {
-    return Capacitor.isNativePlatform();
-  } catch (e) {
-    return false;
+let activeRecognition = null;
+
+// Returns a Web Speech API-shaped recognizer object regardless of platform —
+// the real browser implementation on web, expo-speech-recognition's polyfill
+// on native. `null` means voice input is genuinely unavailable here.
+const getRecognizer = () => {
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') return null;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    try {
+      return new SR();
+    } catch (e) {
+      return null;
+    }
   }
-};
-
-const startCapacitorListening = async (plugin, { language, onResult, onEnd, onError }) => {
+  if (!ExpoWebSpeechRecognition) return null;
   try {
-    if (plugin.removeAllListeners) {
-      try {
-        await plugin.removeAllListeners();
-      } catch (e) {
-        // ignore
-      }
-    }
-    if (plugin.addListener) {
-      await plugin.addListener('partialResults', (data) => {
-        const matches = (data && data.matches) || [];
-        if (matches.length && onResult) onResult(matches[0], false);
-      });
-      await plugin.addListener('listeningState', (data) => {
-        if (data && data.status === 'stopped' && onEnd) onEnd();
-      });
-    }
-    if (plugin.requestPermissions) {
-      const perm = await plugin.requestPermissions();
-      if (perm && perm.speechRecognition !== 'granted') {
-        if (onError) onError(new Error('not-allowed'));
-        return false;
-      }
-    }
-    const result = await plugin.start({
-      language: (language || 'tl-PH').replace(/_/g, '-'),
-      maxResults: 5,
-      partialResults: true,
-      popup: false,
-    });
-    const matches = (result && result.matches) || [];
-    if (matches.length && onResult) onResult(matches[0], true);
-    if (onEnd) onEnd();
-    return true;
-  } catch (e) {
-    console.warn('Capacitor speech recognition failed:', (e && e.message) || e);
-    if (onError) onError(e);
-    return false;
-  }
-};
-
-let webRecognition = null;
-
-const getWebRecognition = () => {
-  if (typeof window === 'undefined') return null;
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return null;
-  try {
-    return new SR();
+    return new ExpoWebSpeechRecognition();
   } catch (e) {
     return null;
   }
 };
 
 export const isVoiceInputSupported = () => {
-  if (isCapacitorNative()) return true;
-  if (Platform.OS === 'web') return !!getWebRecognition();
-  return !!NativeVoice;
+  if (Platform.OS === 'web') {
+    return typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+  return !!ExpoWebSpeechRecognition;
 };
 
 /**
  * Start listening for speech.
  * onResult(text, isFinal) is called as the user speaks.
  */
-export const startListening = ({ language = 'tl-PH', onResult, onEnd, onError } = {}) => {
-  if (isCapacitorNative()) {
-    startCapacitorListening(CapacitorSpeechRecognition, { language, onResult, onEnd, onError });
+export const startListening = async ({ language = 'tl-PH', onResult, onEnd, onError } = {}) => {
+  const rec = getRecognizer();
+  if (!rec) {
+    if (onError) onError(new Error('not-supported'));
+    return false;
+  }
+
+  // Native needs the OS mic/speech-recognizer permission granted before
+  // start() will actually produce audio — request it up front so a denial
+  // surfaces as a clear error instead of a silent no-op.
+  if (Platform.OS !== 'web' && ExpoSpeechRecognitionModule) {
+    try {
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!perm?.granted) {
+        if (onError) onError(new Error('not-allowed'));
+        return false;
+      }
+    } catch (e) {
+      if (onError) onError(e);
+      return false;
+    }
+  }
+
+  try {
+    activeRecognition = rec;
+    rec.lang = language;
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      let interim = '';
+      let finalText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += transcript;
+        else interim += transcript;
+      }
+      if (finalText && onResult) onResult(finalText, true);
+      else if (interim && onResult) onResult(interim, false);
+    };
+    rec.onend = () => {
+      activeRecognition = null;
+      if (onEnd) onEnd();
+    };
+    rec.onerror = (event) => {
+      activeRecognition = null;
+      // 'no-speech' and 'aborted' are benign; only report real errors
+      const code = event.error || 'recognition-error';
+      if (code !== 'aborted' && onError) onError(new Error(code));
+      if (onEnd) onEnd();
+    };
+    rec.start();
     return true;
+  } catch (e) {
+    activeRecognition = null;
+    if (onError) onError(e);
+    return false;
   }
-  if (Platform.OS === 'web') {
-    const rec = getWebRecognition();
-    if (!rec) {
-      if (onError) onError(new Error('not-supported'));
-      return false;
-    }
-    try {
-      webRecognition = rec;
-      rec.lang = language;
-      rec.continuous = false;
-      rec.interimResults = true;
-      rec.maxAlternatives = 1;
-      rec.onresult = (event) => {
-        let interim = '';
-        let finalText = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalText += transcript;
-          else interim += transcript;
-        }
-        if (finalText && onResult) onResult(finalText, true);
-        else if (interim && onResult) onResult(interim, false);
-      };
-      rec.onend = () => {
-        webRecognition = null;
-        if (onEnd) onEnd();
-      };
-      rec.onerror = (event) => {
-        webRecognition = null;
-        // 'no-speech' and 'aborted' are benign; only report real errors
-        const code = event.error || 'recognition-error';
-        if (code !== 'aborted' && onError) onError(new Error(code));
-        if (onEnd) onEnd();
-      };
-      rec.start();
-      return true;
-    } catch (e) {
-      if (onError) onError(e);
-      return false;
-    }
-  }
-
-  if (NativeVoice) {
-    try {
-      NativeVoice.start({
-        lang: language,
-        interimResults: true,
-        onResult: (e) => {
-          const text = e?.results?.[0];
-          if (text && onResult) onResult(text, !!e?.isFinal);
-        },
-        onError: (e) => onError && onError(e),
-        onEnd: () => onEnd && onEnd(),
-      });
-      return true;
-    } catch (e) {
-      if (onError) onError(e);
-      return false;
-    }
-  }
-
-  return false;
 };
 
 export const stopListening = () => {
-  if (isCapacitorNative()) {
-    try {
-      CapacitorSpeechRecognition.stop();
-    } catch (e) {
-      // ignore
-    }
-    return;
-  }
-  if (Platform.OS === 'web') {
-    try {
-      if (webRecognition) webRecognition.stop();
-    } catch (e) {
-      // ignore
-    }
-    return;
-  }
   try {
-    if (NativeVoice) NativeVoice.stop();
+    if (activeRecognition) activeRecognition.stop();
   } catch (e) {
     // ignore
   }

@@ -1187,13 +1187,17 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             </View>
           </View>
 
-          <View style={styles.marketRow}>
+          <TouchableOpacity
+            style={styles.marketRow}
+            activeOpacity={0.7}
+            onPress={() => Alert.alert(t('home.other_markets_title'), t('home.other_markets_none'))}
+          >
             <View style={styles.marketNameGroup}>
               <Ionicons name="location-sharp" size={13} color={colors.primary} />
               <Text style={styles.marketName} numberOfLines={1}>Lipa City Public Market</Text>
             </View>
             <Ionicons name="chevron-down" size={14} color={colors.text.tertiary} />
-          </View>
+          </TouchableOpacity>
           <Text style={styles.marketSubtitle} numberOfLines={1}>Lipa, Batangas 4217 · Pickup only</Text>
 
           <View style={styles.searchHeaderRow}>
@@ -1209,7 +1213,6 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 deletingSpeed={50}
                 pauseDelay={1500}
               />
-              <Ionicons name="scan-outline" size={22} color={colors.text.tertiary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1871,6 +1874,7 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
   marketName: {
     ...TEXT_STYLES.label,
+    fontSize: TYPE.size.caption,
     color: colors.text.primary,
   },
   marketSubtitle: {

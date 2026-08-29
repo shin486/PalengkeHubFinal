@@ -31,6 +31,7 @@ import { Button } from './ui/Button';
 import { PriceText } from './ui/PriceText';
 import { VerdictChip } from './ui/VerdictChip';
 import { RADIUS, LAYOUT, SPACING, TYPE } from '../theme/tokens';
+import { getProductFallbackPhoto } from '../utils/productPhotoFallbacks';
 
 const IMAGE_FADE = 180;
 
@@ -104,6 +105,7 @@ export const ProductCard = ({
     : null;
   const hasOriginal = hasPromotion && originalPrice != null && Number(originalPrice) > 0;
   const safePrice = Number(product?.price) || 0;
+  const fallbackPhoto = !product?.image_url || imageError ? getProductFallbackPhoto(product?.name) : null;
 
     return (
     <Animated.View
@@ -133,6 +135,13 @@ export const ProductCard = ({
               style={[styles.image, { opacity: fadeAnim }, imageStyle]}
               onLoad={handleImageLoad}
               onError={() => setImageError(true)}
+              resizeMode="cover"
+            />
+          ) : fallbackPhoto ? (
+            <Animated.Image
+              source={fallbackPhoto}
+              style={[styles.image, { opacity: fadeAnim }, imageStyle]}
+              onLoad={handleImageLoad}
               resizeMode="cover"
             />
           ) : (

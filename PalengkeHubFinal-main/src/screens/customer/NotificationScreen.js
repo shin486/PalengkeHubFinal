@@ -27,6 +27,7 @@ export default function NotificationScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
   // Announcements are global broadcasts, not per-account — a guest browsing
   // without signing in should still see them. Only the personal notifications
@@ -207,16 +208,25 @@ export default function NotificationScreen({ navigation }) {
     );
   };
 
+  // Tapping the card itself used to jump straight to the linked screen
+  // (Orders/Chats/etc.) — for anything with a message longer than 2 lines,
+  // that meant there was no way to ever read the rest of it: the tap always
+  // navigated away before the text could expand. Now the card tap only
+  // marks-as-read and expands the truncated text; navigating away is a
+  // separate, explicit "View" action below the message.
   const handleNotificationPress = (notification) => {
-    // Announcements are read-only broadcasts — no deep navigation
-    if (notification.is_announcement) {
-      handleMarkAsRead(notification.id);
-      return;
-    }
     if (!notification.is_read) {
       handleMarkAsRead(notification.id);
     }
-    
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(notification.id)) next.delete(notification.id);
+      else next.add(notification.id);
+      return next;
+    });
+  };
+
+  const handleNotificationNavigate = (notification) => {
     if (notification.type === 'order') {
       navigation.navigate('Orders');
     } else if (notification.type === 'chat') {
@@ -266,9 +276,10 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const renderNotification = ({ item }) => {
-    const isCancellation = item.title?.toLowerCase().includes('cancelled') || 
+    const isCancellation = item.title?.toLowerCase().includes('cancelled') ||
                           item.message?.toLowerCase().includes('cancelled');
-    
+    const isExpanded = expandedIds.has(item.id);
+
     return (
       <TouchableOpacity
         style={[styles.notificationCard, !item.is_read && styles.unreadCard]}
@@ -286,10 +297,20 @@ export default function NotificationScreen({ navigation }) {
           <Text style={[styles.notificationTitle, !item.is_read && styles.unreadText]}>
             {item.title}
           </Text>
-          <Text style={styles.notificationMessage} numberOfLines={2}>
+          <Text style={styles.notificationMessage} numberOfLines={isExpanded ? undefined : 2}>
             {item.message}
           </Text>
-          <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
+          <View style={styles.notificationFooterRow}>
+            <Text style={styles.notificationTime}>{formatTime(item.created_at)}</Text>
+            {!item.is_announcement && (
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation?.(); handleNotificationNavigate(item); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.viewLink}>View →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {!item.is_announcement && (
           <TouchableOpacity
@@ -518,9 +539,20 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 4,
     lineHeight: 18,
   },
+  notificationFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
   notificationTime: {
     fontSize: 11,
     color: COLORS.text.quaternary,
+  },
+  viewLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   deleteButton: {
     padding: 8,

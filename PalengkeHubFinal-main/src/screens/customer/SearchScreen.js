@@ -327,16 +327,55 @@ export default function SearchScreen({ navigation }) {
   const [fadeAnim] = useState(() => new Animated.Value(0));
   const [suggestion, setSuggestion] = useState(null);
 
+  // Shown before the user has typed or picked anything — a first-time (or
+  // just-cleared) visit otherwise landed on a bare "no recent searches" box
+  // with nothing else to do. A small starter set of real products/stalls
+  // gives them somewhere to tap instead of a dead end.
+  const [suggestedProducts, setSuggestedProducts] = useState([]);
+  const [suggestedStalls, setSuggestedStalls] = useState([]);
+
   const debounceTimer = useRef(null);
 
   useEffect(() => {
     loadRecentSearches();
+    loadSuggestions();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
       useNativeDriver: true,
     }).start();
   }, []);
+
+  const loadSuggestions = async () => {
+    try {
+      const [{ data: products }, { data: stallRows }] = await Promise.all([
+        supabase
+          .from('products')
+          .select(`
+            id, name, price, unit, stall_id,
+            stalls!inner ( id, stall_number, stall_name, section, average_rating )
+          `)
+          .eq('is_available', true)
+          .order('created_at', { ascending: false })
+          .limit(6),
+        supabase
+          .from('stalls')
+          .select('*')
+          .order('stall_number')
+          .limit(4),
+      ]);
+      setSuggestedProducts(products || []);
+      setSuggestedStalls(
+        (stallRows || []).map(stall => ({
+          ...stall,
+          displayRating: getStallRating(stall.id, stall.average_rating),
+          ratingCount: getRandomRatingCount(stall.id),
+        }))
+      );
+    } catch (error) {
+      console.warn('Could not load search suggestions:', error?.message);
+    }
+  };
 
   useEffect(() => {
     if (searchQuery.length > 0) {
@@ -480,7 +519,7 @@ export default function SearchScreen({ navigation }) {
   };
 
   // Voice search — speak in Tagalog or English and the results update live
-  const handleVoiceSearch = () => {
+  const handleVoiceSearch = async () => {
     if (isListening) {
       stopListening();
       setIsListening(false);
@@ -489,12 +528,12 @@ export default function SearchScreen({ navigation }) {
     if (!isVoiceInputSupported()) {
       Alert.alert(
         'Voice Search',
-        'Voice search is not supported in this browser. Please type your search instead.',
+        'Voice search is not supported on this device. Please type your search instead.',
       );
       return;
     }
     setIsListening(true);
-    const started = startListening({
+    const started = await startListening({
       language: 'tl-PH',
       onResult: (text, isFinal) => {
         if (!text) return;
@@ -511,7 +550,7 @@ export default function SearchScreen({ navigation }) {
         if (error?.message === 'not-allowed' || error?.message === 'service-not-allowed') {
           Alert.alert(
             'Voice Search',
-            'Microphone access was blocked. Please allow microphone permission in your browser and try again.',
+            'Microphone access was blocked. Please allow microphone permission for PalengkeHub and try again.',
           );
         } else if (error?.message === 'no-speech') {
           Alert.alert('Voice Search', 'No speech detected. Please try again.');
@@ -948,6 +987,51 @@ export default function SearchScreen({ navigation }) {
     </Animated.View>
   );
 
+  const renderSuggestions = () => {
+    if (suggestedProducts.length === 0 && suggestedStalls.length === 0) return null;
+    return (
+      <Animated.View style={[styles.recentSection, { opacity: fadeAnim }]}>
+        {suggestedProducts.length > 0 && (
+          <>
+            <View style={styles.recentHeader}>
+              <View style={styles.recentHeaderLeft}>
+                <Ionicons name="pricetag-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.recentTitle}>{t('search.suggested_products') || 'Suggested Products'}</Text>
+              </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionRow}>
+              {suggestedProducts.map((product) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.suggestionCard}
+                  activeOpacity={0.8}
+                  onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+                >
+                  <Text style={styles.suggestionCardName} numberOfLines={2}>{product.name}</Text>
+                  <Text style={styles.suggestionCardPrice}>₱{Number(product.price).toFixed(2)} / {product.unit}</Text>
+                  <Text style={styles.suggestionCardStall} numberOfLines={1}>{product.stalls?.stall_name || 'Market Stall'}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+        {suggestedStalls.length > 0 && (
+          <>
+            <View style={[styles.recentHeader, { marginTop: SPACING.lg }]}>
+              <View style={styles.recentHeaderLeft}>
+                <Ionicons name="storefront-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.recentTitle}>{t('search.suggested_stalls') || 'Suggested Stalls'}</Text>
+              </View>
+            </View>
+            {suggestedStalls.map((stall) => (
+              <View key={stall.id}>{renderStallCard({ item: stall })}</View>
+            ))}
+          </>
+        )}
+      </Animated.View>
+    );
+  };
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
@@ -1074,6 +1158,7 @@ export default function SearchScreen({ navigation }) {
           contentContainerStyle={styles.scrollContentContainer}
         >
           {renderRecentSearches()}
+          {renderSuggestions()}
         </ScrollView>
       ) : loading ? (
         <View style={styles.loadingContainer}>
@@ -1247,6 +1332,36 @@ const createStyles = (COLORS) => StyleSheet.create({
   recentSection: {
     paddingHorizontal: 16,
     paddingTop: 8,
+  },
+  suggestionRow: {
+    gap: 12,
+    paddingRight: 16,
+    paddingBottom: 4,
+  },
+  suggestionCard: {
+    width: 140,
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 12,
+  },
+  suggestionCardName: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: COLORS.text.dark,
+    marginBottom: 6,
+    minHeight: 34,
+  },
+  suggestionCardPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  suggestionCardStall: {
+    fontSize: 11.5,
+    color: COLORS.text.tertiary,
   },
   recentHeader: {
     flexDirection: 'row',

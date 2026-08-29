@@ -17,7 +17,11 @@ const THEME_KEY = '@palengkehub_theme';
 
 export const ThemeProvider = ({ children }) => {
   const systemScheme = useColorScheme();
-  const [themeMode, setThemeMode] = useState('system'); // 'light', 'dark', 'system'
+  // Default to light regardless of device theme — several screens use a fixed
+  // light/warm background that isn't theme-reactive, so auto-following the
+  // system's dark mode made their text unreadable out of the box. Users can
+  // still opt into dark mode manually; this only changes the fresh-install default.
+  const [themeMode, setThemeMode] = useState('light'); // 'light', 'dark', 'system'
   const [colors, setColors] = useState(COLORS.light);
   const [isDark, setIsDark] = useState(false);
 

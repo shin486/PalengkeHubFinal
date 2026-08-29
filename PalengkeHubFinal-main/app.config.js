@@ -3,10 +3,10 @@
 
 export default {
   expo: {
-    name: "PalengkeHub-Final",
+    name: "PalengkeHub",
     slug: "PalengkeHub-Final",
     scheme: "palengkehub",
-    version: "1.0.6",
+    version: "1.0.18",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -27,6 +27,11 @@ export default {
     },
     android: {
       package: "com.palengkehub.app",
+      // "pan" slides the window up when the keyboard opens instead of
+      // resizing it. The default ("resize") reflows the centered login
+      // form as the window shrinks, which can shift the focused field out
+      // from under the keyboard and drop its focus.
+      softwareKeyboardLayoutMode: "pan",
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/android-icon-foreground.png",
@@ -45,7 +50,16 @@ export default {
       // This fixes the AsyncStorage ESM resolution error on Expo 54
       bundler: "metro",
     },
-    plugins: ["expo-font"],
+    plugins: [
+      "expo-font",
+      [
+        "expo-speech-recognition",
+        {
+          microphonePermission: "Allow PalengkeHub to use the microphone for voice search.",
+          speechRecognitionPermission: "Allow PalengkeHub to use speech recognition for voice search.",
+        },
+      ],
+    ],
     extra: {
       eas: {
         projectId: "b4b641a9-9226-46f7-9d6b-6b0c02bd3a23",

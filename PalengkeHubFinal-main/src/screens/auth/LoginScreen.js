@@ -118,7 +118,7 @@ const AlertBanner = ({ message, type = 'error', onDismiss }) => {
 };
 
 // ─── Main Login Screen ─────────────────────────────────────────────────────────
-export const LoginScreen = ({ setIsGuest }) => {
+export const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -145,7 +145,7 @@ export const LoginScreen = ({ setIsGuest }) => {
   const formOpacity = useRef(new Animated.Value(0)).current;
   const logoFloat   = useRef(new Animated.Value(0)).current;
 
-  const { login, loginAsAccount, checkUser } = useAuth();
+  const { login, loginAsAccount, checkUser, setIsGuest } = useAuth();
   const navigation = useNavigation();
 
   // ── PIN login state ──
@@ -368,7 +368,12 @@ export const LoginScreen = ({ setIsGuest }) => {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // Android deliberately gets no behavior here: app.config.js sets
+      // softwareKeyboardLayoutMode "pan", so the OS pans the window to keep
+      // the focused field visible without resizing it. Any JS-driven
+      // resize/padding on top of that would reintroduce the layout reflow
+      // that was stealing focus from the inputs.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* FULL SCREEN BACKGROUND IMAGE */}
       <Image
@@ -439,6 +444,9 @@ export const LoginScreen = ({ setIsGuest }) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="off"
+                importantForAutofill="no"
+                returnKeyType="next"
                 onFocus={() => setEmailFocused(true)}
                 onBlur={() => setEmailFocused(false)}
               />
@@ -463,6 +471,10 @@ export const LoginScreen = ({ setIsGuest }) => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
+                autoComplete="off"
+                importantForAutofill="no"
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
                 onFocus={() => setPasswordFocused(true)}
                 onBlur={() => setPasswordFocused(false)}
               />
@@ -916,6 +928,8 @@ const styles = StyleSheet.create({
   validIcon:  { fontSize: 15, color: '#4A9E72', fontWeight: '700', marginLeft: 6 },
   eyeToggle:  { fontSize: 12.5, color: '#C96A28', fontWeight: '600', paddingLeft: 8 },
   fieldError: { fontSize: 11.5, color: '#9E2B20', marginTop: 5, marginLeft: 3 },
+  lockedEmailText: { flex: 1, fontSize: 14.5, color: '#5B4436', marginLeft: 10 },
+  changeLink: { fontSize: 12.5, color: '#C96A28', fontWeight: '700' },
 
   // ── Options Row ──────────────────────────────────────────────────────────────
   optionsRow: {

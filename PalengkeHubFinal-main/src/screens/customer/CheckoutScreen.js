@@ -800,17 +800,41 @@ const handleGcashModalClose = () => {
                   <Text style={styles.stallSectionText}>{data.stall?.section}</Text>
                   
                   <View style={styles.productsList}>
-                    {data.items.map((item, index) => (
-                      <View key={index} style={styles.orderItem}>
-                        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                        <View style={styles.itemRight}>
-                          <Text style={styles.itemQuantity}>x{item.quantity}</Text>
-                          <Text style={styles.itemPrice}>₱{(item.price * item.quantity).toFixed(2)}</Text>
+                    {data.items.map((item, index) => {
+                      const originalUnit = Number(item.original_price ?? item.price) || 0;
+                      const currentUnit = Number(item.price) || 0;
+                      const hasDiscount = originalUnit > currentUnit;
+                      return (
+                        <View key={index} style={styles.orderItem}>
+                          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                          <View style={styles.itemRight}>
+                            <Text style={styles.itemQuantity}>x{item.quantity}</Text>
+                            {hasDiscount && (
+                              <Text style={styles.itemOriginalPrice}>
+                                ₱{(originalUnit * item.quantity).toFixed(2)}
+                              </Text>
+                            )}
+                            <Text style={styles.itemPrice}>₱{(currentUnit * item.quantity).toFixed(2)}</Text>
+                          </View>
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
-                  
+
+                  {(() => {
+                    const stallSavings = data.items.reduce((sum, item) => {
+                      const originalUnit = Number(item.original_price ?? item.price) || 0;
+                      const currentUnit = Number(item.price) || 0;
+                      return sum + Math.max(0, originalUnit - currentUnit) * item.quantity;
+                    }, 0);
+                    return stallSavings > 0 ? (
+                      <View style={styles.stallSavingsRow}>
+                        <Ionicons name="pricetag-outline" size={13} color={COLORS.success} />
+                        <Text style={styles.stallSavingsText}>You saved ₱{stallSavings.toFixed(2)} at this stall</Text>
+                      </View>
+                    ) : null;
+                  })()}
+
                   <View style={styles.stallSubtotal}>
                     <Text style={styles.stallSubtotalLabel}>Stall Total</Text>
                     <Text style={styles.stallSubtotalAmount}>₱{data.total.toFixed(2)}</Text>
@@ -839,6 +863,24 @@ const handleGcashModalClose = () => {
             })
           )}
           
+          {(() => {
+            const totalSavings = Object.values(groupedOrders).reduce((sum, data) => {
+              return sum + data.items.reduce((s, item) => {
+                const originalUnit = Number(item.original_price ?? item.price) || 0;
+                const currentUnit = Number(item.price) || 0;
+                return s + Math.max(0, originalUnit - currentUnit) * item.quantity;
+              }, 0);
+            }, 0);
+            return totalSavings > 0 ? (
+              <View style={styles.stallSavingsRow}>
+                <Ionicons name="pricetag-outline" size={14} color={COLORS.success} />
+                <Text style={[styles.stallSavingsText, { fontSize: 13 }]}>
+                  You're saving ₱{totalSavings.toFixed(2)} on this order
+                </Text>
+              </View>
+            ) : null;
+          })()}
+
           <View style={styles.totalRow}>
             <View>
               <Text style={styles.totalLabel}>Total</Text>
@@ -1480,6 +1522,23 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.primary,
     width: 70,
     textAlign: 'right',
+  },
+  itemOriginalPrice: {
+    fontSize: 12,
+    color: COLORS.text.light,
+    textDecorationLine: 'line-through',
+  },
+  stallSavingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  stallSavingsText: {
+    fontSize: 12,
+    color: COLORS.success,
+    fontWeight: '600',
   },
 
   // Stall Subtotal

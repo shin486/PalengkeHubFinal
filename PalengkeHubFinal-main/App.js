@@ -605,13 +605,17 @@ function RootNavigator() {
         screenOptions={{ headerShown: false }}
         initialRouteName={initialRoute}
       >
-        {/* Auth screens */}
-        <Stack.Screen name="Login">
-          {() => <LoginScreen setIsGuest={setIsGuest} />}
-        </Stack.Screen>
-        <Stack.Screen name="SignUp">
-          {() => <SignUpScreen setIsGuest={setIsGuest} />}
-        </Stack.Screen>
+        {/* Auth screens — must use component=, not an inline children
+            function. An inline `{() => <LoginScreen .../>}` creates a new
+            element on every RootNavigator re-render, which React Navigation
+            treats as a remount of the whole screen. Remounting a TextInput
+            that currently has focus makes Android auto-advance focus to the
+            next focusable view (the password field) — exactly the
+            "tap email, keyboard opens, focus jumps to password" bug this
+            was causing. Both screens now read setIsGuest from useAuth()
+            directly instead of taking it as a prop, so component= works. */}
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="SignUp" component={SignUpScreen} />
         
         {/* Vendor screens */}
         <Stack.Screen name="VendorDashboard" component={VendorTabNavigator} />

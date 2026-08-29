@@ -26,7 +26,7 @@ import { supabase } from '../../../lib/supabase';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useColors } from '../../contexts/ThemeContext';
+import { COLORS as STATIC_COLORS } from '../../theme/tokens';
 
 const { width, height } = Dimensions.get('window');
 
@@ -146,8 +146,13 @@ const OTPModal = ({
   </Modal>
 );
 
-export const SignUpScreen = ({ setIsGuest }) => {
-  const COLORS = useColors();
+export const SignUpScreen = () => {
+  // This screen's background is a fixed warm cream gradient regardless of
+  // device theme (matches LoginScreen), so its text must stay pinned to the
+  // light palette too — using the theme-reactive useColors() here made every
+  // label swap to dark-mode's pale/cream text colors while the background
+  // stayed light, making them unreadable when the device was in dark mode.
+  const COLORS = STATIC_COLORS.light;
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -203,7 +208,7 @@ export const SignUpScreen = ({ setIsGuest }) => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   
-  const { signUp, login, sendAuthenticatorSms, sendEmailVerificationCode } = useAuth();
+  const { signUp, login, sendAuthenticatorSms, sendEmailVerificationCode, setIsGuest } = useAuth();
   const navigation = useNavigation();
 
   const handleSendSmsVerification = async () => {
@@ -1135,13 +1140,13 @@ export const SignUpScreen = ({ setIsGuest }) => {
         </View>
 
         <View style={styles.requirementsNote}>
-          <Text style={styles.requirementsNoteIcon}>ðŸ“‹</Text>
+          <Text style={styles.requirementsNoteIcon}>📋</Text>
           <View style={styles.requirementsNoteContent}>
             <Text style={styles.requirementsNoteTitle}>Document Requirements</Text>
             <Text style={styles.requirementsNoteText}>
-              â€¢ Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
-              â€¢ Business Permit or Mayor's Permit{'\n'}
-              â€¢ Photo of your stall (to be submitted after approval)
+              • Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
+              • Business Permit or Mayor's Permit{'\n'}
+              • Photo of your stall (to be submitted after approval)
             </Text>
           </View>
         </View>
@@ -1157,9 +1162,11 @@ export const SignUpScreen = ({ setIsGuest }) => {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // See LoginScreen.js for why Android gets no behavior here — "height"
+      // reflows the form mid-touch and can land the tap on the wrong field.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Animated.View style={[styles.background, { opacity: fadeAnim }]}>
         <LinearGradient
