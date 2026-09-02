@@ -36,6 +36,7 @@ import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../../utils/receiptScanner';
 import { getSectionMapOffset } from '../../constants/marketSections';
+import { clampPickupTime, isOutsideMarketHours } from '../../utils/marketHours';
 import { SPACING, RADIUS } from '../../theme/tokens';
 
 // Downscale an image (data URI or blob URI) to a compressed JPEG data URI using
@@ -90,7 +91,7 @@ export default function CheckoutScreen({ navigation, route }) {
   const cartTotal = route.params?.cartTotal || hookTotal;
   
   const [loading, setLoading] = useState(false);
-  const [pickupTime, setPickupTime] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
+  const [pickupTime, setPickupTime] = useState(() => clampPickupTime(new Date(Date.now() + 2 * 60 * 60 * 1000)));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -257,6 +258,14 @@ const handleGcashModalClose = () => {
   };
 
   const placeOrder = async () => {
+    // Belt-and-suspenders: the picker already rejects an invalid pick, but
+    // time keeps moving after that — a slot valid when chosen can slip
+    // into the past (or past closing) by the time the order actually
+    // submits, e.g. sitting on this screen near closing.
+    if (isOutsideMarketHours(pickupTime) || pickupTime < new Date()) {
+      Alert.alert('Invalid Pickup Time', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.');
+      return;
+    }
     hapticMedium();
     setLoading(true);
     try {
@@ -710,12 +719,14 @@ const handleGcashModalClose = () => {
     }
   };
 
-  // ── Pickup time validation: must be at least 15 min from now ──
+  // ── Pickup time validation: at least 15 min from now, and inside market
+  // hours (5 AM-7 PM) — this screen previously only enforced the first
+  // part, so a customer could pick e.g. 2 AM and it would go straight
+  // through, unlike CheckoutContent.js's equivalent flow. ──
   const validateAndSetPickup = (candidate) => {
     const minimum = new Date(Date.now() + 15 * 60 * 1000);
-    if (candidate.getTime() < minimum.getTime()) {
-      const bumped = new Date(Date.now() + 30 * 60 * 1000);
-      setPickupTime(bumped);
+    if (candidate.getTime() < minimum.getTime() || isOutsideMarketHours(candidate)) {
+      setPickupTime(clampPickupTime(candidate));
       Alert.alert(
         t('checkout.pickup_adjusted_title'),
         t('checkout.pickup_adjusted_body')

@@ -109,7 +109,12 @@ export default function NotificationScreen({ navigation }) {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications(prev => [payload.new, ...prev]);
+          // Same is_announcement:false normalization as the initial fetch
+          // above — without it, a realtime INSERT arriving while this
+          // screen is open reproduces the exact bug that fix was written
+          // for (an unclickable pseudo-announcement with no View link or
+          // delete button).
+          setNotifications(prev => [{ ...payload.new, is_announcement: false }, ...prev]);
           setUnreadCount(prev => prev + 1);
         }
       )

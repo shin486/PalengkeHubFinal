@@ -1088,12 +1088,23 @@ function VendorApplications() {
       const { data: activatedStalls, error: activateError } = await supabase
         .from('stalls').update({ is_active: true }).eq('vendor_id', app.applicant_id).select('id');
       if (activateError) {
+        // Previously fell through to the success toast/audit log right
+        // after this error toast — an admin skimming could easily read
+        // only the final "approved — is now a vendor" message and believe
+        // the stall is live when it isn't.
         toast({ message: `Approved, but failed to activate the stall: ${activateError.message}`, type: 'error' });
-      } else if (!activatedStalls?.length) {
+        setSelected(null);
+        load();
+        return;
+      }
+      if (!activatedStalls?.length) {
         // A 0-row match isn't a Postgrest error, so it fails silently
         // without this check — happens if the signup-time stall insert
         // in AuthContext.js failed and only the application row exists.
         toast({ message: `Approved, but no stall was found for this vendor to activate. Check the Stalls tab.`, type: 'error' });
+        setSelected(null);
+        load();
+        return;
       }
       await logAudit('vendor_application_approved', 'vendor_applications', app.id, `${app.business_name} approved — ${app.applicant?.full_name || app.applicant_id} is now a vendor`);
       toast({ message: `${app.business_name} approved — applicant is now a vendor`, type: 'success' });
@@ -1804,7 +1815,7 @@ function PriceMonitor() {
                         <td>{PH_DATETIME(h.changed_at)}</td>
                         <td>₱{PH(h.previous_price)}</td>
                         <td>₱{PH(h.new_price)}</td>
-                        <td style={{ color: isUp ? '#DC2626' : '#059669', fontWeight: 700 }}>
+                        <td style={{ color: isUp ? 'var(--verdict-dear-text)' : 'var(--verdict-cheap-text)', fontWeight: 700 }}>
                           {isUp ? '+' : ''}₱{PH(diff)} ({h.previous_price ? ((diff / h.previous_price) * 100).toFixed(1) : 0}%)
                         </td>
                       </tr>
@@ -1882,7 +1893,7 @@ function PriceHistory() {
                     <td><strong>{h.product?.name || 'Unknown'}</strong></td>
                     <td>₱{PH(h.previous_price)}</td>
                     <td>₱{PH(h.new_price)}</td>
-                    <td style={{ color: isUp ? '#DC2626' : '#059669', fontWeight: 700 }}>
+                    <td style={{ color: isUp ? 'var(--verdict-dear-text)' : 'var(--verdict-cheap-text)', fontWeight: 700 }}>
                       {isUp ? '▲' : '▼'} ₱{PH(Math.abs(diff))} ({pct}%)
                     </td>
                     <td>{PH_DATETIME(h.changed_at)}</td>
@@ -1964,7 +1975,7 @@ function PriceAnomaly() {
                 <tr key={p.id}>
                   <td><strong>{p.name}</strong></td>
                   <td>{p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
-                  <td style={{ color: p.isHigh ? '#DC2626' : '#F59E0B', fontWeight: 700 }}>₱{PH(p.price)}</td>
+                  <td style={{ color: p.isHigh ? 'var(--verdict-dear-text)' : 'var(--gold-dark)', fontWeight: 700 }}>₱{PH(p.price)}</td>
                   <td>{p.deviation}% {p.isHigh ? 'above' : 'below'} average</td>
                   <td><span className={`status-badge ${p.isHigh ? 'status-cancelled' : 'status-pending'}`}>{p.isHigh ? 'Overpriced' : 'Underpriced'}</span></td>
                 </tr>
@@ -1987,7 +1998,17 @@ function Orders() {
     .from('orders')
     .select('*, customer:consumer_id (full_name, email), stall:stall_id (stall_name, stall_number)')
     .order('created_at', { ascending: false }).limit(100)
-    .then(({ data }) => setOrders(data || []));
+    .then(({ data, error }) => {
+      // Previously had no error handling at all — a failed query (RLS,
+      // network blip) just left orders empty/stale with the page looking
+      // like a normal "no orders" state instead of surfacing the failure.
+      if (error) {
+        console.error('Orders load error:', error.message);
+        toast({ message: `Failed to load orders: ${error.message}`, type: 'error' });
+        return;
+      }
+      setOrders(data || []);
+    });
   useEffect(() => { load(); }, []);
 
   const filtered = orders.filter(o => {
@@ -2237,7 +2258,15 @@ function ComplaintManagement() {
 
   const updateStatus = async (status) => {
     const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from('complaints').update({ status, resolution, resolved_by: session?.user?.id || null, resolved_at: new Date().toISOString() }).eq('id', selected.id);
+    const { error } = await supabase.from('complaints').update({ status, resolution, resolved_by: session?.user?.id || null, resolved_at: new Date().toISOString() }).eq('id', selected.id);
+    if (error) {
+      // Previously unchecked — a failed write still closed the modal,
+      // cleared the typed resolution text, and showed "marked as X"
+      // success, so a network/RLS hiccup silently discarded the admin's
+      // notes with no indication anything went wrong.
+      toast({ message: `Failed to update complaint: ${error.message}`, type: 'error' });
+      return;
+    }
     await logAudit('complaint_status_change', 'complaints', selected.id, `Status changed to ${status}`);
     setSelected(null);
     setResolution('');
@@ -2437,7 +2466,7 @@ function Chat() {
       const { error: insertError } = await supabase.from('messages').insert({
         conversation_id: active,
         sender_id: session.user.id,
-        sender_role: 'customer',
+        sender_role: 'admin',
         message: input,
         is_image: false,
       });
@@ -2498,7 +2527,7 @@ function Chat() {
       await supabase.from('messages').insert({
         conversation_id: active,
         sender_id: session.user.id,
-        sender_role: 'customer',
+        sender_role: 'admin',
         message: imageUrl,
         is_image: true,
       });
@@ -2814,9 +2843,15 @@ function AnalyticsReports() {
   const getFilteredOrders = () => {
     let filtered = [...orders];
     if (dateRange === 'custom' && customStart && customEnd) {
+      // customEnd is a bare YYYY-MM-DD from <input type="date">, which
+      // parses to 00:00:00.000 — comparing against that excluded almost
+      // the entire end day (everything ordered after midnight), unlike
+      // the preset-range branch below which correctly extends to 23:59:59.
+      const endOfDay = new Date(customEnd);
+      endOfDay.setHours(23, 59, 59, 999);
       filtered = filtered.filter(o => {
         const d = new Date(o.created_at || '');
-        return d >= new Date(customStart) && d <= new Date(customEnd);
+        return d >= new Date(customStart) && d <= endOfDay;
       });
     } else if (dateRange !== 'all') {
       const { startDate, endDate } = getDateRangePreset(dateRange);

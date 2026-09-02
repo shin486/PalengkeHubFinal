@@ -385,7 +385,16 @@ export const AuthProvider = ({ children }) => {
           // fires, and the user lands right back on the Login screen —
           // "sign in just refreshes". Re-authenticating as the one account
           // that actually matched guarantees the live session is real.
-          await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
+          const { error: reauthError } = await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
+          if (reauthError) {
+            // Previously unchecked — the caller was told login succeeded
+            // even when no session actually exists (e.g. rate-limited
+            // after the earlier per-candidate attempts, or a transient
+            // network blip), leaving the user stuck on whatever screen
+            // trusted that false "success".
+            console.error(' Re-authentication failed for single matched account:', reauthError.message);
+            return { success: false, error: reauthError.message || 'Login failed. Please try again.' };
+          }
           console.log(' Login successful (single account):', matched[0].authEmail);
           await checkUser();
           return { success: true, account: matched[0] };

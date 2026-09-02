@@ -504,7 +504,7 @@ function RootNavigator() {
       return;
     }
     let cancelled = false;
-    (async () => {
+    const checkApproved = async () => {
       const { data } = await supabase
         .from('stalls')
         .select('is_active')
@@ -513,8 +513,16 @@ function RootNavigator() {
         .limit(1)
         .maybeSingle();
       if (!cancelled) setVendorApproved(!!data);
-    })();
-    return () => { cancelled = true; };
+    };
+    checkApproved();
+    // This only ran once on mount, keyed on [user?.id, profile?.role] —
+    // neither changes when an admin deactivates the vendor's stall
+    // mid-session (AdminDashboard.jsx's Stalls "Deactivate" toggle), so a
+    // vendor already using the app kept full dashboard access until they
+    // fully closed and relaunched it. Re-checking periodically closes that
+    // window instead of only gating access at login.
+    const interval = setInterval(checkApproved, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [user?.id, profile?.role]);
 
   useEffect(() => {
