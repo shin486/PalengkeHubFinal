@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -104,9 +105,12 @@ export const useCart = () => {
 
   const addToCart = useCallback(async (item, stallId, stallData, quantity = 1) => {
     console.log(' Adding to cart:', { itemName: item.name, quantity, stallId });
-    
-    if (!user) return;
-    
+
+    if (isGuest || !user) {
+      Alert.alert('Sign in required', 'You need to sign in to buy products.');
+      return { requiresAuth: true };
+    }
+
     const newItem = {
       product_id: item.id,
       id: item.id,
@@ -177,7 +181,7 @@ export const useCart = () => {
     } catch (dbError) {
       console.error(' Database error:', dbError);
     }
-  }, [cart, user]);
+  }, [cart, user, isGuest]);
 
   const updateQuantity = useCallback(async (productId, newQuantity) => {
     console.log(' Updating quantity:', { productId, newQuantity });

@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { Ionicons } from '@expo/vector-icons';
 import { getPriceSuggestion, classifyPrice } from '../../services/priceSuggestion';
 import { supabase } from '../../../lib/supabase';
@@ -152,12 +154,18 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     try {
       console.log(' Uploading product image:', uri);
 
-      const blob = await (await fetch(uri)).blob();
+      // fetch(uri).blob() is unreliable on Android for the content:// URIs
+      // the image picker can return — it fails silently for some
+      // pickers/OS versions. Reading the file as base64 and decoding to an
+      // ArrayBuffer works consistently on both platforms.
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const blob = decodeBase64(base64);
       const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+      const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
       const path = `product_images/${user?.id || 'unknown'}/${Date.now()}.${ext}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('vendor_documents')
-        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: blob.type || 'image/jpeg' });
+        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType });
       if (uploadError) throw uploadError;
 
       // vendor_documents is a private bucket — a long-lived signed URL is

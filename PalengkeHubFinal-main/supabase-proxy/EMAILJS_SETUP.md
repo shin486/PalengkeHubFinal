@@ -42,23 +42,54 @@ delivered to your **actual Gmail inbox** (or any email) using **EmailJS + your G
 
    **Content (HTML):**
    ```html
-   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-     <div style="background: linear-gradient(135deg,#DC2626,#EF4444,#F87171); padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
-       <span style="font-size: 36px;">🛒</span>
-       <h1 style="margin: 8px 0 0; color: #fff; font-size: 24px;">PalengkeHub</h1>
-       <p style="margin: 4px 0 0; color: #fee2e2; font-size: 13px;">Lipa City Public Market</p>
+   <div style="font-family: 'Trebuchet MS', Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #F2E7D6; padding: 24px 16px;">
+
+     <!-- Header: gradient band + circular logo, matches the app's login header -->
+     <div style="background: linear-gradient(135deg,#C96A28,#E8833A,#F0913F); padding: 32px 24px 26px; text-align: center; border-radius: 28px 36px 0 0;">
+       <img src="https://www.palengkehub.site/palengkehublogo.jpg" width="72" height="72" alt="PalengkeHub"
+            style="width: 72px; height: 72px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8); display: inline-block;" />
+       <h1 style="margin: 14px 0 0; color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: 0.2px;">PalengkeHub</h1>
+       <p style="margin: 6px 0 0; color: #FDF3E9; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;">
+         &bull;&nbsp; Lipa City Public Market &nbsp;&bull;
+       </p>
      </div>
-     <div style="background: #fff; border: 1px solid #fde8e8; padding: 28px; border-radius: 0 0 12px 12px;">
-       <h2 style="margin: 0 0 12px; color: #111827;">Verify your email</h2>
-       <p style="color: #4b5563; line-height: 1.6;">Use the code below to verify your email address and activate your {{from_name}} account.</p>
-       <div style="background: #fef2f2; border: 2px dashed #fca5a5; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0;">
-         <span style="font-size: 32px; font-weight: 800; letter-spacing: 12px; color: #DC2626;">{{otp_code}}</span>
+
+     <!-- Card: same asymmetric "hand-drawn" corners as the login/signup card -->
+     <div style="background: #FAF7F2; border: 1px solid #E4D3C8; border-top: none; padding: 30px 26px 26px; border-radius: 0 0 36px 22px;">
+
+       <h2 style="margin: 0 0 4px; color: #261006; font-size: 21px; font-weight: 700;">Mabuhay! &#128075;</h2>
+       <!-- hand-drawn underline, approximated with a short rounded rule -->
+       <div style="width: 62px; height: 3px; background: #E2B8A8; border-radius: 3px; margin: 6px 0 16px;"></div>
+
+       <p style="color: #5B4436; line-height: 1.6; margin: 0 0 22px; font-size: 14.5px;">
+         Use the code below to verify your email address and activate your {{from_name}} account.
+       </p>
+
+       <p style="margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #5B4436;">
+         Verification Code
+       </p>
+       <div style="background: #FDF3E9; border: 1.5px solid #C96A28; border-radius: 16px 10px 10px 16px; padding: 20px; text-align: center; margin: 0 0 22px;">
+         <span style="font-size: 32px; font-weight: 800; letter-spacing: 12px; color: #C96A28;">{{otp_code}}</span>
        </div>
-       <p><strong>⏳ This code is valid for {{expires_minutes}} minutes.</strong></p>
-       <p style="color: #6b7280;">If you didn't request this code, you can safely ignore this email.</p>
+
+       <p style="color: #5B4436; margin: 0 0 6px; font-size: 14px;">
+         <strong>&#9203; This code is valid for {{expires_minutes}} minutes.</strong>
+       </p>
+       <p style="color: #8A7263; font-size: 12.5px; margin: 0;">
+         If you didn't request this code, you can safely ignore this email.
+       </p>
      </div>
+
+     <p style="text-align: center; color: #A89484; font-size: 11px; margin: 18px 0 0;">
+       PalengkeHub &middot; Lipa City Public Market
+     </p>
    </div>
    ```
+
+   > The logo loads from `https://www.palengkehub.site/palengkehublogo.jpg` — it's already
+   > live on the deployed landing page, so no extra hosting step is needed. If that domain
+   > ever changes, swap the `src` to wherever the logo is hosted publicly (email clients
+   > can't load images bundled inside the app itself).
 
    > ⚠️ **IMPORTANT:** Do **NOT** add a `{{email_html}}` placeholder to your template.
    > The worker no longer sends `email_html`. If you leave `{{email_html}}` in the

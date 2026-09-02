@@ -1,4 +1,4 @@
-// App.js
+ App.js
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
@@ -13,8 +13,6 @@ import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { App as CapacitorApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
 import { useFonts } from 'expo-font';
 import { Baloo2_600SemiBold, Baloo2_700Bold, Baloo2_800ExtraBold } from '@expo-google-fonts/baloo-2';
 import {
@@ -30,24 +28,11 @@ import { CartProvider } from './src/contexts/CartContext';
 import { I18nProvider } from './src/contexts/i18nContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { registerPushToken, setupNotificationListeners } from './src/services/notificationService';
-import { Header } from './src/components/Header';
+import { Header } from './src/components/Header'; 
 import { LoadingSpinner } from './src/components/LoadingSpinner';
-import { BiometricLockScreen } from './src/components/BiometricLockScreen';
-import { useBiometricLock } from './src/hooks/useBiometricLock';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignUpScreen } from './src/screens/auth/SignUpScreen';
 import NotificationScreen from './src/screens/customer/NotificationScreen';
-import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
-import AdminVendorApplicationsScreen from './src/screens/admin/AdminVendorApplicationsScreen';
-import AdminStallsManagementScreen from './src/screens/admin/AdminStallsManagementScreen';
-import AdminStallDetailsScreen from './src/screens/admin/AdminStallDetailsScreen';
-import AdminReportsScreen from './src/screens/admin/AdminReportsScreen';
-import AdminAuditTrailScreen from './src/screens/admin/AdminAuditTrailScreen';
-import AdminPriceMonitoringScreen from './src/screens/admin/AdminPriceMonitoringScreen';
-import AdminStallLocationsScreen from './src/screens/admin/AdminStallLocationsScreen';
-import HelpSupportScreen from './src/screens/shared/HelpSupportScreen';
-import PrivacyPolicyScreen from './src/screens/shared/PrivacyPolicyScreen';
-import VendorApplicationStatusScreen from './src/screens/customer/VendorApplicationStatusScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -65,13 +50,11 @@ import OrdersScreen from './src/screens/customer/OrdersScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
 import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
-import PickupPassScreen from './src/screens/customer/PickupPassScreen';
 import CategoryProductsScreen from './src/screens/customer/CategoryProductsScreen';
 import ChatListScreen from './src/screens/customer/ChatListScreen';
 import ChatDetailScreen from './src/screens/customer/ChatDetailScreen';
 import VendorChatDetailScreen from './src/screens/vendor/VendorChatDetailScreen';
 import VendorChatListScreen from './src/screens/vendor/VendorChatListScreen';
-import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 import { useCart } from './src/hooks/useCart';
 import VendorRatingsScreen from './src/screens/vendor/VendorRatingsScreen';
 
@@ -122,8 +105,8 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.log(' ERROR CAUGHT:', error);
-    console.log(' ERROR INFO:', errorInfo);
+    console.log('❌ ERROR CAUGHT:', error);
+    console.log('❌ ERROR INFO:', errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -132,7 +115,7 @@ class ErrorBoundary extends React.Component {
       return (
         <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={{ fontSize: 20, fontWeight: 'bold', color: 'red', marginBottom: 20 }}>
- Error Detected
+            🐛 Error Detected
           </Text>
           <Text style={{ fontSize: 16, marginBottom: 10 }}>{this.state.error?.toString()}</Text>
           <Text style={{ fontSize: 14, color: '#666', marginTop: 20 }}>
@@ -340,16 +323,6 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  //  Expose setActiveRouteName globally so screens can update the header visibility
-  useEffect(() => {
-    global.setActiveRouteName = setActiveRouteName;
-    global.updateRouteName = setActiveRouteName;
-    return () => {
-      delete global.setActiveRouteName;
-      delete global.updateRouteName;
-    };
-  }, []);
-
   useEffect(() => {
     const fetchUnreadCount = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -377,14 +350,14 @@ function AppStack({ isGuest }) {
       } else if (data.type === 'promotion' && data.stallId) {
         navigation.navigate('StallDetails', { stallId: data.stallId });
       } else if (data.type === 'chat') {
-        navigation.navigate('Chats');
+        navigation.navigate('ChatList');
       }
     });
 
     return cleanup;
   }, []);
 
-  //  Updated: All screens that should hide the header
+  // ✅ Updated: All screens that should hide the header
   const getHeaderProps = () => {
     const routeName = activeRouteName;
     
@@ -397,32 +370,22 @@ function AppStack({ isGuest }) {
       'ProductDetails',
       'Search',
       'CategoryProducts',
-      // These three render their own header (with their own back button) —
-      // leaving them off this list stacked a second, generic global header
-      // on top of it (Notifications had none of its own outside a loading
-      // flash; PrivacyPolicy/HelpSupport rendered a correct one but still
-      // got a duplicate "PalengkeHub" header above it from the default case).
-      'Notifications',
-      'PrivacyPolicy',
-      'HelpSupport',
     ];
     
     const isHeaderHidden = hiddenScreens.includes(routeName);
     
     if (isHeaderHidden) {
-      console.log(' Hiding header on:', routeName);
+      console.log('🚫 Hiding header on:', routeName);
       return null;
     }
     
-    console.log(' Showing header on:', routeName);
+    console.log('✅ Showing header on:', routeName);
     
     switch (routeName) {
       case 'Cart':
         return { title: 'My PalengKart', subtitle: '' };
       case 'Orders':
         return { title: 'My Orders', subtitle: 'Track your orders here' };
-      case 'Chats':
-        return { title: 'Messages', subtitle: 'Your conversations' };
       case 'Profile':
         return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
@@ -442,12 +405,12 @@ function AppStack({ isGuest }) {
 
   const headerProps = getHeaderProps();
 
-  console.log(' AppStack - activeRouteName:', activeRouteName);
-  console.log(' AppStack - headerProps:', headerProps);
+  console.log('🔍 AppStack - activeRouteName:', activeRouteName);
+  console.log('🔍 AppStack - headerProps:', headerProps);
 
   return (
     <View style={styles.container}>
-      {/*  Only show global Header if NOT on hidden screens */}
+      {/* ✅ Only show global Header if NOT on hidden screens */}
       {headerProps && (
         <Header title={headerProps.title} subtitle={headerProps.subtitle} />
       )}
@@ -456,8 +419,8 @@ function AppStack({ isGuest }) {
         screenOptions={{ headerShown: false, animation: 'none' }}
         onStateChange={(state) => {
           const routeName = getActiveRouteName(state);
-          console.log(' StackNavigator - route changed to:', routeName);
-          //  Update activeRouteName for ALL routes, including MainTabs
+          console.log('🔄 StackNavigator - route changed to:', routeName);
+          // ✅ Update activeRouteName for ALL routes, including MainTabs
           setActiveRouteName(routeName);
         }}
       >
@@ -467,7 +430,7 @@ function AppStack({ isGuest }) {
               {...props}
               isGuest={isGuest}
               onRouteChange={(tabName) => {
-                console.log(' Tab changed to:', tabName);
+                console.log('🔄 Tab changed to:', tabName);
                 setActiveRouteName(tabName);
               }}
             />
@@ -479,7 +442,6 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
-      <Stack.Screen name="PickupPass" component={PickupPassScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         
@@ -491,10 +453,7 @@ function AppStack({ isGuest }) {
         
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
-                <Stack.Screen name="Favorites" component={FavoritesScreen} />
-        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
       </Stack.Navigator>
     </View>
   );
@@ -509,47 +468,11 @@ let navigationContainerRef = null;
 function RootNavigator() {
   const { user, loading, isGuest, setIsGuest, profile } = useAuth();
 
-  // Android hardware back button / gesture: navigate back INSIDE the app instead
-  // of closing it. The app runs as a web bundle inside a Capacitor WebView which
-  // has no browser history, so without this listener the system back button
-  // exits the app instead of going to the previous screen.
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    const handlePromise = CapacitorApp.addListener('backButton', () => {
-      if (
-        navigationContainerRef &&
-        navigationContainerRef.isReady() &&
-        navigationContainerRef.canGoBack()
-      ) {
-        navigationContainerRef.goBack();
-      } else {
-        // At the root screen - exit the app (standard Android behavior)
-        CapacitorApp.exitApp();
-      }
-    });
-
-    return () => {
-      if (handlePromise && typeof handlePromise.then === 'function') {
-        handlePromise
-          .then((handle) => {
-            if (handle && handle.remove) handle.remove();
-          })
-          .catch(() => {});
-      }
-    };
-  }, []);
-
-  console.log(' RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
-
-  // Session re-entry gate, not a sign-in method — the user is already
-  // authenticated; this only decides whether to show that session again
-  // right away after the app comes back from the background.
-  const { locked, unlock } = useBiometricLock(!!user);
+  console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
 
   useEffect(() => {
     if (isGuest && global.navigationRef) {
-      console.log(' Guest mode activated - navigating to App');
+      console.log('🎯 Guest mode activated - navigating to App');
       global.navigationRef.reset({
         index: 0,
         routes: [{ name: 'App' }],
@@ -561,11 +484,10 @@ function RootNavigator() {
     if (loading || !user || !global.navigationRef) return;
 
     const target =
-      profile?.role === 'admin' ? 'AdminDashboard'
-      : profile?.role === 'vendor' ? 'VendorDashboard'
+      profile?.role === 'vendor' ? 'VendorDashboard'
       : 'App';
 
-    console.log(' Redirecting authenticated user to:', target);
+    console.log('🔀 Redirecting authenticated user to:', target);
 
     global.navigationRef.reset({
       index: 0,
@@ -583,66 +505,40 @@ function RootNavigator() {
     initialRoute = 'App';
   } else if (user && profile?.role === 'vendor') {
     initialRoute = 'VendorDashboard';
-  } else if (user && profile?.role === 'admin') {
-    initialRoute = 'AdminDashboard';
   } else if (user && profile?.role === 'consumer') {
     initialRoute = 'App';
   }
 
-  if (locked) {
-    return <BiometricLockScreen onUnlock={unlock} />;
-  }
-
   return (
-    <NavigationContainer
+    <NavigationContainer 
       ref={(ref) => {
         global.navigationRef = ref;
         navigationContainerRef = ref;
-        console.log(' NavigationContainer ref set');
+        console.log('✅ NavigationContainer ref set');
       }}
     >
-      <Stack.Navigator
-        screenOptions={{ headerShown: false }}
+      <Stack.Navigator 
+        screenOptions={{ headerShown: false }} 
         initialRouteName={initialRoute}
       >
-        {/* Auth screens — must use component=, not an inline children
-            function. An inline `{() => <LoginScreen .../>}` creates a new
-            element on every RootNavigator re-render, which React Navigation
-            treats as a remount of the whole screen. Remounting a TextInput
-            that currently has focus makes Android auto-advance focus to the
-            next focusable view (the password field) — exactly the
-            "tap email, keyboard opens, focus jumps to password" bug this
-            was causing. Both screens now read setIsGuest from useAuth()
-            directly instead of taking it as a prop, so component= works. */}
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="SignUp" component={SignUpScreen} />
+        {/* Auth screens */}
+        <Stack.Screen name="Login">
+          {() => <LoginScreen setIsGuest={setIsGuest} />}
+        </Stack.Screen>
+        <Stack.Screen name="SignUp">
+          {() => <SignUpScreen setIsGuest={setIsGuest} />}
+        </Stack.Screen>
         
         {/* Vendor screens */}
         <Stack.Screen name="VendorDashboard" component={VendorTabNavigator} />
         <Stack.Screen name="VendorOrderDetail" component={VendorOrderDetailScreen} />
         <Stack.Screen name="VendorReports" component={VendorReportsScreen} />
         <Stack.Screen name="VendorNotifications" component={VendorNotificationsScreen} />
-        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
         <Stack.Screen name="VendorChatDetail" component={VendorChatDetailScreen} />
-        <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
 
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
-        
-                {/* Shared screens (Customer + Vendor) */}
-        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-
-        {/* Admin screens */}
-        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-        <Stack.Screen name="AdminVendorApplications" component={AdminVendorApplicationsScreen} />
-        <Stack.Screen name="AdminStallsManagement" component={AdminStallsManagementScreen} />
-        <Stack.Screen name="AdminStallDetails" component={AdminStallDetailsScreen} />
-        <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
-        <Stack.Screen name="AdminAuditTrail" component={AdminAuditTrailScreen} />
-        <Stack.Screen name="AdminPriceMonitoring" component={AdminPriceMonitoringScreen} />
-        <Stack.Screen name="AdminStallLocations" component={AdminStallLocationsScreen} />
         
         {/* Customer / Guest App */}
         <Stack.Screen name="App">
@@ -655,16 +551,16 @@ function RootNavigator() {
 
 // Helper function to reset to login screen
 export const resetToLogin = () => {
-  console.log(' resetToLogin called, ref exists:', !!navigationContainerRef);
+  console.log('🔄 resetToLogin called, ref exists:', !!navigationContainerRef);
   
   if (navigationContainerRef) {
     navigationContainerRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
-    console.log(' Reset to Login executed');
+    console.log('✅ Reset to Login executed');
   } else {
-    console.log(' navigationContainerRef is null!');
+    console.log('❌ navigationContainerRef is null!');
   }
 };
 
@@ -672,9 +568,11 @@ export const resetToLogin = () => {
 // MAIN APP EXPORT
 // ============================================================
 export default function App() {
-  // D-07/D-08: don't render the tree with a half-loaded font and let it
-  // swap. A font load error still renders the tree (platform default)
-  // rather than hanging on a blank screen forever.
+  // Don't render the tree with a half-loaded font and let it swap. A font
+  // load error still renders the tree (platform default) rather than
+  // hanging on a blank screen forever. LoadingSpinner can't be used here —
+  // it reads ThemeContext via useColors(), which doesn't exist yet since
+  // ThemeProvider is inside the tree this gate is blocking.
   const [fontsLoaded, fontError] = useFonts({
     Baloo2_600SemiBold,
     Baloo2_700Bold,

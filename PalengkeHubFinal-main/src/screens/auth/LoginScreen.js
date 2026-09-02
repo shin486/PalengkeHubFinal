@@ -15,6 +15,7 @@ import {
   Dimensions,
   Vibration,
   Modal,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SvgXml } from 'react-native-svg';
@@ -130,9 +131,14 @@ export const LoginScreen = () => {
   const [passwordFocused, setPasswordFocused] = useState(false);
 
   const [resetVisible, setResetVisible] = useState(false);
+  // 'email' -> 'code' -> 'password' -> 'done'
+  const [resetStep, setResetStep] = useState('email');
   const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState('error');
@@ -272,13 +278,15 @@ export const LoginScreen = () => {
         setLoginSuccess(true);
         showPlatformAlert('Welcome back! Signing you in...', 'success');
         setTimeout(() => setLoginSuccess(false), 2000);
+      } else if (result.adminWebOnly) {
+        shake();
+        showPlatformAlert('Admin accounts sign in on the web, not the app. Opening the admin portal for you...');
+        Linking.openURL('https://admin.palengkehub.site').catch(() => {});
       } else {
         shake();
         const raw = result.error?.toLowerCase() || '';
         let msg = 'Login failed. Please try again.';
-        if (result.adminWebOnly) {
- msg = ' Admin accounts can only log in through the PalengkeHub web portal. Please visit the Admin Login page on the website. Customers and vendors can log in here on the app.';
-        } else if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found'))
+        if (raw.includes('invalid login') || raw.includes('invalid credentials') || raw.includes('user not found'))
           msg = 'Wrong email or password. Double-check and try again.';
         else if (raw.includes('email not confirmed'))
           msg = 'Please verify your email first. Check your inbox.';
@@ -330,23 +338,93 @@ export const LoginScreen = () => {
     setPickerError('');
   };
 
-  const handleForgotPassword = async () => {
-    if (!resetEmail.trim()) { 
-      showPlatformAlert('Enter your email address first.');
-      return; 
+  const closeResetSheet = () => {
+    setResetVisible(false);
+    setResetStep('email');
+    setResetEmail('');
+    setResetCode('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setResetError('');
+  };
+
+  // Step 1: send a 6-digit recovery code to the entered email. Uses
+  // Supabase's own OTP-based recovery (auth.resetPasswordForEmail +
+  // auth.verifyOtp), not a magic link — a link needs a deep-link route
+  // this app never registered, which is exactly what left "Forgot
+  // password?" going nowhere before.
+  const handleSendResetCode = async () => {
+    if (!resetEmail.trim()) {
+      setResetError('Enter your email address first.');
+      return;
     }
+    setResetError('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: 'palengkehub://reset-password',
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setResetStep('code');
+    } catch (err) {
+      setResetError(err.message || 'Could not send the reset code. Try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  // Step 2: confirm the code proves the user owns this inbox. Supabase
+  // trades a valid code for a short-lived "recovery" session — that
+  // session (not a password, not an admin key) is what authorizes the
+  // password change in step 3.
+  const handleVerifyResetCode = async () => {
+    if (resetCode.trim().length < 6) {
+      setResetError('Enter the code sent to your email.');
+      return;
+    }
+    setResetError('');
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: resetEmail.trim(),
+        token: resetCode.trim(),
+        type: 'recovery',
       });
       if (error) throw error;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setResetSent(true);
-      setTimeout(() => { setResetVisible(false); setResetSent(false); setResetEmail(''); }, 2500);
+      setResetStep('password');
     } catch (err) {
-      showPlatformAlert(err.message || 'Could not send reset email. Try again.');
+      setResetError(err.message || 'Incorrect or expired code. Try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  // Step 3: the recovery session from step 2 is what lets this succeed —
+  // Supabase only allows updateUser({ password }) for the currently
+  // authenticated session, which is exactly the guarantee we want here.
+  const handleSetNewPassword = async () => {
+    if (newPassword.length < 6) {
+      setResetError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setResetError('Passwords do not match.');
+      return;
+    }
+    setResetError('');
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      // Sign out of the recovery session so the user lands on a clean
+      // Login screen and confirms their new password by signing in fresh.
+      await supabase.auth.signOut();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setResetStep('done');
+      setTimeout(closeResetSheet, 2500);
+    } catch (err) {
+      setResetError(err.message || 'Could not update your password. Try again.');
     } finally {
       setResetLoading(false);
     }
@@ -368,12 +446,15 @@ export const LoginScreen = () => {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      // Android deliberately gets no behavior here: app.config.js sets
-      // softwareKeyboardLayoutMode "pan", so the OS pans the window to keep
-      // the focused field visible without resizing it. Any JS-driven
-      // resize/padding on top of that would reintroduce the layout reflow
-      // that was stealing focus from the inputs.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // windowSoftInputMode is "adjustNothing" (see AndroidManifest.xml) —
+      // Android does zero automatic window resize/pan when the keyboard
+      // opens. That handoff to the OS was what caused the login form's
+      // content to shift while a touch was still in progress, landing the
+      // touch-up on a different field than the one that was tapped. With
+      // "adjustNothing", this KeyboardAvoidingView is the ONLY thing that
+      // moves the layout, and it only runs after React processes the
+      // focus change — i.e. strictly after the tap gesture has finished.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* FULL SCREEN BACKGROUND IMAGE */}
       <Image
@@ -381,7 +462,7 @@ export const LoginScreen = () => {
         style={styles.fullScreenBackground}
         resizeMode="cover"
       />
-      
+
       {/* Dark overlay for better text readability */}
       <View style={styles.overlay} />
 
@@ -441,12 +522,6 @@ export const LoginScreen = () => {
                 placeholderTextColor="#A89484"
                 value={email}
                 onChangeText={validateEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                importantForAutofill="no"
-                returnKeyType="next"
                 onFocus={() => setEmailFocused(true)}
                 onBlur={() => setEmailFocused(false)}
               />
@@ -471,9 +546,6 @@ export const LoginScreen = () => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                autoComplete="off"
-                importantForAutofill="no"
-                returnKeyType="go"
                 onSubmitEditing={handleLogin}
                 onFocus={() => setPasswordFocused(true)}
                 onBlur={() => setPasswordFocused(false)}
@@ -633,24 +705,20 @@ export const LoginScreen = () => {
         <View style={styles.sheetOverlay}>
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
-            onPress={() => { setResetVisible(false); setResetSent(false); setResetEmail(''); }}
+            onPress={closeResetSheet}
             activeOpacity={1}
           />
           <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Reset Password</Text>
-            <Text style={styles.sheetSub}>
-              We'll send a link so you can create a new password.
-            </Text>
 
-            {resetSent ? (
-              <View style={styles.sentBox}>
-                <Ionicons name="mail-outline" size={18} />
-                <Text style={styles.sentText}>Email sent! Check your inbox.</Text>
-              </View>
-            ) : (
+            {resetStep === 'email' && (
               <>
-                <View style={[styles.inputRow, { marginBottom: 22 }]}>
+                <Text style={styles.sheetTitle}>Reset Password</Text>
+                <Text style={styles.sheetSub}>
+                  We'll send a code to your email so you can create a new password.
+                </Text>
+
+                <View style={[styles.inputRow, { marginBottom: 10 }]}>
                   <Ionicons name="mail-outline" size={18} />
                   <TextInput
                     style={styles.textInput}
@@ -660,12 +728,14 @@ export const LoginScreen = () => {
                     onChangeText={setResetEmail}
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    autoCorrect={false}
                   />
                 </View>
+                {resetError ? <Text style={styles.fieldError}>{resetError}</Text> : null}
 
                 <TouchableOpacity
-                  style={styles.signInBtn}
-                  onPress={handleForgotPassword}
+                  style={[styles.signInBtn, { marginTop: 22 }]}
+                  onPress={handleSendResetCode}
                   disabled={resetLoading}
                   activeOpacity={0.88}
                 >
@@ -677,19 +747,129 @@ export const LoginScreen = () => {
                   >
                     {resetLoading
                       ? <ActivityIndicator color="#fff" />
-                      : <Text style={styles.signInText}>Send Reset Link</Text>
+                      : <Text style={styles.signInText}>Send Code</Text>
                     }
                   </LinearGradient>
                 </TouchableOpacity>
               </>
             )}
 
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => { setResetVisible(false); setResetSent(false); setResetEmail(''); }}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+            {resetStep === 'code' && (
+              <>
+                <Text style={styles.sheetTitle}>Enter Code</Text>
+                <Text style={styles.sheetSub}>
+                  We sent a code to {resetEmail}. Enter it below.
+                </Text>
+
+                <View style={[styles.inputRow, { marginBottom: 10 }]}>
+                  <Ionicons name="key-outline" size={18} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter code"
+                    placeholderTextColor="#A89484"
+                    value={resetCode}
+                    onChangeText={(t) => setResetCode(t.replace(/\D/g, ''))}
+                    keyboardType="number-pad"
+                  />
+                </View>
+                {resetError ? <Text style={styles.fieldError}>{resetError}</Text> : null}
+
+                <TouchableOpacity
+                  style={[styles.signInBtn, { marginTop: 22 }]}
+                  onPress={handleVerifyResetCode}
+                  disabled={resetLoading}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={['#C96A28', '#E8833A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.signInGrad}
+                  >
+                    {resetLoading
+                      ? <ActivityIndicator color="#fff" />
+                      : <Text style={styles.signInText}>Verify Code</Text>
+                    }
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ marginTop: 14, alignItems: 'center' }}
+                  onPress={handleSendResetCode}
+                  disabled={resetLoading}
+                >
+                  <Text style={styles.changeLink}>Resend code</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {resetStep === 'password' && (
+              <>
+                <Text style={styles.sheetTitle}>New Password</Text>
+                <Text style={styles.sheetSub}>
+                  Code verified! Choose a new password for your account.
+                </Text>
+
+                <View style={[styles.inputRow, { marginBottom: 14 }]}>
+                  <Ionicons name="key-outline" size={18} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="New password"
+                    placeholderTextColor="#A89484"
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry
+                  />
+                </View>
+                <View style={[styles.inputRow, { marginBottom: 10 }]}>
+                  <Ionicons name="key-outline" size={18} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#A89484"
+                    value={confirmNewPassword}
+                    onChangeText={setConfirmNewPassword}
+                    secureTextEntry
+                  />
+                </View>
+                {resetError ? <Text style={styles.fieldError}>{resetError}</Text> : null}
+
+                <TouchableOpacity
+                  style={[styles.signInBtn, { marginTop: 22 }]}
+                  onPress={handleSetNewPassword}
+                  disabled={resetLoading}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={['#C96A28', '#E8833A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.signInGrad}
+                  >
+                    {resetLoading
+                      ? <ActivityIndicator color="#fff" />
+                      : <Text style={styles.signInText}>Update Password</Text>
+                    }
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {resetStep === 'done' && (
+              <View style={styles.sentBox}>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#61802F" />
+                <Text style={styles.sentText}>Password updated! Please sign in again.</Text>
+              </View>
+            )}
+
+            {resetStep !== 'done' && (
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={closeResetSheet}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
@@ -908,11 +1088,11 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: '#C96A28',
     backgroundColor: '#FDF3E9',
-    shadowColor: '#C96A28',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 2,
+    // No shadow/elevation here deliberately: adding elevation to a View the
+    // instant its child TextInput gains focus makes Android rebuild that
+    // View's native layer to add the shadow, which drops the child's IME
+    // connection right as it's created — this was the actual cause of the
+    // email field losing focus and jumping to password on every tap.
   },
   inputError: {
     borderColor: '#D34638',

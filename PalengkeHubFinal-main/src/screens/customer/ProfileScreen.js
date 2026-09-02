@@ -23,8 +23,11 @@ import { useI18n } from '../../contexts/i18nContext';
 import { useTheme, useColors } from '../../contexts/ThemeContext';
 import { useFavorites } from '../../hooks/useFavorites';
 import { Header } from '../../components/Header';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import { supabase } from '../../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 import {
   isBiometricHardwareAvailable,
@@ -38,13 +41,12 @@ export default function ProfileScreen({ navigation }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
   const { t, locale, changeLanguage } = useI18n();
-  const { themeMode, setTheme } = useTheme();
+  const { isDark } = useTheme();
   const { getFavoriteCount } = useFavorites();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
-  const [showThemePicker, setShowThemePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
   const [vendorApplication, setVendorApplication] = useState(null);
@@ -245,11 +247,16 @@ export default function ProfileScreen({ navigation }) {
         // vendor_documents is a private bucket, so a signed URL (long
         // expiry — effectively permanent) is used instead of getPublicUrl,
         // which 400s for any request that isn't sending an auth header.
-        const blob = await (await fetch(uri)).blob();
+        // fetch(uri).blob() is unreliable on Android for the content://
+        // URIs the image picker can return — it fails silently for some
+        // pickers/OS versions. Reading the file as base64 and decoding to
+        // an ArrayBuffer works consistently on both platforms.
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const fileData = decodeBase64(base64);
         const path = `avatars/${user.id}/${Date.now()}_${fileName}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('vendor_documents')
-          .upload(path, blob, { cacheControl: '3600', upsert: true, contentType });
+          .upload(path, fileData, { cacheControl: '3600', upsert: true, contentType });
         if (uploadError) throw uploadError;
 
         const { data: urlData, error: signError } = await supabase.storage
@@ -356,13 +363,17 @@ export default function ProfileScreen({ navigation }) {
     if (Platform.OS === 'web') {
       const confirmSwitch = window.confirm('Switch to Guest Mode? You will be logged out.');
       if (confirmSwitch) {
+        // A hard window.location.href reload used to sit here — it raced
+        // signOut() and, worse, remounted AuthContext, whose "reset isGuest
+        // on app start" effect immediately flipped isGuest back to false.
+        // Setting the flag and letting React Navigation react to it (see
+        // RootNavigator's isGuest effect in App.js) is what actually works.
         supabase.auth.signOut();
         setIsGuest(true);
-        window.location.href = '/';
       }
       return;
     }
-    
+
     Alert.alert(
       'Switch to Guest Mode',
       'You will be logged out and continue as guest. Continue?',
@@ -371,6 +382,7 @@ export default function ProfileScreen({ navigation }) {
         {
           text: 'Continue',
           onPress: () => {
+            supabase.auth.signOut();
             if (setIsGuest) {
               setIsGuest(true);
             }
@@ -384,14 +396,10 @@ export default function ProfileScreen({ navigation }) {
     if (setIsGuest) {
       setIsGuest(false);
     }
-    if (Platform.OS === 'web') {
-      window.location.href = '/';
-    } else {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
-    }
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
   };
 
   const handleSignUp = () => {
@@ -651,15 +659,12 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
-          {/* Theme Selector */}
-          <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemePicker(true)}>
-            <Ionicons name={themeMode === 'dark' ? 'moon' : 'sunny'} size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>Theme</Text>
-            <Text style={styles.languageValue}>
-              {themeMode === 'light' ? 'Light' : themeMode === 'dark' ? 'Dark' : 'System'}
-            </Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+          {/* Theme Toggle */}
+          <View style={styles.menuItem}>
+            <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={COLORS.primary} style={styles.menuItemIcon} />
+            <Text style={styles.menuItemText}>Dark Mode</Text>
+            <ThemeToggle />
+          </View>
 
           {/* Language Selector */}
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguagePicker(true)}>
@@ -775,42 +780,6 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
         </View>
       </ScrollView>
-
-      {/* Theme Picker Modal */}
-      <Modal visible={showThemePicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose Theme</Text>
-            <TouchableOpacity
-              style={[styles.langOption, themeMode === 'light' && styles.langOptionActive]}
-              onPress={() => { setTheme('light'); setShowThemePicker(false); }}
-            >
-              <Text style={styles.langOptionText}>Light</Text>
-              {themeMode === 'light' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.langOption, themeMode === 'dark' && styles.langOptionActive]}
-              onPress={() => { setTheme('dark'); setShowThemePicker(false); }}
-            >
-              <Text style={styles.langOptionText}>Dark</Text>
-              {themeMode === 'dark' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.langOption, themeMode === 'system' && styles.langOptionActive]}
-              onPress={() => { setTheme('system'); setShowThemePicker(false); }}
-            >
-              <Text style={styles.langOptionText}>System Default</Text>
-              {themeMode === 'system' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.langCancelBtn}
-              onPress={() => setShowThemePicker(false)}
-            >
-              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Language Picker Modal */}
       <Modal visible={showLanguagePicker} transparent animationType="slide">

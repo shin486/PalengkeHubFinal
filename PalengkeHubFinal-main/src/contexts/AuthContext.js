@@ -3,8 +3,10 @@
 import React, { createContext, useState, useEffect, useContext, useMemo, useCallback } from 'react';
 import Constants from 'expo-constants';
 import { supabase } from '../../lib/supabase';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { CommonActions } from '@react-navigation/native';
 
 const AuthContext = createContext({});
@@ -35,8 +37,20 @@ export const SIGNED_URL_TTL_SECONDS = 10 * 365 * 24 * 60 * 60;
 export const uploadVendorDocument = async (file, folder) => {
   if (!file) return null;
   try {
-    const response = await fetch(file.uri);
-    const blob = await response.blob();
+    // fetch(uri).blob() is unreliable on Android for the content:// URIs
+    // the document/image picker can return — it fails silently on some
+    // pickers/OS versions. expo-file-system isn't available on web
+    // though, so native reads the file as base64 and decodes to an
+    // ArrayBuffer, while web keeps using fetch+blob (which works fine
+    // there for blob:/data: URIs).
+    let blob;
+    if (Platform.OS === 'web') {
+      const response = await fetch(file.uri);
+      blob = await response.blob();
+    } else {
+      const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+      blob = decodeBase64(base64);
+    }
     const contentType = file.mimeType || file.type || 'image/jpeg';
     const { data, error } = await supabase.storage
       .from('vendor_documents')
@@ -246,6 +260,15 @@ export const AuthProvider = ({ children }) => {
           .select('*')
           .eq('id', user.id)
           .single();
+
+        if (profile?.role === 'admin') {
+          console.log(' Admin session restored in app — signing out (admin is web-only)');
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          return;
+        }
+
         setProfile(profile);
         console.log(' User loaded:', user.email);
       }
@@ -315,7 +338,31 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
+        const adminMatched = matched.filter((m) => m.role === 'admin');
+        matched = matched.filter((m) => m.role !== 'admin');
+
+        if (matched.length === 0 && adminMatched.length > 0) {
+          try {
+            await supabase.auth.signOut();
+            setUser(null);
+            setProfile(null);
+          } catch (signOutErr) {
+            console.warn(' Could not sign out admin-only account:', signOutErr);
+          }
+          return {
+            success: false,
+            adminWebOnly: true,
+            error: 'Admin accounts can only sign in through the PalengkeHub web portal.',
+          };
+        }
+
         if (matched.length === 1) {
+          if (adminMatched.length > 0) {
+            // The active Supabase session may belong to whichever candidate
+            // signed in last, which isn't necessarily this one — re-authenticate
+            // explicitly so the admin account can't end up as the live session.
+            await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
+          }
           console.log(' Login successful (single account):', matched[0].authEmail);
           await checkUser();
           return { success: true, account: matched[0] };
@@ -345,12 +392,29 @@ export const AuthProvider = ({ children }) => {
       }
 
       const { data, error } = await supabase.auth.signInWithPassword(credentials);
-      
+
       if (error) {
         console.log(' Login error:', error);
         throw error;
       }
-      
+
+      const { data: phoneProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (phoneProfile?.role === 'admin') {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        return {
+          success: false,
+          adminWebOnly: true,
+          error: 'Admin accounts can only sign in through the PalengkeHub web portal.',
+        };
+      }
+
       console.log(' Login successful:', data.user?.email);
       await checkUser();
       return { success: true };
@@ -373,6 +437,23 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         console.error(' loginAsAccount error:', error);
         return { success: false, error: error.message };
+      }
+
+      const { data: accountProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (accountProfile?.role === 'admin') {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        return {
+          success: false,
+          adminWebOnly: true,
+          error: 'Admin accounts can only sign in through the PalengkeHub web portal.',
+        };
       }
 
       console.log(' loginAsAccount success:', authEmail);

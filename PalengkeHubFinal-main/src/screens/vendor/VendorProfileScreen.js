@@ -25,10 +25,13 @@ import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useColors, useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { hapticLight, hapticSuccess } from '../../theme/motion';
 import { savePinWithCredentials, clearPin, hasSavedPin } from '../../services/pinService';
 import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 import { WovenBackground } from '../../components/WovenBackground';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import StallLocationCapture from '../../components/vendor/StallLocationCapture';
 import { fetchCurrentStallLocation } from '../../services/stallLocationService';
 
@@ -64,9 +67,8 @@ export default function VendorProfileScreen({ navigation }) {
     const [editingField, setEditingField] = useState(null);
 
   // ── Settings: theme / language / PIN login ──
-  const { themeMode, setTheme, isDark } = useTheme();
+  const { isDark } = useTheme();
   const { locale, changeLanguage } = useI18n();
-  const [showThemePicker, setShowThemePicker] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [hasPin, setHasPin] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -112,11 +114,16 @@ export default function VendorProfileScreen({ navigation }) {
         const fileName = asset.fileName || `avatar_${Date.now()}.${ext}`;
         const contentType = asset.mimeType || (ext === 'png' ? 'image/png' : 'image/jpeg');
 
-        const blob = await (await fetch(uri)).blob();
+        // fetch(uri).blob() is unreliable on Android for the content://
+        // URIs the image picker can return — it fails silently for some
+        // pickers/OS versions. Reading the file as base64 and decoding to
+        // an ArrayBuffer works consistently on both platforms.
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const fileData = decodeBase64(base64);
         const path = `avatars/${user.id}/${Date.now()}_${fileName}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('vendor_documents')
-          .upload(path, blob, { cacheControl: '3600', upsert: true, contentType });
+          .upload(path, fileData, { cacheControl: '3600', upsert: true, contentType });
         if (uploadError) throw uploadError;
 
         // vendor_documents is a private bucket — a long-lived signed URL
@@ -718,11 +725,13 @@ export default function VendorProfileScreen({ navigation }) {
             </View>
           </View>
 
-          <MenuItem
-            icon={themeMode === 'dark' ? 'moon-outline' : 'sunny-outline'}
-            label={`Dark Mode · ${themeMode === 'dark' ? 'On' : themeMode === 'system' ? 'System' : 'Off'}`}
-            onPress={() => setShowThemePicker(true)}
-          />
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIconContainer, { backgroundColor: COLORS.primarySurface }]}>
+              <Ionicons name={isDark ? 'moon-outline' : 'sunny-outline'} size={22} color={COLORS.primary} />
+            </View>
+            <Text style={styles.menuLabel}>Dark Mode</Text>
+            <ThemeToggle />
+          </View>
           <MenuItem
             icon="language-outline"
             label={`Language · ${locale === 'en' ? 'English' : 'Filipino'}`}
@@ -768,30 +777,6 @@ export default function VendorProfileScreen({ navigation }) {
         onClose={() => setShowLocationCapture(false)}
         onSaved={(saved) => setStallLocation(saved)}
       />
-
-      {/* Theme Picker Modal */}
-      <Modal visible={showThemePicker} transparent animationType="slide" onRequestClose={() => setShowThemePicker(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose theme</Text>
-            {['light', 'dark', 'system'].map((mode) => (
-              <TouchableOpacity
-                key={mode}
-                style={styles.optionRow}
-                onPress={() => { setTheme(mode); setShowThemePicker(false); }}
-              >
-                <Text style={[styles.optionText, themeMode === mode && styles.optionTextActive]}>
-                  {mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'System default'}
-                </Text>
-                {themeMode === mode && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={styles.optionRow} onPress={() => setShowThemePicker(false)}>
-              <Text style={styles.optionText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Language Picker Modal */}
       <Modal visible={showLanguagePicker} transparent animationType="slide" onRequestClose={() => setShowLanguagePicker(false)}>

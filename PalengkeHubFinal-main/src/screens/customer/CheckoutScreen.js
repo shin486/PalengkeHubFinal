@@ -22,13 +22,15 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
@@ -436,21 +438,31 @@ const handleGcashModalClose = () => {
     if (!uri) return null;
     setGcashReceiptUploading(true);
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // fetch(uri).blob() is unreliable on Android for the content:// URIs
+      // the image picker can return — it fails silently on some
+      // pickers/OS versions. Reading the file as base64 and decoding to an
+      // ArrayBuffer works consistently on both platforms.
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileData = decodeBase64(base64);
       const fileName = `receipt_${Date.now()}_${stallId}.jpg`;
       const folder = `gcash_receipts/${user.id}/${stallId}`;
       const { data, error } = await supabase.storage
         .from('vendor_documents')
-        .upload(`${folder}/${fileName}`, blob, {
+        .upload(`${folder}/${fileName}`, fileData, {
           cacheControl: '3600',
           contentType: 'image/jpeg',
         });
       if (error) throw error;
-      const { data: urlData } = supabase.storage
+      // vendor_documents is a PRIVATE bucket — getPublicUrl() builds a URL
+      // that 400s for everyone (including the vendor viewing it in the app),
+      // since it only works on public buckets. A signed URL is a real URL
+      // that works with no auth headers, same as this bucket's document
+      // uploads already do.
+      const { data: urlData, error: signError } = await supabase.storage
         .from('vendor_documents')
-        .getPublicUrl(data.path);
-      return urlData?.publicUrl || null;
+        .createSignedUrl(data.path, SIGNED_URL_TTL_SECONDS);
+      if (signError) throw signError;
+      return urlData?.signedUrl || null;
     } catch (error) {
       // Fallback: no storage buckets configured yet, so keep the compressed
       // receipt attached directly to the order.

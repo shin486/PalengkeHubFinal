@@ -193,7 +193,6 @@ export const SignUpScreen = () => {
   const [expectedVerificationCode, setExpectedVerificationCode] = useState('');
   const [expectedEmailVerificationCode, setExpectedEmailVerificationCode] = useState('');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [authEmail, setAuthEmail] = useState(''); // the auth email (may be a +alias for accounts 2–5)
   const [emailAccountCount, setEmailAccountCount] = useState(0); // existing accounts for this email
   const [duplicateName, setDuplicateName] = useState(false); // same name already used for this email
   const otpInputs = useRef([]);
@@ -210,6 +209,36 @@ export const SignUpScreen = () => {
   
   const { signUp, login, sendAuthenticatorSms, sendEmailVerificationCode, setIsGuest } = useAuth();
   const navigation = useNavigation();
+
+  // Creates the actual account. Only called AFTER the OTP code is verified
+  // (see handleVerifyOtp / handleVerifyEmailOtp) — sending the code itself
+  // doesn't need an account to exist yet, so nothing is written to the
+  // database until the user proves they own the email/phone they entered.
+  const performSignUp = async () => {
+    // Document upload happens inside AuthContext's signUp() — the
+    // vendor_documents bucket requires an authenticated uploader, and
+    // signUp() uploads them itself during the brief window its session is
+    // live, right after account creation, before it signs back out.
+    const metadata = role === 'vendor' ? {
+      stall_name: stallName,
+      stall_section: stallSection,
+      stall_number: stallNumber,
+      phone: phone,
+      verificationMethod,
+      validIdFile: validId,
+      businessPermitFile: businessPermit,
+      requires_approval: true,
+      terms_accepted: true,
+      terms_accepted_at: new Date().toISOString(),
+    } : {
+      phone: phone,
+      verificationMethod,
+      terms_accepted: true,
+      terms_accepted_at: new Date().toISOString(),
+    };
+
+    return await signUp(email, password, fullName, role, metadata);
+  };
 
   const handleSendSmsVerification = async () => {
     setSmsSendError('');
@@ -303,16 +332,26 @@ export const SignUpScreen = () => {
     setExpectedEmailVerificationCode('');
     setOtpDigits(['', '', '', '', '', '']);
 
-    // The account was already created and the email is now verified.
-    // Sign the user in automatically and redirect them to the dashboard.
+    // The email is now verified — only now does the account actually get
+    // created. Sign the user in automatically and redirect them to the
+    // dashboard once it exists.
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSignUpSuccess(true);
+    setIsLoading(true);
+    setUploading(role === 'vendor');
 
     try {
-      // The account is ALWAYS created with email in AuthContext.signUp().
-      // Use the stored authEmail (may be a +alias for accounts 2–5) so we
+      const signUpResult = await performSignUp();
+      if (!signUpResult.success) {
+        setSignUpSuccess(false);
+        shake();
+        Alert.alert('Sign Up Failed', signUpResult.error || 'Something went wrong. Please try again.');
+        return;
+      }
+
+      // Use the returned authEmail (may be a +alias for accounts 2–5) so we
       // sign into the exact account that was just created.
-      const loginIdentifier = authEmail || email;
+      const loginIdentifier = signUpResult.authEmail || email;
       const result = await login(loginIdentifier, password);
       if (result.success) {
         // RootNavigator will automatically redirect to the right dashboard
@@ -330,21 +369,22 @@ export const SignUpScreen = () => {
           setSignUpSuccess(false);
           Alert.alert(
             'Email Verified!',
-            'Your email address has been verified. Please log in with your credentials.',
+            'Your account has been created. Please log in with your credentials.',
             [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
           );
         }, 800);
       }
     } catch (err) {
-      console.error('Auto-login after email OTP error:', err);
-      setTimeout(() => {
-        setSignUpSuccess(false);
-        Alert.alert(
-          'Email Verified!',
-          'Your email address has been verified. Please log in with your credentials.',
-          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
-        );
-      }, 800);
+      console.error('Account creation after email OTP error:', err);
+      setSignUpSuccess(false);
+      shake();
+      Alert.alert(
+        'Error',
+        'Your code was verified, but creating your account failed. Please try again.',
+      );
+    } finally {
+      setIsLoading(false);
+      setUploading(false);
     }
   };
 
@@ -403,18 +443,28 @@ export const SignUpScreen = () => {
     setExpectedVerificationCode('');
     setOtpDigits(['', '', '', '', '', '']);
 
-    // The account was already created and the phone is now verified.
-    // Sign the user in automatically and redirect them to the dashboard.
+    // The phone is now verified — only now does the account actually get
+    // created. Sign the user in automatically and redirect them to the
+    // dashboard once it exists.
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSignUpSuccess(true);
+    setIsLoading(true);
+    setUploading(role === 'vendor');
 
     try {
+      const signUpResult = await performSignUp();
+      if (!signUpResult.success) {
+        setSignUpSuccess(false);
+        shake();
+        Alert.alert('Sign Up Failed', signUpResult.error || 'Something went wrong. Please try again.');
+        return;
+      }
+
       // The account is ALWAYS created with email in AuthContext.signUp()
       // (even for SMS verification), so the login identifier must be the
-      // auth email. Use the stored authEmail (may be a +alias for accounts 2–5).
-      // Logging in with the phone number would fail because the Supabase auth
-      // identity is tied to the email.
-      const loginIdentifier = authEmail || email;
+      // auth email — logging in with the phone number would fail. Use the
+      // returned authEmail (may be a +alias for accounts 2–5).
+      const loginIdentifier = signUpResult.authEmail || email;
       const result = await login(loginIdentifier, password);
       if (result.success) {
         // RootNavigator will automatically redirect to the right dashboard
@@ -433,21 +483,22 @@ export const SignUpScreen = () => {
           setSignUpSuccess(false);
           Alert.alert(
             'Phone Verified!',
-            'Your phone number has been verified. Please log in with your credentials.',
+            'Your account has been created. Please log in with your credentials.',
             [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
           );
         }, 800);
       }
     } catch (err) {
-      console.error('Auto-login after OTP error:', err);
-      setTimeout(() => {
-        setSignUpSuccess(false);
-        Alert.alert(
-          'Phone Verified!',
-          'Your phone number has been verified. Please log in with your credentials.',
-          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
-        );
-      }, 800);
+      console.error('Account creation after OTP error:', err);
+      setSignUpSuccess(false);
+      shake();
+      Alert.alert(
+        'Error',
+        'Your code was verified, but creating your account failed. Please try again.',
+      );
+    } finally {
+      setIsLoading(false);
+      setUploading(false);
     }
   };
 
@@ -756,73 +807,17 @@ export const SignUpScreen = () => {
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsLoading(true);
-    setUploading(true);
 
     try {
-      const performSignUp = async () => {
-        // Document upload happens inside AuthContext's signUp() now, not
-        // here — the vendor_documents bucket requires an authenticated
-        // uploader, and no account exists yet at this point in the flow.
-        // Pass the raw picked files through; signUp() uploads them itself
-        // during the brief window its session is live, before it signs
-        // the new account back out pending OTP verification.
-        const metadata = role === 'vendor' ? {
-          stall_name: stallName,
-          stall_section: stallSection,
-          stall_number: stallNumber,
-          phone: phone,
-          verificationMethod,
-          validIdFile: validId,
-          businessPermitFile: businessPermit,
-          requires_approval: true,
-          terms_accepted: true,
-          terms_accepted_at: new Date().toISOString(),
-        } : {
-          phone: phone,
-          verificationMethod,
-          terms_accepted: true,
-          terms_accepted_at: new Date().toISOString(),
-        };
-
-        return await signUp(email, password, fullName, role, metadata);
-      };
-
-      // 1) Create the account. For SMS verification, ALSO fire the SMS send
-      //    in parallel so the code is already in transit while the account is
-      //    being created (avoids the perceived "SMS takes too long" delay).
-      const smsPromise = verificationMethod === 'sms'
-        ? handleSendSmsVerification()
-        : null;
-
-      const result = await performSignUp();
-      
-      if (result.success) {
-        // Store the auth email (may be a +alias for accounts 2–5) so the OTP
-        // auto-login uses the exact account that was just created.
-        setAuthEmail(result.authEmail || email);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        // 2) Authenticate based on the method the user chose:
-        //    - "sms"    iProg SMS sends a 6-digit code  OTP modal appears
-        //    - "email"  Resend email sends a 6-digit code  OTP modal appears
-        //                (sent AFTER account creation, code returned by worker)
-        if (verificationMethod === 'sms') {
-          setSignUpSuccess(true);
-          if (smsPromise) await smsPromise;
-          setSignUpSuccess(false);
-        } else {
-          setSignUpSuccess(true);
-          await handleSendEmailVerification();
-          setSignUpSuccess(false);
-        }
-        return;
+      // Send the verification code first. The account itself isn't created
+      // until the code is confirmed (see performSignUp, called from
+      // handleVerifyOtp / handleVerifyEmailOtp) — so closing the app or
+      // failing verification at this step never leaves an unverified
+      // account behind in the database.
+      if (verificationMethod === 'sms') {
+        await handleSendSmsVerification();
       } else {
-        // Account creation failed — dismiss the OTP modal if the parallel SMS
-        // send already opened it, since there is no account to verify.
-        setOtpModalVisible(false);
-        shake();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert('Sign Up Failed', result.error);
+        await handleSendEmailVerification();
       }
     } catch (error) {
       console.error('Sign up error:', error);
@@ -831,7 +826,6 @@ export const SignUpScreen = () => {
       Alert.alert('Error', error.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
-      setUploading(false);
     }
   };
 

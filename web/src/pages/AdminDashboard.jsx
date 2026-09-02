@@ -39,6 +39,29 @@ const PH = (n) => parseFloat(n || 0).toLocaleString('en-PH', { minimumFractionDi
 const PH_DATE = (d) => new Date(d).toLocaleDateString('en-PH');
 const PH_DATETIME = (d) => new Date(d).toLocaleString('en-PH');
 
+// Recharts' default pie label sits outside the slice on a leader line, at a
+// distance the ResponsiveContainer doesn't reserve any room for — in a
+// narrow chart-card that puts the text past the SVG's own width, where SVG's
+// default overflow:hidden clips it mid-word ("confirmed (1..."). Drawing the
+// label inside the slice instead keeps it within outerRadius, which is
+// always inside the SVG's bounds no matter how narrow the card gets. Every
+// slice gets a label, however small — a thin wedge is still real order
+// volume, and hiding it read as data missing rather than data that's just
+// small. The radius sits near the outer edge (0.78) rather than mid-slice,
+// since the arc is at its widest out there, giving a thin wedge the most
+// room a curved label point can get.
+function renderInsidePercentLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }) {
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.78;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text x={x} y={y} fill="#FFFDFA" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700} stroke="#261006" strokeWidth={2} paintOrder="stroke">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+}
+
 /* ==================== SHARED UI HELPERS ==================== */
 function SearchBar({ value, onChange, placeholder = 'Search...' }) {
   return (
@@ -253,7 +276,7 @@ function addPdfTable(doc, headers, rows, startY, colWidths) {
 }
 
 function generatePdf({ title, subtitle, filename, headers, rows, colWidths, summary }) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   addPdfHeader(doc, title, subtitle);
 
   let y = 55;
@@ -270,6 +293,19 @@ function generatePdf({ title, subtitle, filename, headers, rows, colWidths, summ
   y = addPdfTable(doc, headers, rows, y, colWidths);
   addPdfFooter(doc);
   doc.save(filename);
+}
+
+// Builds a self-describing, collision-free PDF filename: the active filter
+// (if any) plus a full date-and-time stamp, so printing the same screen
+// twice — or with a different filter — never produces the same filename
+// twice in a row (the browser was silently overwriting/auto-numbering
+// same-day exports before this).
+function printFilename(prefix, filterLabel) {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  const slug = (filterLabel || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return `palengkehub_${prefix}${slug ? `_${slug}` : ''}_${stamp}.pdf`;
 }
 
 /* ==================== AUDIT LOG ==================== */
@@ -576,7 +612,16 @@ function Overview({ onNavigate }) {
                 <PieChart>
                   <Tooltip formatter={(v) => [v, 'Orders']} />
                   <Legend />
-                  <Pie data={orderStatusData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={85} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                  <Pie
+                    data={orderStatusData}
+                    dataKey="count"
+                    nameKey="status"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    labelLine={false}
+                    label={renderInsidePercentLabel}
+                  >
                     {orderStatusData.map((entry, i) => (
                       <Cell key={`cell-${i}`} fill={STATUS_COLORS[entry.status] || '#9CA3AF'} />
                     ))}
@@ -711,6 +756,17 @@ function StallManagement() {
     setTransactions(orders || []);
   };
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Stall Report',
+      subtitle: `Stall list${statusFilter ? ` — ${statusFilter}` : ''}${sectionFilter ? ` — ${sectionFilter}` : ''} (${filtered.length} records)`,
+      headers: ['Stall Name', 'Number', 'Section', 'Floor', 'Location', 'Vendor', 'Status'],
+      rows: filtered.map(s => [s.stall_name || `Stall #${s.stall_number}`, s.stall_number, s.section || 'N/A', s.floor || 'N/A', s.location || 'N/A', s.vendor?.full_name || 'Unassigned', s.is_active ? 'Active' : 'Inactive']),
+      filename: printFilename('stalls', [statusFilter, sectionFilter].filter(Boolean).join(' ')),
+      summary: [`Total Stalls: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Stall Management</div>
@@ -718,6 +774,7 @@ function StallManagement() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search stall name, number, section, vendor..." />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} placeholder="All Statuses" />
         <FilterSelect value={sectionFilter} onChange={setSectionFilter} options={sections.map(s => ({ value: s, label: s }))} placeholder="All Sections" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -839,6 +896,17 @@ function UserManagement() {
     load();
   };
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'User Report',
+      subtitle: `User list${roleFilter ? ` — ${roleFilter}` : ''}${statusFilter ? ` — ${statusFilter}` : ''} (${filtered.length} records)`,
+      headers: ['Name', 'Email', 'Role', 'Registered', 'Status'],
+      rows: filtered.map(u => [u.full_name || 'Unnamed', u.email || 'N/A', u.role || 'consumer', PH_DATE(u.created_at), u.is_active === false ? 'Inactive' : 'Active']),
+      filename: printFilename('users', [roleFilter, statusFilter].filter(Boolean).join(' ')),
+      summary: [`Total Users: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">User Management</div>
@@ -846,6 +914,7 @@ function UserManagement() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search by name or email..." />
         <FilterSelect value={roleFilter} onChange={setRoleFilter} options={[{ value: 'consumer', label: 'Consumer' }, { value: 'vendor', label: 'Vendor' }, { value: 'admin', label: 'Admin' }]} placeholder="All Roles" />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} placeholder="All Statuses" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table admin-table-fixed">
@@ -995,12 +1064,24 @@ function VendorApplications() {
     }
   };
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Vendor Applications Report',
+      subtitle: `Vendor applications${statusFilter ? ` — ${statusFilter}` : ''} (${filtered.length} records)`,
+      headers: ['Business', 'Applicant', 'Category', 'Applied', 'Status'],
+      rows: filtered.map(a => [a.business_name || 'N/A', a.applicant?.full_name || 'N/A', a.category || 'N/A', PH_DATE(a.application_date), a.status]),
+      filename: printFilename('vendor_applications', statusFilter),
+      summary: [`Total Applications: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Vendor Applications</div>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search by business name or applicant..." />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }]} placeholder="All Statuses" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1199,6 +1280,27 @@ function VendorLocations() {
     }
   };
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Vendor Locations Report',
+      subtitle: `${tab === 'queue' ? 'Locations needing review' : 'All stall locations'} (${rows.length} records)`,
+      headers: ['Stall', 'Vendor', 'Coordinates', 'Accuracy', 'Captured By', 'Status'],
+      rows: rows.map(l => {
+        const needsReview = !l.verified_by_admin || (l.accuracy_meters != null && l.accuracy_meters > LOCATION_REVIEW_THRESHOLD_METERS);
+        return [
+          l.stall?.stall_name || `Stall #${l.stall?.stall_number}`,
+          l.stall?.vendor?.full_name || 'N/A',
+          `${Number(l.lat).toFixed(6)}, ${Number(l.lng).toFixed(6)}`,
+          l.accuracy_meters != null ? `±${Math.round(l.accuracy_meters)}m` : (l.manually_adjusted ? 'Manual' : 'N/A'),
+          l.captured_by || 'N/A',
+          needsReview ? 'Needs Review' : 'Verified',
+        ];
+      }),
+      filename: printFilename('vendor_locations', tab === 'queue' ? 'needs review' : 'all'),
+      summary: [`Total Locations: ${rows.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Vendor Locations</div>
@@ -1209,6 +1311,7 @@ function VendorLocations() {
         <button role="tab" aria-selected={tab === 'all'} className={`report-tab${tab === 'all' ? ' active' : ''}`} onClick={() => setTab('all')}>
           All Stalls
         </button>
+        <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={handlePrint}>Print</button>
       </div>
 
       {loading ? <SkeletonTable rows={5} cols={7} /> : (
@@ -1350,6 +1453,17 @@ function ProductCategories() {
     catOptions.reduce((acc, c) => { acc[c.toLowerCase()] = c; return acc; }, {})
   );
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Product Report',
+      subtitle: `Products${categoryFilter ? ` — ${categoryFilter}` : ''} (${filtered.length} records)`,
+      headers: ['Product', 'Category', 'Stall', 'Price', 'Status'],
+      rows: filtered.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, p.is_available === false ? 'Not Available' : 'Available']),
+      filename: printFilename('products', categoryFilter),
+      summary: [`Total Products: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Product Categories</div>
@@ -1357,6 +1471,7 @@ function ProductCategories() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={uniqueCatOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
         <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || s.stall_number || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1469,6 +1584,20 @@ function PriceMonitor() {
     buildGraphData(priceHistory, range);
   };
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Price Monitoring Report',
+      subtitle: `Current product prices${categoryFilter ? ` — ${categoryFilter}` : ''} (${filtered.length} records)`,
+      headers: ['Product', 'Category', 'Stall', 'Price', 'Last Updated', 'Status'],
+      rows: filtered.map(p => {
+        const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
+        return [p.name, p.category || 'Uncategorized', p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A', p.is_available === false ? 'Not Available' : 'Available'];
+      }),
+      filename: printFilename('price_monitoring', categoryFilter),
+      summary: [`Total Products: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Price Monitoring</div>
@@ -1476,6 +1605,7 @@ function PriceMonitor() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={categories.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
         <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || s.stall_number || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1581,6 +1711,17 @@ function PriceHistory() {
     return matchSearch && matchType && matchDate;
   });
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Price Change History Report',
+      subtitle: `Price changes${typeFilter ? ` — ${typeFilter === 'increase' ? 'Price Increase' : 'Price Decrease'}` : ''} (${filtered.length} records)`,
+      headers: ['Product', 'Previous Price', 'New Price', 'Date Changed'],
+      rows: filtered.map(h => [h.product?.name || 'Unknown', `₱${PH(h.previous_price)}`, `₱${PH(h.new_price)}`, PH_DATETIME(h.changed_at)]),
+      filename: printFilename('price_history', typeFilter === 'increase' ? 'increase' : typeFilter === 'decrease' ? 'decrease' : ''),
+      summary: [`Total Price Changes: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Price Change History</div>
@@ -1588,6 +1729,7 @@ function PriceHistory() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search by product name..." />
         <FilterSelect value={typeFilter} onChange={setTypeFilter} options={[{ value: 'increase', label: 'Price Increase' }, { value: 'decrease', label: 'Price Decrease' }]} placeholder="All Changes" />
         <input type="date" className="admin-filter-select" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1653,6 +1795,17 @@ function PriceAnomaly() {
     return matchSearch && matchType;
   });
 
+  const handlePrint = () => {
+    generatePdf({
+      title: 'Price Anomaly Report',
+      subtitle: `Flagged products${typeFilter ? ` — ${typeFilter === 'high' ? 'Overpriced' : 'Underpriced'}` : ''} (${filtered.length} records)`,
+      headers: ['Product', 'Stall', 'Price', 'Deviation', 'Flag'],
+      rows: filtered.map(p => [p.name, p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, `${p.deviation}% ${p.isHigh ? 'above' : 'below'} average`, p.isHigh ? 'Overpriced' : 'Underpriced']),
+      filename: printFilename('price_anomalies', typeFilter === 'high' ? 'overpriced' : typeFilter === 'low' ? 'underpriced' : ''),
+      summary: [`Total Anomalies: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Price Anomaly Detection</div>
@@ -1663,6 +1816,7 @@ function PriceAnomaly() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <FilterSelect value={typeFilter} onChange={setTypeFilter} options={[{ value: 'high', label: 'Overpriced' }, { value: 'low', label: 'Underpriced' }]} placeholder="All Anomalies" />
         <button className="btn btn-primary" onClick={detect} disabled={loading}>{loading ? 'Detecting...' : 'Re-run Detection'}</button>
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1691,18 +1845,13 @@ function Orders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
+  const [viewing, setViewing] = useState(null);
   const load = () => supabase
     .from('orders')
     .select('*, customer:consumer_id (full_name, email), stall:stall_id (stall_name, stall_number)')
     .order('created_at', { ascending: false }).limit(100)
     .then(({ data }) => setOrders(data || []));
   useEffect(() => { load(); }, []);
-  const update = async (id, status) => {
-    await supabase.from('orders').update({ status }).eq('id', id);
-    await logAudit('order_status_change', 'orders', `Order #${String(id).slice(-6)}`, `Status changed to ${status}`);
-    toast({ message: `Order status updated to ${status}`, type: 'success' });
-    load();
-  };
 
   const filtered = orders.filter(o => {
     const q = search.toLowerCase();
@@ -1713,6 +1862,18 @@ function Orders() {
     return matchSearch && matchStatus && matchDate;
   });
 
+  const handlePrint = () => {
+    const s = ORDER_STATUS[statusFilter];
+    generatePdf({
+      title: 'Order Monitoring Report',
+      subtitle: `Orders${s ? ` — ${s.label}` : ''} (${filtered.length} records)`,
+      headers: ['Order #', 'Status', 'Total', 'Date', 'Customer'],
+      rows: filtered.map(o => [`#${o.order_number?.slice(-8) || String(o.id).slice(-6)}`, (ORDER_STATUS[o.status] || ORDER_STATUS.pending).label, `₱${PH(o.total_amount || o.total)}`, PH_DATETIME(o.created_at), o.customer?.full_name || 'N/A']),
+      filename: printFilename('orders', s?.label),
+      summary: [`Total Orders: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Order Monitoring</div>
@@ -1720,6 +1881,7 @@ function Orders() {
         <SearchBar value={search} onChange={setSearch} placeholder="Search order # or customer..." />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={Object.keys(ORDER_STATUS).map(k => ({ value: k, label: ORDER_STATUS[k].label }))} placeholder="All Statuses" />
         <input type="date" className="admin-filter-select" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -1735,9 +1897,7 @@ function Orders() {
                     <td>₱{PH(o.total_amount || o.total)}</td>
                     <td>{PH_DATETIME(o.created_at)}</td>
                     <td>
-                      <select className="status-select" value={o.status} onChange={e => update(o.id, e.target.value)}>
-                        {Object.keys(ORDER_STATUS).map(k => <option key={k} value={k}>{ORDER_STATUS[k].label}</option>)}
-                      </select>
+                      <button className="btn btn-sm btn-secondary" onClick={() => setViewing(o)}>View Receipt</button>
                     </td>
                   </tr>
                 );
@@ -1745,6 +1905,58 @@ function Orders() {
           </tbody>
         </table>
       </div>
+
+      {viewing && (
+        <Modal title={`Receipt - #${viewing.order_number?.slice(-8) || String(viewing.id).slice(-6)}`} onClose={() => setViewing(null)} width="560px">
+          <div className="complaint-detail">
+            <div className="complaint-detail-row"><strong>Status:</strong> <span className={`status-badge ${(ORDER_STATUS[viewing.status] || ORDER_STATUS.pending).cls}`}>{(ORDER_STATUS[viewing.status] || ORDER_STATUS.pending).label}</span></div>
+            <div className="complaint-detail-row"><strong>Date:</strong> {PH_DATETIME(viewing.created_at)}</div>
+            <div className="complaint-detail-row"><strong>Customer:</strong> {viewing.customer?.full_name || 'N/A'} ({viewing.customer?.email || 'N/A'})</div>
+            <div className="complaint-detail-row"><strong>Stall:</strong> {viewing.stall?.stall_name || `Stall #${viewing.stall?.stall_number}` || 'N/A'}</div>
+            {viewing.payment_method && (
+              <div className="complaint-detail-row"><strong>Payment:</strong> {viewing.payment_method.toUpperCase()} &middot; {viewing.payment_status || 'N/A'}</div>
+            )}
+            {viewing.special_instructions && (
+              <div className="complaint-detail-row"><strong>Notes:</strong> {viewing.special_instructions}</div>
+            )}
+
+            <div className="admin-table-wrap" style={{ marginTop: 14 }}>
+              <table className="admin-table">
+                <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr></thead>
+                <tbody>
+                  {(viewing.items || []).length === 0
+                    ? <tr><td colSpan="4">No item details recorded for this order.</td></tr>
+                    : viewing.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.name}</td>
+                        <td>{item.quantity} {item.unit || ''}</td>
+                        <td>&#8369;{PH(item.price)}</td>
+                        <td>&#8369;{PH(item.price * item.quantity)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="complaint-detail-row" style={{ marginTop: 12, fontSize: '1.05em' }}>
+              <strong>Total:</strong> &#8369;{PH(viewing.total_amount || viewing.total)}
+            </div>
+
+            {viewing.payment_receipt_url && (
+              <div style={{ marginTop: 16 }}>
+                <strong>Payment Proof</strong>
+                <div style={{ marginTop: 8 }}>
+                  <img src={viewing.payment_receipt_url} alt="Payment receipt" style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid #e4d3c8' }} />
+                </div>
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setViewing(null)}>Close</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1906,12 +2118,25 @@ function ComplaintManagement() {
     return matchSearch && matchStatus;
   });
 
+  const handlePrint = () => {
+    const t = types.find(t => t.value === statusFilter);
+    generatePdf({
+      title: 'Complaints Report',
+      subtitle: `Complaints${t ? ` — ${t.label}` : ''} (${filtered.length} records)`,
+      headers: ['Stall', 'Message', 'User', 'Status', 'Date'],
+      rows: filtered.map(c => [c.stall?.stall_name || `Stall #${c.stall?.stall_number}` || 'N/A', c.message || 'No message', c.user?.full_name || 'N/A', (types.find(t => t.value === c.status) || types[0]).label, PH_DATE(c.created_at)]),
+      filename: printFilename('complaints', t?.label),
+      summary: [`Total Complaints: ${filtered.length}`],
+    });
+  };
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Complaint Management</div>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search complaints..." />
         <FilterSelect value={statusFilter} onChange={setStatusFilter} options={types.map(t => ({ value: t.value, label: t.label }))} placeholder="All Statuses" />
+        <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">

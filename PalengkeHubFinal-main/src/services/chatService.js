@@ -1,4 +1,7 @@
 // src/services/chatService.js
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
 
 const normalizeRoleForDb = (role) => {
@@ -183,10 +186,20 @@ export const chatService = {
       else if (ext === 'webp') contentType = 'image/webp';
       else if (ext === 'gif') contentType = 'image/gif';
 
-      // Read the image as a binary blob. Works on native (file:// paths) and on
-      // web (blob:/data: URIs) alike.
-      var response = await fetch(uri);
-      var blob = await response.blob();
+      // fetch(uri).blob() is unreliable on Android for the content:// URIs
+      // the image picker can return — it fails silently on some
+      // pickers/OS versions. expo-file-system isn't available on web
+      // though, so native reads the file as base64 and decodes to an
+      // ArrayBuffer, while web keeps using fetch+blob (which works fine
+      // there for blob:/data: URIs).
+      var blob;
+      if (Platform.OS === 'web') {
+        var response = await fetch(uri);
+        blob = await response.blob();
+      } else {
+        var base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        blob = decodeBase64(base64);
+      }
 
       // Permanent path under a per-conversation folder for easy management.
       var fileName = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10) + '.' + ext;

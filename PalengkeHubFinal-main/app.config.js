@@ -6,7 +6,7 @@ export default {
     name: "PalengkeHub",
     slug: "PalengkeHub-Final",
     scheme: "palengkehub",
-    version: "1.0.18",
+    version: "1.0.38",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
