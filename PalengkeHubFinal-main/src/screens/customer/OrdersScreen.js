@@ -934,7 +934,7 @@ export default function OrdersScreen({ navigation }) {
       await supabase
         .from('orders')
         .update({ proposed_changes: { ...proposalData, status: 'rejected' } })
-        .eq('id', order);
+        .eq('id', order.id);
       
       await refreshOrders();
       Alert.alert('Proposal Rejected', 'The vendor has been notified of your decision');

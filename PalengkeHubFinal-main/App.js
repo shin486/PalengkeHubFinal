@@ -24,6 +24,8 @@ import {
 } from '@expo-google-fonts/nunito';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { useBiometricLock } from './src/hooks/useBiometricLock';
+import { BiometricLockScreen } from './src/components/BiometricLockScreen';
 import { CartProvider } from './src/contexts/CartContext';
 import { I18nProvider } from './src/contexts/i18nContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
@@ -474,6 +476,47 @@ function RootNavigator() {
 
   console.log('🔄 RootNavigator - isGuest:', isGuest, 'user:', user?.email, 'role:', profile?.role);
 
+  // The "Biometric Unlock" toggle in Profile/VendorProfile settings has
+  // been settable this whole time but nothing ever called this hook, so
+  // turning it on never actually locked the app on background/foreground —
+  // the setting silently did nothing.
+  const { locked: biometricLocked, unlock: unlockBiometric } = useBiometricLock(!!user);
+
+  // profiles.role flips to 'vendor' as soon as someone signs up choosing
+  // that role (see AuthContext.signUp) — it does NOT wait for admin
+  // approval. Routing on role alone let an unapproved applicant straight
+  // into the full vendor dashboard (add products, etc.) the moment they
+  // created their account. null = still checking, so the synchronous
+  // initialRoute below defaults an unverified vendor to the pending
+  // screen (fail closed) instead of flashing the dashboard first.
+  //
+  // Gated on stalls.is_active rather than vendor_applications.status:
+  // that's the actual "may this vendor operate" flag (false at signup,
+  // flipped true by admin approval — see AdminDashboard.jsx's approve()),
+  // and it's also correct for accounts that were seeded directly in the
+  // database with no application row at all, which a status-only check
+  // would permanently lock out with no application for anyone to approve.
+  const [vendorApproved, setVendorApproved] = useState(null);
+
+  useEffect(() => {
+    if (profile?.role !== 'vendor' || !user?.id) {
+      setVendorApproved(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('stalls')
+        .select('is_active')
+        .eq('vendor_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) setVendorApproved(!!data);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, profile?.role]);
+
   useEffect(() => {
     if (isGuest && global.navigationRef) {
       console.log('🎯 Guest mode activated - navigating to App');
@@ -486,9 +529,11 @@ function RootNavigator() {
 
   useEffect(() => {
     if (loading || !user || !global.navigationRef) return;
+    // Wait for the approval check before deciding a vendor's destination.
+    if (profile?.role === 'vendor' && vendorApproved === null) return;
 
     const target =
-      profile?.role === 'vendor' ? 'VendorDashboard'
+      profile?.role === 'vendor' ? (vendorApproved ? 'VendorDashboard' : 'VendorApplicationStatus')
       : 'App';
 
     console.log('🔀 Redirecting authenticated user to:', target);
@@ -497,31 +542,32 @@ function RootNavigator() {
       index: 0,
       routes: [{ name: target }],
     });
-  }, [user, profile, loading]);
+  }, [user, profile, loading, vendorApproved]);
 
   if (loading) {
     return <LoadingSpinner />;
   }
 
   let initialRoute = 'Login';
-  
+
   if (isGuest) {
     initialRoute = 'App';
   } else if (user && profile?.role === 'vendor') {
-    initialRoute = 'VendorDashboard';
+    initialRoute = vendorApproved ? 'VendorDashboard' : 'VendorApplicationStatus';
   } else if (user && profile?.role === 'consumer') {
     initialRoute = 'App';
   }
 
   return (
-    <NavigationContainer 
+    <View style={{ flex: 1 }}>
+    <NavigationContainer
       ref={(ref) => {
         global.navigationRef = ref;
         navigationContainerRef = ref;
         console.log('✅ NavigationContainer ref set');
       }}
     >
-      <Stack.Navigator 
+      <Stack.Navigator
         screenOptions={{ headerShown: false }} 
         initialRouteName={initialRoute}
       >
@@ -556,6 +602,12 @@ function RootNavigator() {
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
+    {biometricLocked && (
+      <View style={StyleSheet.absoluteFill}>
+        <BiometricLockScreen onUnlock={unlockBiometric} />
+      </View>
+    )}
+    </View>
   );
 }
 

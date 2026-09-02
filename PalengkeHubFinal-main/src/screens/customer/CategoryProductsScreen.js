@@ -357,26 +357,32 @@ export default function CategoryProductsScreen({ route, navigation }) {
     }
   };
 
-  const handleAddToCart = (product, stall) => {
+  const handleAddToCart = async (product, stall) => {
     if (!user && !isGuest) {
       Alert.alert(
         'Login Required',
         'Please login to add items to cart',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
+          {
+            text: 'Login',
             onPress: () => {}
           }
         ]
       );
       return;
     }
-    
+
     if (product && stall) {
-      addToCart(product, stall.id, stall, 1);
+      // addToCart itself alerts + bails with requiresAuth:true for a guest
+      // (isGuest is a valid, reachable state the !user && !isGuest check
+      // above doesn't catch) — without checking the result, this fell
+      // through to a false "Added to Cart" alert offering a "View Cart"
+      // that leads to an empty cart.
+      const result = await addToCart(product, stall.id, stall, 1);
+      if (result?.requiresAuth) return;
       Alert.alert(
-        'Added to Cart', 
+        'Added to Cart',
         `${product.name} added to your cart`,
         [
           { text: 'Continue Shopping', style: 'cancel' },

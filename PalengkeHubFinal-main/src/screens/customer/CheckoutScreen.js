@@ -240,7 +240,12 @@ const handleGcashModalClose = () => {
             section: item.section,
             stall_id: stallId,
             gcash_qr_url: item.gcash_qr_url || null,
-            gcash_number: item.gcash_number || '0917 123 4567',
+            // No fake fallback number here — showing a plausible-looking
+            // placeholder as "the vendor's GCash number" risked a customer
+            // sending real money to a number that isn't actually theirs.
+            // A missing number now surfaces as a visible warning instead
+            // (see the gcashQRPlaceholder render below).
+            gcash_number: item.gcash_number || null,
           },
           items: [],
           total: 0,
@@ -296,12 +301,22 @@ const handleGcashModalClose = () => {
           .single();
         if (error) throw error;
         ordersPlaced.push(order);
+        // Fetch the vendor's CURRENT GCash details rather than trusting
+        // data.stall (a snapshot frozen onto the cart item back when it was
+        // added — a cart can sit for hours/days, and if the vendor updates
+        // their GCash number/QR in that window, checkout would otherwise
+        // show the customer stale payment details with no way to know.
+        const { data: freshStall } = await supabase
+          .from('stalls')
+          .select('gcash_qr_url, gcash_number')
+          .eq('id', stallId)
+          .maybeSingle();
         payments.push({
           stallId: parseInt(stallId),
           stallName: data.stall.stall_name,
           stallNumber: data.stall.stall_number,
-          gcashQrUrl: data.stall.gcash_qr_url || null,
-          gcashNumber: data.stall.gcash_number || '0917 123 4567',
+          gcashQrUrl: freshStall?.gcash_qr_url ?? data.stall.gcash_qr_url ?? null,
+          gcashNumber: freshStall?.gcash_number ?? data.stall.gcash_number ?? null,
           total: subtotal,
           orderId: order.id,
           referenceNumber: '',
@@ -520,9 +535,16 @@ const handleGcashModalClose = () => {
 
     // 2) Reference / amount / timestamp cross-checks (when we have a scan)
     let softIssue = null;
+    // Declared here, not const inside the block below — the DB update
+    // further down reads validation.refMatched, which needs to stay in
+    // scope (and null) when the scan itself failed. Previously this was
+    // block-scoped const, so a "Submit Anyway" after a failed scan hit a
+    // ReferenceError on `validation` at the update call, crashing checkout
+    // on the exact path the escape hatch exists to handle.
+    let validation = null;
     if (!scanFailed) {
       const oldestAllowed = new Date(Date.now() - 20 * 60 * 1000);
-      const validation = validateReceiptScan({
+      validation = validateReceiptScan({
         typedReference: referenceDigits,
         scan,
         expectedAmount: payment.total || 0,
@@ -624,8 +646,8 @@ const handleGcashModalClose = () => {
         payment_status: 'awaiting_verification',
         payment_reference: referenceDigits,
         payment_receipt_url: receiptUrl,
-        payment_scan_text: (scan.text || '').slice(0, 1500) || null,
-        payment_scan_matched: validation.refMatched,
+        payment_scan_text: (scan?.text || '').slice(0, 1500) || null,
+        payment_scan_matched: validation?.refMatched ?? false,
         receipt_image_hash: receiptHash || null,
       })
       .eq('id', payment.orderId);
@@ -672,9 +694,18 @@ const handleGcashModalClose = () => {
     setGcashScanError(t('checkout.submit_payment_error'));
     Alert.alert(t('common.error'), t('checkout.submit_payment_error'));
   } finally {
-    const resetPayments = [...gcashPayments];
-    resetPayments[index].isProcessing = false;
-    setGcashPayments(resetPayments);
+    // Functional updater — reading the outer `gcashPayments` closure here
+    // reverts the successful submission above: setGcashPayments(updatedPayments)
+    // hasn't flushed into this closure yet, so rebuilding from the stale
+    // `gcashPayments` snapshot silently undid isPaid/isSubmitted/receiptUrl
+    // right after a payment succeeded, leaving the modal stuck forever even
+    // though the order was correctly recorded in the database.
+    setGcashPayments(prev => {
+      if (!prev[index]) return prev;
+      const next = [...prev];
+      next[index] = { ...next[index], isProcessing: false };
+      return next;
+    });
     setGcashScanStatus(null);
   }
 };
@@ -1206,9 +1237,19 @@ const handleGcashModalClose = () => {
                         <Image source={{ uri: currentPayment.gcashQrUrl }} style={styles.gcashQRImage} resizeMode="contain" />
                       ) : (
                         <View style={styles.gcashQRPlaceholder}>
-                          <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
-                          <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
-                          <Text style={styles.gcashQRPlaceholderSubtext}>GCash: {currentPayment.gcashNumber}</Text>
+                          {currentPayment.gcashNumber ? (
+                            <>
+                              <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
+                              <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
+                              <Text style={styles.gcashQRPlaceholderSubtext}>GCash: {currentPayment.gcashNumber}</Text>
+                            </>
+                          ) : (
+                            <>
+                              <Ionicons name="warning-outline" size={48} color={COLORS.error} />
+                              <Text style={styles.gcashQRPlaceholderText}>No GCash number on file</Text>
+                              <Text style={styles.gcashQRPlaceholderSubtext}>This vendor hasn't set up GCash payment yet. Please confirm their payment details directly before sending money.</Text>
+                            </>
+                          )}
                         </View>
                       )}
                     </View>

@@ -105,26 +105,61 @@ export function PromotionModal({ visible, onClose, onSubmit, editingPromotion, p
       return;
     }
 
-    setLoading(true);
-
+    const dateFormat = /^\d{4}-\d{2}-\d{2}$/;
     const now = new Date();
     const defaultEnd = new Date(now);
     defaultEnd.setDate(defaultEnd.getDate() + 7);
 
-    const payload = {
-      product_id: formData.product_id,
-      original_price: original,
-      discounted_price: discounted,
-      discount_type: formData.discount_type,
-      discount_value: parseFloat(formData.discount_value) || 0,
-      start_date: formData.start_date ? new Date(formData.start_date).toISOString() : now.toISOString(),
-      end_date: formData.end_date ? new Date(formData.end_date).toISOString() : defaultEnd.toISOString(),
-      is_active: formData.is_active,
-    };
+    let endDateIso = defaultEnd.toISOString();
+    if (formData.end_date) {
+      if (!dateFormat.test(formData.end_date)) {
+        Alert.alert('Error', 'End date must be in YYYY-MM-DD format');
+        return;
+      }
+      const endDate = new Date(formData.end_date);
+      if (Number.isNaN(endDate.getTime())) {
+        Alert.alert('Error', 'End date is not a valid date');
+        return;
+      }
+      if (endDate <= now) {
+        Alert.alert('Error', 'End date must be in the future');
+        return;
+      }
+      endDateIso = endDate.toISOString();
+    }
 
-    await onSubmit(payload);
-    setLoading(false);
-    onClose();
+    let startDateIso = now.toISOString();
+    if (formData.start_date) {
+      if (!dateFormat.test(formData.start_date)) {
+        Alert.alert('Error', 'Start date must be in YYYY-MM-DD format');
+        return;
+      }
+      const startDate = new Date(formData.start_date);
+      if (Number.isNaN(startDate.getTime())) {
+        Alert.alert('Error', 'Start date is not a valid date');
+        return;
+      }
+      startDateIso = startDate.toISOString();
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        product_id: formData.product_id,
+        original_price: original,
+        discounted_price: discounted,
+        discount_type: formData.discount_type,
+        discount_value: parseFloat(formData.discount_value) || 0,
+        start_date: startDateIso,
+        end_date: endDateIso,
+        is_active: formData.is_active,
+      };
+
+      await onSubmit(payload);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

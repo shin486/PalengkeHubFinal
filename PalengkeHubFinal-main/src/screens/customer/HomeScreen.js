@@ -1028,51 +1028,56 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
   }, [user, isGuest]);
 
-  const handleAddToCart = (product, stall) => {
+  const handleAddToCart = async (product, stall) => {
     if (!user && !isGuest) {
       Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
         { text: t('common.cancel'), style: 'cancel' },
-        { 
-          text: 'Login', 
-          onPress: () => { 
+        {
+          text: 'Login',
+          onPress: () => {
             if (setIsGuest) {
               setIsGuest(false);
               navigation.navigate('Login');
             } else {
               navigation.navigate('Login');
             }
-          } 
+          }
         }
       ]);
       return;
     }
     if (product && stall) {
-      addToCart(product, stall.id, stall, 1);
+      // addToCart itself alerts + bails with requiresAuth:true for a guest
+      // (isGuest is a valid, reachable state this !user && !isGuest check
+      // above doesn't catch) — without checking the result, this fell
+      // through to a false "added to cart" toast right after that alert.
+      const result = await addToCart(product, stall.id, stall, 1);
+      if (result?.requiresAuth) return;
       // Haptic feedback + animated toast
       hapticMedium();
       showToast(`${product.name} added to cart`);
     }
   };
 
-  const handleOrderAgain = (item) => {
+  const handleOrderAgain = async (item) => {
     if (!user && !isGuest) {
       Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
         { text: t('common.cancel'), style: 'cancel' },
-        { 
-          text: 'Login', 
-          onPress: () => { 
+        {
+          text: 'Login',
+          onPress: () => {
             if (setIsGuest) {
               setIsGuest(false);
               navigation.navigate('Login');
             } else {
               navigation.navigate('Login');
             }
-          } 
+          }
         }
       ]);
       return;
     }
-    
+
     const product = {
       id: item.id,
       name: item.name,
@@ -1081,7 +1086,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     };
     const stall = item.stall;
     if (product && stall) {
-      addToCart(product, stall.id, stall, item.quantity);
+      const result = await addToCart(product, stall.id, stall, item.quantity);
+      if (result?.requiresAuth) return;
       // Haptic feedback + animated toast
       hapticMedium();
       showToast(`${item.quantity}× ${item.name} added to cart`);

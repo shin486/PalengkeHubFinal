@@ -1003,7 +1003,30 @@ function VendorApplications() {
       }).eq('id', app.id);
       if (error) { toast({ message: `Failed to approve: ${error.message}`, type: 'error' }); return; }
       const { error: roleError } = await supabase.from('profiles').update({ role: 'vendor' }).eq('id', app.applicant_id);
-      if (roleError) { toast({ message: `Approved, but failed to grant vendor role: ${roleError.message}`, type: 'error' }); }
+      if (roleError) {
+        // Don't activate a stall for someone who was never actually granted
+        // the vendor role — that would make it publicly visible/orderable
+        // while its owner is stuck unable to reach the vendor dashboard to
+        // manage it (App.js only runs the stall-active check for role='vendor').
+        toast({ message: `Approved, but failed to grant vendor role: ${roleError.message}. Stall was not activated — retry the approval.`, type: 'error' });
+        setSelected(null);
+        load();
+        return;
+      }
+      // The applicant's stall was created with is_active: false at signup
+      // (src/contexts/AuthContext.js) so it stays invisible to customers
+      // until an admin turns it on — this used to require a second, easy-
+      // to-forget manual toggle in the Stalls tab after approving here.
+      const { data: activatedStalls, error: activateError } = await supabase
+        .from('stalls').update({ is_active: true }).eq('vendor_id', app.applicant_id).select('id');
+      if (activateError) {
+        toast({ message: `Approved, but failed to activate the stall: ${activateError.message}`, type: 'error' });
+      } else if (!activatedStalls?.length) {
+        // A 0-row match isn't a Postgrest error, so it fails silently
+        // without this check — happens if the signup-time stall insert
+        // in AuthContext.js failed and only the application row exists.
+        toast({ message: `Approved, but no stall was found for this vendor to activate. Check the Stalls tab.`, type: 'error' });
+      }
       await logAudit('vendor_application_approved', 'vendor_applications', app.id, `${app.business_name} approved — ${app.applicant?.full_name || app.applicant_id} is now a vendor`);
       toast({ message: `${app.business_name} approved — applicant is now a vendor`, type: 'success' });
       setSelected(null);

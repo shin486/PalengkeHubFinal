@@ -22,6 +22,7 @@ import { WovenBackground } from '../../components/WovenBackground';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
+import { chatService } from '../../services/chatService';
 import { ModernOrderCard } from '../../components/vendor/ModernOrderCard';
 import PaymentApproveModal from '../../components/vendor/PaymentApproveModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
@@ -107,6 +108,18 @@ export default function VendorOrdersScreen({ navigation }) {
 
       const cancelResult = await updateOrderStatus(orderId, 'cancelled');
       if (!cancelResult.success) throw new Error(cancelResult.error || 'Failed to cancel order');
+
+      // The previous (removed) rejection flow also left the reason in the
+      // customer/vendor chat thread as a persistent, shared record — this
+      // rewrite only wrote the notification below, silently dropping that.
+      try {
+        const conversation = await chatService.getOrCreateConversation(order.consumer_id, order.stall_id);
+        if (conversation?.id) {
+          await chatService.sendMessage(conversation.id, user.id, 'vendor', `Order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`);
+        }
+      } catch (chatError) {
+        console.error('Failed to post rejection to chat:', chatError);
+      }
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,

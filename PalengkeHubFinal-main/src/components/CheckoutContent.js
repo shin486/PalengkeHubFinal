@@ -380,23 +380,33 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     setGcashScanStatus('Scanning receipt…');
 
     try {
-      // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
+      // 1) Scan the receipt with OCR — best effort, matching CheckoutScreen.js:
+      // a failed or imperfect scan no longer dead-ends the customer here since
+      // the vendor verifies every submission manually against their own GCash
+      // records regardless (payment_status only ever becomes
+      // 'awaiting_verification', never auto-'paid'). This used to hard-block
+      // on any scan/match failure while the other checkout entry point
+      // (CheckoutScreen.js) already offered a manual-verification escape
+      // hatch instead — same anti-fraud check, two different outcomes
+      // depending on which screen the customer happened to be on.
       let scan = null;
+      let scanFailed = false;
       try {
         scan = await scanReceipt(payment.receiptUri);
       } catch (scanError) {
         console.error('Receipt scan failed:', scanError);
-        setGcashScanError('We could not scan your receipt. Please check your internet connection and try again, or retake a clearer photo.');
-        Alert.alert(
-          'Receipt Scan Unavailable',
-          'We could not scan your receipt. Please check your internet connection and try again.\n\nIf the problem continues, retake a clearer photo of the receipt.'
-        );
-        return;
+        scanFailed = true;
       }
 
-      // 2) Reference / amount / timestamp cross-checks
+      // 2) Reference / amount / timestamp cross-checks (when we have a scan)
+      let softIssue = null;
+      // Declared here (not const inside the block below) because the DB
+      // update further down reads validation.refMatched — it needs to stay
+      // in scope, and null, when the scan itself failed.
+      let validation = null;
+      if (!scanFailed) {
       const oldestAllowed = new Date(Date.now() - 20 * 60 * 1000);
-      const validation = validateReceiptScan({
+      validation = validateReceiptScan({
         typedReference: referenceDigits,
         scan,
         expectedAmount: payment.total || 0,
@@ -409,37 +419,46 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           : validation.digitCandidates.length
             ? validation.digitCandidates.join(', ')
             : 'no number sequence found';
-        setGcashScanError(`We scanned your receipt and could not find the reference number you typed.\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`);
-        Alert.alert(
-          'Reference Number Not Found on Receipt',
-          `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}\n\nPlease fix your reference number or upload a clearer photo of the correct receipt.`
-        );
-        return;
-      }
-      if (!validation.amountMatched) {
-        const amountReason = validation.amounts.length === 0
-          ? `We could not find the total amount on your receipt. Please upload a clearer photo that shows the amount sent (should be ₱${(payment.total || 0).toFixed(2)}).`
+        const body = `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`;
+        setGcashScanError(`Reference number not found on receipt. You typed: ${referenceDigits}. Found: ${found}`);
+        softIssue = { title: 'Reference Number Not Found on Receipt', body };
+      } else if (!validation.amountMatched) {
+        const body = validation.amounts.length === 0
+          ? `We could not find the total amount on your receipt (should be ₱${(payment.total || 0).toFixed(2)}).`
           : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match this vendor's total (₱${(payment.total || 0).toFixed(2)}).`;
-        setGcashScanError(amountReason);
-        Alert.alert(
-          'Receipt Amount Problem',
-          `${amountReason}\n\nPlease upload the receipt for THIS payment.`
-        );
-        return;
+        setGcashScanError(body);
+        softIssue = { title: 'Receipt Amount Problem', body };
+      } else if (!validation.timeOk) {
+        const body = validation.timeProblem === 'future'
+          ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
+          : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.';
+        setGcashScanError(body);
+        softIssue = {
+          title: validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
+          body,
+        };
       }
-      if (!validation.timeOk) {
-        setGcashScanError(
-          validation.timeProblem === 'future'
-            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-            : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
-        );
-        Alert.alert(
-          validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
-          validation.timeProblem === 'future'
-            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-            : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.'
-        );
-        return;
+      }
+
+      // 3) Soft failures get a manual-verification escape hatch instead of a
+      // dead end — matches CheckoutScreen.js's pattern.
+      if (scanFailed || softIssue) {
+        const title = scanFailed ? 'Receipt Scan Unavailable' : softIssue.title;
+        const body = scanFailed
+          ? 'We could not read your receipt automatically. Please check your internet connection or retake a clearer photo.'
+          : softIssue.body;
+
+        const proceed = await new Promise((resolve) => {
+          Alert.alert(
+            title,
+            `${body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`,
+            [
+              { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Submit Anyway', onPress: () => resolve(true) },
+            ]
+          );
+        });
+        if (!proceed) return;
       }
 
       setGcashScanStatus('Checking for duplicates…');
@@ -497,26 +516,27 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           payment_status: 'awaiting_verification',
           payment_reference: referenceDigits,
           payment_receipt_url: receiptUrl,
-          payment_scan_text: (scan.text || '').slice(0, 1500) || null,
-          payment_scan_matched: validation.refMatched,
+          payment_scan_text: (scan?.text || '').slice(0, 1500) || null,
+          payment_scan_matched: validation?.refMatched ?? false,
           receipt_image_hash: receiptHash || null,
         })
         .eq('id', payment.orderId);
       
       if (error) throw error;
       
-      //  Mark this vendor's payment as submitted (awaiting vendor verification)
-      setGcashPayments(prev => {
-        const updated = [...prev];
-        updated[index].isPaid = true;
-        updated[index].isSubmitted = true;
-        updated[index].isProcessing = false;
-        updated[index].receiptUrl = receiptUrl;
-        return updated;
-      });
-      
+      //  Mark this vendor's payment as submitted (awaiting vendor verification).
+      // Build the updated array once and reuse it below — checking
+      // completion off the outer `gcashPayments` closure instead reads the
+      // pre-update snapshot (setState doesn't mutate it synchronously), so
+      // the just-submitted payment never counted itself as paid and the
+      // "all submitted" flow never fired even on a fully successful checkout.
+      const updatedPayments = gcashPayments.map((p, i) => i === index
+        ? { ...p, isPaid: true, isSubmitted: true, isProcessing: false, receiptUrl }
+        : p);
+      setGcashPayments(updatedPayments);
+
       //  Check if all vendors are submitted
-      const allPaid = gcashPayments.every(p => p.isPaid || p.isExpired);
+      const allPaid = updatedPayments.every(p => p.isPaid || p.isExpired);
       
       if (allPaid) {
         setAllPaymentsCompleted(true);
@@ -536,7 +556,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         }, 1500);
       } else {
         //  Move to next unpaid vendor
-        const nextIndex = gcashPayments.findIndex((p, idx) => idx > index && !p.isPaid && !p.isExpired);
+        const nextIndex = updatedPayments.findIndex((p, idx) => idx > index && !p.isPaid && !p.isExpired);
         if (nextIndex !== -1) {
           setCurrentVendorIndex(nextIndex);
           // Start timer for next vendor
@@ -609,7 +629,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
             section: item.section,
             stall_id: stallId,
             gcash_qr_url: item.gcash_qr_url || null,
-            gcash_number: item.gcash_number || '0917 123 4567',
+            // No fake fallback number here — showing a plausible-looking
+            // placeholder as "the vendor's GCash number" risked a customer
+            // sending real money to a number that isn't actually theirs.
+            gcash_number: item.gcash_number || null,
           },
           items: [],
           total: 0,
@@ -718,13 +741,24 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
         if (error) throw error;
 
+        // Fetch the vendor's CURRENT GCash details rather than trusting
+        // data.stall (a snapshot frozen onto the cart item back when it was
+        // added — a cart can sit for hours/days, and if the vendor updates
+        // their GCash number/QR in that window, checkout would otherwise
+        // show the customer stale payment details with no way to know.
+        const { data: freshStall } = await supabase
+          .from('stalls')
+          .select('gcash_qr_url, gcash_number')
+          .eq('id', stallId)
+          .maybeSingle();
+
         //  Each vendor gets their own payment object with individual timer
         payments.push({
           stallId: parseInt(stallId),
           stallName: data.stall.stall_name,
           stallNumber: data.stall.stall_number,
-          gcashQrUrl: data.stall.gcash_qr_url || null,
-          gcashNumber: data.stall.gcash_number || '0917 123 4567',
+          gcashQrUrl: freshStall?.gcash_qr_url ?? data.stall.gcash_qr_url ?? null,
+          gcashNumber: freshStall?.gcash_number ?? data.stall.gcash_number ?? null,
           total: subtotal,
           orderId: order.id,
           referenceNumber: '',
@@ -1008,9 +1042,19 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       <Image source={{ uri: currentPayment.gcashQrUrl }} style={styles.gcashQRImage} resizeMode="contain" />
                     ) : (
                       <View style={styles.gcashQRPlaceholder}>
-                        <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
-                        <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
-                        <Text style={styles.gcashQRPlaceholderSubtext}>GCash: {currentPayment.gcashNumber}</Text>
+                        {currentPayment.gcashNumber ? (
+                          <>
+                            <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
+                            <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
+                            <Text style={styles.gcashQRPlaceholderSubtext}>GCash: {currentPayment.gcashNumber}</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Ionicons name="warning-outline" size={48} color={COLORS.error} />
+                            <Text style={styles.gcashQRPlaceholderText}>No GCash number on file</Text>
+                            <Text style={styles.gcashQRPlaceholderSubtext}>This vendor hasn't set up GCash payment yet. Please confirm their payment details directly before sending money.</Text>
+                          </>
+                        )}
                       </View>
                     )}
                   </View>

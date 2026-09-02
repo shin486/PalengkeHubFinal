@@ -162,7 +162,13 @@ export default function NotificationScreen({ navigation }) {
     if (!hasUnread) return;
 
     const applyMarkAllAsRead = async () => {
-      await notificationService.markAllAsRead(user.id);
+      // Guests can have hasUnread=true from an unread announcement alone
+      // (announcements have no per-user row, so they're always local-only —
+      // see the comment on hasUnread above) — user.id on a null user here
+      // threw and crashed the screen before this guard was added.
+      if (user?.id) {
+        await notificationService.markAllAsRead(user.id);
+      }
       const unreadAnnouncementIds = notifications
         .filter(n => n.is_announcement && !n.is_read)
         .map(n => Number(String(n.id).slice(4)))
