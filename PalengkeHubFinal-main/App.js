@@ -24,6 +24,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { ActiveScreenProvider } from './src/contexts/ActiveScreenContext';
 import { useBiometricLock } from './src/hooks/useBiometricLock';
 import { BiometricLockScreen } from './src/components/BiometricLockScreen';
 import { CartProvider } from './src/contexts/CartContext';
@@ -317,27 +318,6 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // `onStateChange` below on the nested <Stack.Navigator> looks like it
-  // tracks the active route, but that prop only exists on the root
-  // NavigationContainer in React Navigation v6 — on any nested navigator
-  // it's silently ignored, so activeRouteName never actually updated for
-  // pushes within this stack (ChatDetail, StallDetails, ProductDetails,
-  // etc.). It stayed frozen at whatever bottom tab was last focused, so
-  // e.g. opening a chat from the Chats tab kept showing that tab's
-  // fallback header ("PalengkeHub / Lipa City Public Market") stacked on
-  // top of ChatDetailScreen's own header. global.navigationRef is the
-  // root NavigationContainer's ref (see RootNavigator below) — its
-  // 'state' event fires for state changes anywhere in the whole nested
-  // tree, which is what's actually needed here.
-  useEffect(() => {
-    if (!global.navigationRef) return;
-    const unsubscribe = global.navigationRef.addListener('state', () => {
-      const route = global.navigationRef.getCurrentRoute();
-      if (route) setActiveRouteName(route.name);
-    });
-    return unsubscribe;
-  }, []);
-
   useEffect(() => {
     const fetchUnreadCount = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -424,14 +404,32 @@ function AppStack({ isGuest }) {
   console.log('🔍 AppStack - headerProps:', headerProps);
 
   return (
+    <ActiveScreenProvider value={setActiveRouteName}>
     <View style={styles.container}>
       {/* ✅ Only show global Header if NOT on hidden screens */}
       {headerProps && (
         <Header title={headerProps.title} subtitle={headerProps.subtitle} />
       )}
-      
+
       <Stack.Navigator
         screenOptions={{ headerShown: false, animation: 'none' }}
+        // screenListeners (unlike onStateChange, which only works on the
+        // root NavigationContainer — see git history for the version of
+        // this file that tried that and silently did nothing) fires focus
+        // events for every screen registered directly on THIS navigator,
+        // giving the route name directly with no manual state-tree
+        // traversal needed. "MainTabs" itself is skipped here because it
+        // fires whenever the tab navigator container is focused — the
+        // actual tab name (Home/Cart/Orders/Chats/Profile) comes from
+        // CustomerTabNavigator's own onRouteChange below instead, which
+        // already reports the real focused tab correctly.
+        screenListeners={({ route }) => ({
+          focus: () => {
+            if (route.name === 'MainTabs') return;
+            console.log('🔄 Stack screen focused:', route.name);
+            setActiveRouteName(route.name);
+          },
+        })}
       >
         <Stack.Screen name="MainTabs">
           {props => (
@@ -467,6 +465,7 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="Favorites" component={FavoritesScreen} />
       </Stack.Navigator>
     </View>
+    </ActiveScreenProvider>
   );
 }
 

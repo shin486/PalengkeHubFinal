@@ -19,10 +19,12 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFavorites } from '../../hooks/useFavorites';
 import { chatService } from '../../services/chatService';
+import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import StallMap from '../../components/StallMap';
 import * as Location from 'expo-location';
 import {
@@ -86,6 +88,15 @@ export default function StallDetailsScreen({ navigation, route }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
+
+  // See ChatDetailScreen.js for why this screen announces itself directly
+  // instead of App.js trying to infer the active screen from outside.
+  const announceActiveScreen = useAnnounceActiveScreen();
+  useFocusEffect(
+    React.useCallback(() => {
+      announceActiveScreen('StallDetails');
+    }, [announceActiveScreen])
+  );
   const { isStallFavorite, toggleStallFavorite } = useFavorites();
   const [stall, setStall] = useState(null);
   const [vendor, setVendor] = useState(null);

@@ -18,9 +18,11 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
 import { ProductCard } from '../../components/ProductCard';
 import { Chip } from '../../components/ui/Chip';
@@ -255,6 +257,16 @@ const SkeletonLoader = () => {
 export default function CategoryProductsScreen({ route, navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
+  // See ChatDetailScreen.js for why this screen announces itself directly
+  // instead of App.js trying to infer the active screen from outside.
+  const announceActiveScreen = useAnnounceActiveScreen();
+  useFocusEffect(
+    React.useCallback(() => {
+      announceActiveScreen('CategoryProducts');
+    }, [announceActiveScreen])
+  );
+
   const { categoryName } = route.params;
   const [products, setProducts] = useState([]);
   const [stalls, setStalls] = useState([]);

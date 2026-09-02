@@ -18,7 +18,9 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
+import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
@@ -299,6 +301,16 @@ const createQtyStyles = (C) => StyleSheet.create({
 export default function SearchScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
+  // See ChatDetailScreen.js for why this screen announces itself directly
+  // instead of App.js trying to infer the active screen from outside.
+  const announceActiveScreen = useAnnounceActiveScreen();
+  useFocusEffect(
+    React.useCallback(() => {
+      announceActiveScreen('Search');
+    }, [announceActiveScreen])
+  );
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [priceTrends, setPriceTrends] = useState(new Map());

@@ -15,7 +15,9 @@ import {
   TextInput,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
+import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -264,6 +266,16 @@ const PriceHistoryChart = ({ data, styles, COLORS }) => {
 export default function ProductDetailsScreen({ route, navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
+  // See ChatDetailScreen.js for why this screen announces itself directly
+  // instead of App.js trying to infer the active screen from outside.
+  const announceActiveScreen = useAnnounceActiveScreen();
+  useFocusEffect(
+    React.useCallback(() => {
+      announceActiveScreen('ProductDetails');
+    }, [announceActiveScreen])
+  );
+
   // Micro-interaction: spring pulse on the wishlist heart
   const heartScale = useRef(new Animated.Value(1)).current;
   // Haggle offer sheet

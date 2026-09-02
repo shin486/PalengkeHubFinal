@@ -21,8 +21,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../hooks/useChat';
+import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 //  REMOVED: import { Header } from '../../components/Header';
 
 export default function ChatDetailScreen({ navigation, route }) {
@@ -30,6 +32,20 @@ export default function ChatDetailScreen({ navigation, route }) {
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { conversationId, stall, vendor, userRole = 'customer' } = route.params;
   const { user } = useAuth();
+
+  // Tells App.js's global Header to stay hidden while this screen is
+  // focused — this screen renders its own header below instead. Two
+  // earlier mechanisms tried to INFER this from outside (a nested
+  // navigator's onStateChange, which silently no-ops; then a
+  // screenListeners guess) and neither was reliably confirmed working —
+  // this announces it directly instead, via React Navigation's own
+  // guaranteed "screen just focused" hook.
+  const announceActiveScreen = useAnnounceActiveScreen();
+  useFocusEffect(
+    React.useCallback(() => {
+      announceActiveScreen('ChatDetail');
+    }, [announceActiveScreen])
+  );
   const [messageText, setMessageText] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [imageModalVisible, setImageModalVisible] = useState(false);
