@@ -420,7 +420,7 @@ export default function ProfileScreen({ navigation }) {
   // ========== GUEST MODE ==========
   if (isGuest) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -530,7 +530,7 @@ export default function ProfileScreen({ navigation }) {
   const hasProfilePhoto = profile?.avatar_url && !avatarError;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

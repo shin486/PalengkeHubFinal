@@ -135,16 +135,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Helper to get the active route name from a navigation state
-function getActiveRouteName(state) {
-  if (!state) return null;
-  const route = state.routes[state.index];
-  if (route.state) {
-    return getActiveRouteName(route.state);
-  }
-  return route.name;
-}
-
 // ============================================================
 // CUSTOMER BOTTOM TAB NAVIGATOR
 // ============================================================
@@ -327,6 +317,27 @@ function AppStack({ isGuest }) {
   const navigation = useNavigation();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // `onStateChange` below on the nested <Stack.Navigator> looks like it
+  // tracks the active route, but that prop only exists on the root
+  // NavigationContainer in React Navigation v6 — on any nested navigator
+  // it's silently ignored, so activeRouteName never actually updated for
+  // pushes within this stack (ChatDetail, StallDetails, ProductDetails,
+  // etc.). It stayed frozen at whatever bottom tab was last focused, so
+  // e.g. opening a chat from the Chats tab kept showing that tab's
+  // fallback header ("PalengkeHub / Lipa City Public Market") stacked on
+  // top of ChatDetailScreen's own header. global.navigationRef is the
+  // root NavigationContainer's ref (see RootNavigator below) — its
+  // 'state' event fires for state changes anywhere in the whole nested
+  // tree, which is what's actually needed here.
+  useEffect(() => {
+    if (!global.navigationRef) return;
+    const unsubscribe = global.navigationRef.addListener('state', () => {
+      const route = global.navigationRef.getCurrentRoute();
+      if (route) setActiveRouteName(route.name);
+    });
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     const fetchUnreadCount = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -421,12 +432,6 @@ function AppStack({ isGuest }) {
       
       <Stack.Navigator
         screenOptions={{ headerShown: false, animation: 'none' }}
-        onStateChange={(state) => {
-          const routeName = getActiveRouteName(state);
-          console.log('🔄 StackNavigator - route changed to:', routeName);
-          // ✅ Update activeRouteName for ALL routes, including MainTabs
-          setActiveRouteName(routeName);
-        }}
       >
         <Stack.Screen name="MainTabs">
           {props => (
