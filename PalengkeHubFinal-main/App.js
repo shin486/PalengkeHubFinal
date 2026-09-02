@@ -33,6 +33,7 @@ import { LoadingSpinner } from './src/components/LoadingSpinner';
 import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignUpScreen } from './src/screens/auth/SignUpScreen';
 import NotificationScreen from './src/screens/customer/NotificationScreen';
+import VendorApplicationStatusScreen from './src/screens/customer/VendorApplicationStatusScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -47,6 +48,7 @@ import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
 import CartScreen from './src/screens/customer/CartScreen';
 import SearchScreen from './src/screens/customer/SearchScreen';
 import OrdersScreen from './src/screens/customer/OrdersScreen';
+import PickupPassScreen from './src/screens/customer/PickupPassScreen';
 import ProfileScreen from './src/screens/customer/ProfileScreen';
 import FavoritesScreen from './src/screens/customer/FavoritesScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
@@ -442,7 +444,9 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
+        <Stack.Screen name="PickupPass" component={PickupPassScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
+        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
         
         <Stack.Screen 
@@ -539,7 +543,13 @@ function RootNavigator() {
         <Stack.Screen name="VendorRatings" component={VendorRatingsScreen} />
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
-        
+        {/* VendorNotifications lives on this root navigator (not nested inside
+            "App" like its customer-side twin above), so VendorApplicationStatus
+            needs its own registration here too — navigating to a screen name
+            that only exists on a sibling navigator's route table is a silent
+            no-op, not an error. */}
+        <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
+
         {/* Customer / Guest App */}
         <Stack.Screen name="App">
           {(props) => <AppStack {...props} isGuest={isGuest} />}

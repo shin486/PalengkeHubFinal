@@ -176,7 +176,10 @@ export const SignUpScreen = () => {
   const [validIdName, setValidIdName] = useState('');
   const [businessPermit, setBusinessPermit] = useState(null);
   const [businessPermitName, setBusinessPermitName] = useState('');
-  
+  const [gcashQr, setGcashQr] = useState(null);
+  const [gcashQrName, setGcashQrName] = useState('');
+  const [gcashNumber, setGcashNumber] = useState('');
+
   const [uploading, setUploading] = useState(false);
   const [showSectionPicker, setShowSectionPicker] = useState(false);
   
@@ -227,6 +230,8 @@ export const SignUpScreen = () => {
       verificationMethod,
       validIdFile: validId,
       businessPermitFile: businessPermit,
+      gcashQrFile: gcashQr,
+      gcashNumber: gcashNumber,
       requires_approval: true,
       terms_accepted: true,
       terms_accepted_at: new Date().toISOString(),
@@ -723,7 +728,17 @@ export const SignUpScreen = () => {
       Alert.alert('Required', 'Please upload your business permit');
       return false;
     }
-    
+
+    if (!gcashQr) {
+      Alert.alert('Required', 'Please upload your GCash QR code so customers can pay you');
+      return false;
+    }
+
+    if (!gcashNumber.trim()) {
+      Alert.alert('Required', 'Please enter the GCash number linked to that QR code');
+      return false;
+    }
+
     return true;
   };
 
@@ -1130,7 +1145,32 @@ export const SignUpScreen = () => {
             file={businessPermit}
             onUpload={() => pickDocument('business_permit', setBusinessPermit, setBusinessPermitName)}
           />
-          
+
+          {/* GCash Number */}
+          <View style={styles.inputGroup}>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="cash-outline" size={18} />
+              <TextInput
+                style={styles.input}
+                placeholder="GCash Number (e.g. 0917 123 4567)"
+                placeholderTextColor={COLORS.text.tertiary}
+                value={gcashNumber}
+                onChangeText={setGcashNumber}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+          {/* GCash QR Code Upload */}
+          <DocumentUpload
+            label="GCash QR Code"
+            icon="qr-code-outline"
+            required={true}
+            fileName={gcashQrName}
+            file={gcashQr}
+            onUpload={() => pickImage('gcash_qr', setGcashQr, setGcashQrName)}
+          />
+
         </View>
 
         <View style={styles.requirementsNote}>
@@ -1140,6 +1180,7 @@ export const SignUpScreen = () => {
             <Text style={styles.requirementsNoteText}>
               • Valid Government ID (Driver's License, Passport, UMID, Postal ID,etc.){'\n'}
               • Business Permit or Mayor's Permit{'\n'}
+              • Your GCash QR code and number — this is what customers will scan to pay you{'\n'}
               • Photo of your stall (to be submitted after approval)
             </Text>
           </View>

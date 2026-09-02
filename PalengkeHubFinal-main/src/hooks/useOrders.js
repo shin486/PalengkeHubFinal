@@ -99,8 +99,16 @@ export const useOrders = () => {
       )
       .subscribe();
 
+    // Safety net: postgres_changes only fires once Realtime replication is
+    // turned on for this table in the Supabase dashboard, which is an easy
+    // step to miss. Poll as a fallback so status changes (payment verified,
+    // preparing, ready, completed) still show up within ~15s even if that
+    // toggle is off or the socket drops, instead of requiring a manual pull.
+    const pollInterval = setInterval(fetchOrders, 15000);
+
     return () => {
       subscription.unsubscribe();
+      clearInterval(pollInterval);
     };
   }, [fetchOrders, user?.id]);
 

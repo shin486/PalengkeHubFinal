@@ -38,17 +38,20 @@ export const I18nProvider = ({ children }) => {
   };
 
   // t('home.title') -> "Home" or "Home" (Filipino)
-  const t = (key) => {
+  // t('home.title', 'Home') -> falls back to the given default instead of
+  // the raw dotted key when the translation is missing from en.json/fil.json.
+  const t = (key, defaultValue) => {
+    const fallback = defaultValue !== undefined ? defaultValue : key;
     const keys = key.split('.');
     let value = translations[locale];
     for (const k of keys) {
       if (value && typeof value === 'object') {
         value = value[k];
       } else {
-        return key; // fallback to key if translation missing
+        return fallback;
       }
     }
-    return value || key;
+    return value || fallback;
   };
 
   const value = {

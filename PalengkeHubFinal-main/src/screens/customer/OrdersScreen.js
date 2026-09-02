@@ -347,9 +347,17 @@ export default function OrdersScreen({ navigation }) {
       // fetch(uri).blob() is unreliable on Android for the content:// URIs
       // the image picker can return — it fails silently on some
       // pickers/OS versions. Reading the file as base64 and decoding to an
-      // ArrayBuffer works consistently on both platforms.
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const fileData = decodeBase64(base64);
+      // ArrayBuffer works consistently on both platforms. expo-file-system
+      // has no web implementation of readAsStringAsync at all, so this
+      // rejected on every web upload — same fix as the other upload flows.
+      let fileData;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        fileData = await response.blob();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        fileData = decodeBase64(base64);
+      }
       const fileName = `receipt_${Date.now()}_${payNowOrder.id}.jpg`;
       const folder = `gcash_receipts/${user.id}/${payNowOrder.stall_id}`;
 

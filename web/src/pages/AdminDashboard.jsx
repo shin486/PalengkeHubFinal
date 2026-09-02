@@ -976,6 +976,7 @@ function VendorApplications() {
   const [busy, setBusy] = useState(false);
   const [requesting, setRequesting] = useState(null);
   const [requestMessage, setRequestMessage] = useState('');
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -1157,9 +1158,14 @@ function VendorApplications() {
               <strong>Documents:</strong>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                 {selected.documents.map((doc, i) => (
-                  <a key={i} href={doc.url} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
-                    {doc.type === 'valid_id' ? 'Valid ID' : doc.type === 'business_permit' ? 'Business Permit' : `Document ${i + 1}`}
-                  </a>
+                  <button
+                    key={i}
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setPreviewDoc(doc)}
+                  >
+                    {doc.type === 'valid_id' ? 'Valid ID' : doc.type === 'business_permit' ? 'Business Permit' : doc.type === 'gcash_qr' ? 'GCash QR Code' : `Document ${i + 1}`}
+                  </button>
                 ))}
               </div>
             </div>
@@ -1198,6 +1204,32 @@ function VendorApplications() {
           <div className="modal-actions">
             <button className="btn btn-secondary" onClick={() => setRequesting(null)}>Cancel</button>
             <button className="btn btn-primary" onClick={submitResubmissionRequest} disabled={busy || !requestMessage.trim()}>Send Request</button>
+          </div>
+        </Modal>
+      )}
+
+      {previewDoc && (
+        <Modal
+          title={previewDoc.type === 'valid_id' ? 'Valid ID' : previewDoc.type === 'business_permit' ? 'Business Permit' : previewDoc.type === 'gcash_qr' ? 'GCash QR Code' : 'Document'}
+          onClose={() => setPreviewDoc(null)}
+          width="720px"
+        >
+          {/\.pdf$/i.test(previewDoc.url.split('?')[0]) ? (
+            <iframe
+              src={previewDoc.url}
+              title="Document preview"
+              style={{ width: '100%', height: '70vh', border: '1px solid var(--admin-border)', borderRadius: 'var(--admin-radius-sm)' }}
+            />
+          ) : (
+            <img
+              src={previewDoc.url}
+              alt="Document preview"
+              style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 'var(--admin-radius-sm)', background: 'var(--admin-surface-secondary, #F3E3CB)', display: 'block' }}
+            />
+          )}
+          <div className="modal-actions">
+            <a href={previewDoc.url} target="_blank" rel="noreferrer" className="btn btn-secondary">Open in new tab</a>
+            <button className="btn btn-primary" onClick={() => setPreviewDoc(null)}>Close</button>
           </div>
         </Modal>
       )}

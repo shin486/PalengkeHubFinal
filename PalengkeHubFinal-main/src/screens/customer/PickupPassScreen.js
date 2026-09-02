@@ -37,7 +37,7 @@ export default function PickupPassScreen({ route, navigation }) {
   const status = order?.status || 'pending';
   const statusText = t(`orders.status.${status}`, t('orders.status.pending'));
   const statusTone = STATUS_TONE[status] || 'warning';
-  const isPaid = order?.payment_status === 'paid';
+  const isPaid = ['paid', 'verified'].includes(order?.payment_status);
   const pickupTime = order?.pickup_time
     ? new Date(order.pickup_time).toLocaleString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })
     : t('orders.pickup_asap', 'Ngayon');

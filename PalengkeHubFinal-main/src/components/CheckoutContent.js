@@ -70,6 +70,41 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 };
 
 
+// Matches the market's posted hours ("Open 5:00 AM to 7:00 PM") shown
+// elsewhere in the app — a pickup slot outside this window means the
+// stall isn't even open.
+const MARKET_OPEN_HOUR = 5;
+const MARKET_CLOSE_HOUR = 19; // 7:00 PM, exclusive
+
+// Nudges a candidate pickup date/time so it always lands inside market
+// hours and, if it's today, no earlier than a few minutes from now.
+// The native date/time pickers have no concept of "business hours" or
+// "not in the past" — @react-native-community/datetimepicker's
+// minimumDate only constrains the date picker, not the time picker —
+// so that has to be enforced here instead of trusted from the picker.
+const clampPickupTime = (candidate) => {
+  const now = new Date();
+  const result = new Date(candidate);
+  result.setSeconds(0, 0);
+
+  if (result.toDateString() === now.toDateString()) {
+    const earliest = new Date(now.getTime() + 15 * 60 * 1000); // 15-min prep buffer
+    if (result < earliest) result.setTime(earliest.getTime());
+  }
+
+  if (result.getHours() < MARKET_OPEN_HOUR) {
+    result.setHours(MARKET_OPEN_HOUR, 0, 0, 0);
+  } else if (result.getHours() >= MARKET_CLOSE_HOUR) {
+    // Past closing (or bumped past it by the "not in the past" nudge
+    // above) — roll to opening time the next day rather than accepting
+    // a pickup slot the market won't be open for.
+    result.setDate(result.getDate() + 1);
+    result.setHours(MARKET_OPEN_HOUR, 0, 0, 0);
+  }
+
+  return result;
+};
+
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
   const { clearCart } = useCart();
@@ -77,7 +112,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
   const [loading, setLoading] = useState(false);
-  const [pickupTime, setPickupTime] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
+  const [pickupTime, setPickupTime] = useState(() => clampPickupTime(new Date(Date.now() + 2 * 60 * 60 * 1000)));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -269,9 +304,17 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       // fetch(uri).blob() is unreliable on Android for the content:// URIs
       // the image picker can return — it fails silently on some
       // pickers/OS versions. Reading the file as base64 and decoding to an
-      // ArrayBuffer works consistently on both platforms.
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const fileData = decodeBase64(base64);
+      // ArrayBuffer works consistently on both platforms. expo-file-system
+      // has no web implementation of readAsStringAsync at all, so this
+      // rejected on every web upload — same fix as the other upload flows.
+      let fileData;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        fileData = await response.blob();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        fileData = decodeBase64(base64);
+      }
       const fileName = `receipt_${Date.now()}_${stallId}.jpg`;
       const folder = `gcash_receipts/${user.id}/${stallId}`;
 
@@ -590,24 +633,49 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       const newDate = new Date(selectedDate);
       newDate.setHours(pickupTime.getHours());
       newDate.setMinutes(pickupTime.getMinutes());
-      setPickupTime(newDate);
+      // The previously-picked time-of-day can land outside market hours
+      // or in the past once carried onto a different (e.g. today's) date
+      // — nudge it back into a valid slot instead of accepting it as-is.
+      setPickupTime(clampPickupTime(newDate));
     }
   };
 
   const onTimeChange = (event, selectedTime) => {
     setShowTimePicker(false);
-    if (selectedTime) {
-      const newTime = new Date(pickupTime);
-      newTime.setHours(selectedTime.getHours());
-      newTime.setMinutes(selectedTime.getMinutes());
-      setPickupTime(newTime);
+    if (!selectedTime) return;
+
+    const newTime = new Date(pickupTime);
+    newTime.setHours(selectedTime.getHours());
+    newTime.setMinutes(selectedTime.getMinutes());
+    newTime.setSeconds(0, 0);
+
+    if (newTime.getHours() < MARKET_OPEN_HOUR || newTime.getHours() >= MARKET_CLOSE_HOUR) {
+      Alert.alert('Outside Market Hours', 'Pickup time must be between 5:00 AM and 7:00 PM.');
+      return;
     }
+
+    const now = new Date();
+    if (newTime.toDateString() === now.toDateString() && newTime < now) {
+      Alert.alert('Invalid Time', 'Please choose a pickup time later than now.');
+      return;
+    }
+
+    setPickupTime(newTime);
   };
 
   //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
     if (cart.length === 0) {
       Alert.alert('Empty Cart', 'Add items to your cart first');
+      return;
+    }
+
+    // Belt-and-suspenders: the pickers already reject an invalid pick,
+    // but time keeps moving after that — a slot that was valid when
+    // chosen can slip into the past (or past closing) by the time the
+    // order actually submits, e.g. sitting on this screen near closing.
+    if (pickupTime.getHours() < MARKET_OPEN_HOUR || pickupTime.getHours() >= MARKET_CLOSE_HOUR || pickupTime < new Date()) {
+      Alert.alert('Invalid Pickup Time', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.');
       return;
     }
 

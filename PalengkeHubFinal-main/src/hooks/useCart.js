@@ -7,8 +7,18 @@ import { useAuth } from '../contexts/AuthContext';
 let sharedCart = [];
 const listeners = new Set();
 
+// Bumped on every local mutation (add/update/remove/clear) so a slower,
+// concurrent fetchCart() can tell its result is now stale instead of
+// blindly overwriting it. CartScreen refetches from the DB on every
+// screen focus (for multi-device sync), but addToCart's own DB write is
+// never awaited by its callers — tap "Add to Cart" and immediately switch
+// to the Cart tab, and the focus-triggered fetch can resolve with the
+// pre-add cart and stomp the optimistic update that already added the item.
+let cartVersion = 0;
+
 const updateSharedCart = (newCart) => {
   sharedCart = newCart;
+  cartVersion += 1;
   listeners.forEach(fn => fn(sharedCart));
 };
 
@@ -31,10 +41,12 @@ export const useCart = () => {
       return;
     }
 
+    const versionAtStart = cartVersion;
+
     try {
       setLoading(true);
       console.log(' Fetching cart for user:', user.id);
-      
+
       // Get cart data - ensure we get only one row
       let { data, error } = await supabase
         .from('carts')
@@ -94,6 +106,13 @@ export const useCart = () => {
       }));
       
       console.log(' Cart loaded:', formattedItems.length, 'items');
+      if (cartVersion !== versionAtStart) {
+        // addToCart/updateQuantity/removeItem/clearCart changed the cart
+        // while this fetch was in flight — that local write is newer than
+        // what we just read, so trust it and drop this stale result.
+        console.log(' Skipping stale cart fetch — a newer local change won the race');
+        return;
+      }
       updateSharedCart(formattedItems);
     } catch (error) {
       console.error(' Error fetching cart:', error);

@@ -117,9 +117,17 @@ export default function VendorProfileScreen({ navigation }) {
         // fetch(uri).blob() is unreliable on Android for the content://
         // URIs the image picker can return — it fails silently for some
         // pickers/OS versions. Reading the file as base64 and decoding to
-        // an ArrayBuffer works consistently on both platforms.
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        const fileData = decodeBase64(base64);
+        // an ArrayBuffer works consistently on both platforms. expo-file-system
+        // has no web implementation of readAsStringAsync at all, so this
+        // never resolved on web — same fix as AddProductModal/AuthContext.
+        let fileData;
+        if (Platform.OS === 'web') {
+          const response = await fetch(uri);
+          fileData = await response.blob();
+        } else {
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          fileData = decodeBase64(base64);
+        }
         const path = `avatars/${user.id}/${Date.now()}_${fileName}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('vendor_documents')

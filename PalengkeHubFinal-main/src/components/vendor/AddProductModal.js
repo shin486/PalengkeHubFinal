@@ -157,9 +157,18 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       // fetch(uri).blob() is unreliable on Android for the content:// URIs
       // the image picker can return — it fails silently for some
       // pickers/OS versions. Reading the file as base64 and decoding to an
-      // ArrayBuffer works consistently on both platforms.
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const blob = decodeBase64(base64);
+      // ArrayBuffer works consistently on both platforms. expo-file-system
+      // has no web implementation of readAsStringAsync at all, so this used
+      // to reject on every web upload — same fix as the profile avatar and
+      // vendor document uploads.
+      let blob;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        blob = await response.blob();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        blob = decodeBase64(base64);
+      }
       const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
       const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
       const path = `product_images/${user?.id || 'unknown'}/${Date.now()}.${ext}`;

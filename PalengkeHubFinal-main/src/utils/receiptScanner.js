@@ -96,13 +96,27 @@ const extractDigitCandidates = (text) => {
 };
 
 // Amounts like ₱1,234.56 / PHP 1,234.56 / "sent 1,234.56" / "Total 1,234.56"
+//
+// The ₱ sign isn't in Tesseract's default English character set (it's a
+// Unicode currency glyph, not a Latin letter), so it's routinely dropped
+// or mis-OCR'd — a real GCash receipt read "Total Amount Sent ₱100.00"
+// and "Amount 100.00" and neither line was extracted: the currency-symbol
+// patterns below need ₱/P to actually appear in the OCR text, and the old
+// "total" pattern only expected an optional literal "amount:" right after
+// "total", not GCash's actual wording "Total Amount **Sent**" — the extra
+// word broke the match entirely. The label-anchored patterns now match
+// GCash's real line wording with or without a currency symbol at all, so
+// a garbled ₱ no longer sinks the whole extraction.
 const extractAmounts = (text) => {
   const amounts = [];
   const patterns = [
     /[₱P]\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
     /PHP\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
     /sent\s+(?:you\s+)?[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
-    /total\s+(?:amount\s*:?)?\s*[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
+    /total\s+amount\s+sent\s*:?\s*[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
+    /total\s+amount\s*:?\s*[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
+    /total\s*:?\s*[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)/gi,
+    /^\s*amount\s*:?\s*[₱P]?\s*([\d,]{1,9}(?:\.\d{1,2})?)\s*$/gim,
   ];
   patterns.forEach((re) => {
     let m;

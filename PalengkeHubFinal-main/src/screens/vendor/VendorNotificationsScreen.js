@@ -118,7 +118,13 @@ export default function VendorNotificationsScreen({ navigation }) {
         is_announcement: true,
       }));
 
-      const allItems = [...announcementItems, ...(notifRes.data || [])];
+      // See the customer NotificationScreen for why this is forced rather
+      // than trusted from the row: is_announcement is a client-side tag for
+      // the merged announcements array, and a real notification row taking
+      // a truthy value from the DB (if that column exists there with a
+      // truthy default) would wrongly hide its View/delete actions.
+      const realNotifications = (notifRes.data || []).map(n => ({ ...n, is_announcement: false }));
+      const allItems = [...announcementItems, ...realNotifications];
       setNotifications(allItems);
       setUnreadCount(allItems.filter(n => !n.is_read).length);
     } catch (error) {

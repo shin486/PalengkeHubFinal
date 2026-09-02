@@ -281,8 +281,23 @@ export const AuthProvider = ({ children }) => {
 
   // ========== LOGIN ==========
   const login = useCallback(async (identifier, password) => {
+    // Deliberately does NOT toggle the global `loading` flag the way
+    // checkUser() does. RootNavigator unmounts the entire Stack.Navigator
+    // (including LoginScreen itself) whenever `loading` is true, to show
+    // LoadingSpinner during the app's initial boot check. If login() also
+    // flipped that flag, every sign-in attempt would tear down LoginScreen
+    // for its duration and remount a *fresh* instance once it settled —
+    // fine for a successful single-account login (which navigates away
+    // regardless), but fatal for the multi-account-picker and error paths,
+    // which return to LoginScreen and rely on its OWN local state
+    // (pickerVisible, error text) to show the follow-up UI. That state was
+    // being set on the old, already-unmounted instance and thrown away the
+    // instant the remount happened, which surfaced as "sign in just
+    // refreshes back to a blank Login screen, no error, nothing" — for
+    // multi-account emails, that's every login attempt: LoginScreen's own
+    // local isLoading (set below in handleLogin) already gives the button
+    // its spinner, so nothing user-visible needs AuthContext.loading here.
     try {
-      setLoading(true);
       console.log(' Attempting login for:', identifier);
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -357,12 +372,20 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (matched.length === 1) {
-          if (adminMatched.length > 0) {
-            // The active Supabase session may belong to whichever candidate
-            // signed in last, which isn't necessarily this one — re-authenticate
-            // explicitly so the admin account can't end up as the live session.
-            await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
-          }
+          // This loop tries every candidate@n alias for this email even
+          // after the real one already succeeded, to find out whether more
+          // than one account shares this email+password. Supabase's client
+          // treats each signInWithPassword call as authoritative — a later
+          // *failed* attempt (against a candidate alias that doesn't exist,
+          // the common case for a single-account user) clears the session
+          // the successful one just set. So by the time this line runs, the
+          // browser usually has NO valid session at all, even though the
+          // correct login happened seconds ago in this same loop. checkUser()
+          // then finds nobody signed in, the app's redirect effect never
+          // fires, and the user lands right back on the Login screen —
+          // "sign in just refreshes". Re-authenticating as the one account
+          // that actually matched guarantees the live session is real.
+          await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
           console.log(' Login successful (single account):', matched[0].authEmail);
           await checkUser();
           return { success: true, account: matched[0] };
@@ -421,8 +444,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Login error details:', error);
       return { success: false, error: error.message };
-    } finally {
-      setLoading(false);
     }
   }, [checkUser]);
 
@@ -570,10 +591,25 @@ export const AuthProvider = ({ children }) => {
         // point (signOut() hasn't run yet) — this is the only window in
         // the whole flow where the vendor_documents bucket's RLS will
         // actually accept these uploads.
-        const [validIdUrl, businessPermitUrl] = await Promise.all([
+        const [validIdUrl, businessPermitUrl, gcashQrUrl] = await Promise.all([
           uploadVendorDocument(metadata.validIdFile, `valid_ids/${data.user.id}`),
           uploadVendorDocument(metadata.businessPermitFile, `business_permits/${data.user.id}`),
+          uploadVendorDocument(metadata.gcashQrFile, `gcash_qr/${data.user.id}`),
         ]);
+
+        // The stall the vendor is applying for already exists (see the
+        // insert above) — the GCash QR belongs on it directly so checkout
+        // can show it right away once the application is approved, not
+        // just on the application record for admin review.
+        if (gcashQrUrl) {
+          const { error: gcashError } = await supabase
+            .from('stalls')
+            .update({ gcash_qr_url: gcashQrUrl, gcash_number: metadata.gcashNumber || null })
+            .eq('vendor_id', data.user.id);
+          if (gcashError) {
+            console.error(' Stall GCash update error:', gcashError);
+          }
+        }
 
         const documents = [];
         if (validIdUrl) {
@@ -581,6 +617,9 @@ export const AuthProvider = ({ children }) => {
         }
         if (businessPermitUrl) {
           documents.push({ type: 'business_permit', url: businessPermitUrl });
+        }
+        if (gcashQrUrl) {
+          documents.push({ type: 'gcash_qr', url: gcashQrUrl });
         }
         if (metadata.barangay_clearance_url) {
           documents.push({ type: 'barangay_clearance', url: metadata.barangay_clearance_url });

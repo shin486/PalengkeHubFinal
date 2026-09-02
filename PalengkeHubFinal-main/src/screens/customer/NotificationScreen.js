@@ -66,7 +66,16 @@ export default function NotificationScreen({ navigation }) {
         console.warn('Error loading announcements:', annError?.message);
       }
 
-      const all = [...announcementItems, ...(data || [])].sort(
+      // Real rows from the notifications table are spread with an explicit
+      // is_announcement: false — the "View ->" link and delete button below
+      // are gated on !is_announcement, and if that column exists in the DB
+      // with a truthy default, an admin-created row (which never sets it)
+      // would silently inherit `true` and look unclickable, same as an
+      // actual announcement. is_announcement is a client-side tag meant
+      // only for the merged announcements array, so a real notification
+      // should never take its value from whatever the row happens to carry.
+      const realNotifications = (data || []).map(n => ({ ...n, is_announcement: false }));
+      const all = [...announcementItems, ...realNotifications].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at)
       );
       setNotifications(all);
