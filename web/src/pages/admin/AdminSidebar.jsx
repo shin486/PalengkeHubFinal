@@ -77,7 +77,7 @@ export default function AdminSidebar({ activeSection, setActiveSection, adminNam
       <div className="admin-sidebar-brand">
         <img src="/palengkehublogo.jpg" alt="PalengkeHub" className="admin-sidebar-logo" />
         <div className="admin-sidebar-brand-text">
-          <div className="admin-sidebar-title">PalengkeHub</div>
+          <div className="admin-sidebar-title">Palengke<span className="brand-hub">Hub</span></div>
           <div className="admin-sidebar-subtitle">Admin Panel</div>
         </div>
       </div>
