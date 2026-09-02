@@ -115,7 +115,7 @@
   display: flex;
   min-height: 100vh;
   background: var(--admin-bg);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
 }
 
 /* ========== SIDEBAR (clean redesign) ========== */
@@ -157,7 +157,7 @@
 .admin-sidebar-brand-text { min-width: 0; }
 
 .admin-sidebar-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-weight: 700;
   font-size: 1.05rem;
   color: #111827;
@@ -211,7 +211,7 @@
   color: #4B5563;
   font-size: 0.88rem;
   font-weight: 500;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -381,7 +381,7 @@
 }
 
 .admin-page-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.85rem;
   font-weight: 700;
   color: #7A1C1E;
@@ -465,7 +465,7 @@
 }
 
 .stat-card-value {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 2rem;
   font-weight: 700;
   color: var(--admin-primary);
@@ -545,7 +545,7 @@
 }
 
 .priority-card-value {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 2.25rem;
   font-weight: 700;
   line-height: 1;
@@ -585,7 +585,7 @@
 }
 
 .admin-section-header {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.25rem;
   font-weight: 600;
   color: #7A1C1E;
@@ -723,7 +723,7 @@
   font-weight: 600;
   cursor: pointer;
   border: none;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   transition: all var(--transition-bounce);
   white-space: nowrap;
   position: relative;
@@ -921,7 +921,7 @@
 }
 
 .stall-card-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.15rem;
   font-weight: 600;
   color: #7A1C1E;
@@ -1024,7 +1024,7 @@
   font-weight: 700;
   color: #7A1C1E;
   border-bottom: 1px solid var(--admin-border-light);
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1rem;
 }
 
@@ -1173,7 +1173,7 @@
   border: 2px solid var(--admin-border);
   border-radius: var(--admin-radius);
   font-size: 0.9rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   transition: all var(--transition-smooth);
 }
 
@@ -1211,7 +1211,7 @@
   font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   transition: all var(--transition-bounce);
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
 }
@@ -1269,10 +1269,10 @@
   border-radius: 6px;
   border: 2px solid var(--admin-border);
   font-size: 0.82rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-weight: 600;
   color: var(--admin-text);
-  background: #fff;
+  background: var(--admin-surface);
   cursor: pointer;
   transition: all var(--transition-smooth);
 }
@@ -1386,7 +1386,7 @@ input[type="checkbox"], input[type="radio"] {
   outline: none;
   flex: 1;
   font-size: 0.88rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   color: var(--admin-text);
   background: transparent;
 }
@@ -1400,7 +1400,7 @@ input[type="checkbox"], input[type="radio"] {
   border: 2px solid var(--admin-border);
   border-radius: var(--admin-radius-sm);
   font-size: 0.85rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-weight: 500;
   color: var(--admin-text);
   background: var(--admin-surface);
@@ -1466,7 +1466,7 @@ input[type="checkbox"], input[type="radio"] {
   background: none;
   border: none;
   padding: 0;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--admin-primary);
@@ -1516,7 +1516,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .admin-modal-header h3 {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.15rem;
   font-weight: 700;
   color: #7A1C1E;
@@ -1571,7 +1571,7 @@ input[type="checkbox"], input[type="radio"] {
   border: 2px solid var(--admin-border);
   border-radius: var(--admin-radius-sm);
   font-size: 0.88rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   color: var(--admin-text);
   background: var(--admin-surface);
   transition: all var(--transition-smooth);
@@ -1726,7 +1726,7 @@ textarea.form-input {
 }
 
 .report-card h4 {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1rem;
   font-weight: 700;
   color: #7A1C1E;
@@ -1874,7 +1874,7 @@ textarea.form-input {
   border-radius: var(--admin-radius-sm);
   padding: 8px 12px;
   font-size: 0.85rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   color: var(--admin-text);
   background: var(--admin-surface);
   transition: all var(--admin-transition-smooth);
@@ -1917,7 +1917,7 @@ textarea.form-input {
 }
 
 .report-summary-item .value {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--admin-primary);
@@ -1953,7 +1953,7 @@ textarea.form-input {
 }
 
 .chart-card .chart-card-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.1rem;
   font-weight: 600;
   color: #7A1C1E;
@@ -2132,7 +2132,7 @@ textarea.form-input {
   border: none;
   outline: none;
   font-size: 0.85rem;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   color: var(--admin-text);
   background: transparent;
 }
@@ -2383,7 +2383,7 @@ textarea.form-input {
 
 .admin-topbar-search:focus-within {
   border-color: var(--admin-primary);
-  background: #fff;
+  background: var(--admin-surface);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
@@ -2393,7 +2393,7 @@ textarea.form-input {
   border: none;
   outline: none;
   background: transparent;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.88rem;
   color: var(--admin-text);
 }
@@ -2409,7 +2409,7 @@ textarea.form-input {
   left: 0;
   right: 0;
   max-height: 60vh;
-  background: #fff;
+  background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius-sm);
   box-shadow: var(--admin-shadow-md);
@@ -2422,7 +2422,7 @@ textarea.form-input {
 .admin-topbar-search-hint-small,
 .admin-topbar-search-empty {
   padding: 12px 16px;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.86rem;
   color: var(--admin-text-muted);
 }
@@ -2435,9 +2435,9 @@ textarea.form-input {
   padding: 10px 14px;
   border: none;
   border-bottom: 1px solid var(--admin-border-light);
-  background: #fff;
+  background: var(--admin-surface);
   color: var(--admin-text);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.86rem;
   font-weight: 500;
   cursor: pointer;
@@ -2554,7 +2554,7 @@ textarea.form-input {
   right: 0;
   min-width: 260px;
   max-width: 320px;
-  background: #fff;
+  background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
   box-shadow: var(--admin-shadow-lg);
@@ -2588,9 +2588,9 @@ textarea.form-input {
   width: 100%;
   padding: 12px 16px;
   border: none;
-  background: #fff;
+  background: var(--admin-surface);
   color: var(--admin-text);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.85rem;
   text-align: left;
   cursor: pointer;
@@ -2636,7 +2636,7 @@ textarea.form-input {
   box-shadow: var(--admin-shadow);
   position: relative;
   overflow: hidden;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   transition: transform var(--transition-smooth),
               box-shadow var(--transition-smooth),
               border-color var(--transition-smooth);
@@ -2696,7 +2696,7 @@ textarea.form-input {
 }
 
 .kpi-value {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-size: 1.7rem;
   font-weight: 700;
   color: var(--admin-text);
@@ -2748,7 +2748,7 @@ textarea.form-input {
   border-radius: 20px;
   background: #FFF7ED;
   color: #92400E;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
@@ -2793,7 +2793,7 @@ textarea.form-input {
 }
 
 .overview-toolbar-title {
-  font-family: 'Fraunces', serif;
+  font-family: var(--f-display);
   font-weight: 600;
   font-size: 1rem;
   color: var(--admin-text);
@@ -2814,7 +2814,7 @@ textarea.form-input {
   border-radius: 6px;
   background: transparent;
   color: var(--admin-text-secondary);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -2825,7 +2825,7 @@ textarea.form-input {
 
 .range-btn:hover {
   color: var(--admin-primary);
-  background: #fff;
+  background: var(--admin-surface);
 }
 
 .range-btn.active {
@@ -2932,7 +2932,7 @@ textarea.form-input {
   border-radius: 6px;
   background: transparent;
   color: var(--admin-text-secondary);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--f-ui);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -2944,7 +2944,51 @@ textarea.form-input {
 
 .report-tab:hover {
   color: var(--admin-primary);
-  background: #fff;
+  background: var(--admin-surface);
+}
+
+/* ========== THEME TOGGLE ==========
+   Same pill track + sliding marble knob as the mobile app's
+   src/components/ThemeToggle.js, same colour values, CSS transitions
+   instead of Animated. */
+.theme-toggle {
+  --tt-w: 52px;
+  --tt-h: 28px;
+  --tt-knob: 20px;
+  --tt-pad: 4px;
+  position: relative;
+  width: var(--tt-w);
+  height: var(--tt-h);
+  flex: none;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(38, 16, 6, 0.14);
+  background: #F3E3CB;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(38, 16, 6, 0.1);
+  transition: background-color var(--transition-smooth), border-color var(--transition-smooth);
+}
+
+.theme-toggle.is-dark {
+  background: #221812;
+  border-color: rgba(0, 0, 0, 0.6);
+}
+
+.theme-toggle-knob {
+  position: absolute;
+  top: var(--tt-pad);
+  left: var(--tt-pad);
+  width: var(--tt-knob);
+  height: var(--tt-knob);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FFFFFF, #E7DCCB);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
+  transition: transform var(--transition-bounce), background var(--transition-smooth);
+}
+
+.theme-toggle.is-dark .theme-toggle-knob {
+  transform: translateX(calc(var(--tt-w) - var(--tt-knob) - var(--tt-pad) * 2));
+  background: linear-gradient(135deg, #4A3B30, #0B0806);
 }
 
 .report-tab.active {

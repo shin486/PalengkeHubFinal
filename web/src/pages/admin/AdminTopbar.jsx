@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import ThemeToggle from '../../components/ThemeToggle';
 
 const SECTION_LABELS = {
   overview: 'Dashboard', stalls: 'Stalls', products: 'Products', orders: 'Orders',
@@ -148,6 +149,8 @@ export default function AdminTopbar({ setActiveSection }) {
       </div>
 
       <div className="admin-topbar-actions">
+        <ThemeToggle />
+
         {/* Notifications */}
         <div className="admin-topbar-notif" ref={notifRef}>
           <button
