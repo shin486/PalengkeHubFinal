@@ -35,6 +35,7 @@ import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import StallMap from '../../components/StallMap';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../../utils/receiptScanner';
+import { getSectionMapOffset } from '../../constants/marketSections';
 import { SPACING, RADIUS } from '../../theme/tokens';
 
 // Downscale an image (data URI or blob URI) to a compressed JPEG data URI using
@@ -177,15 +178,7 @@ const handleGcashModalClose = () => {
   const getStallCoordinates = (section, stallNumber) => {
     const baseLat = 13.9417;
     const baseLng = 121.1642;
-    const sectionOffsets = {
-      'Meat Section': { lat: 0.0008, lng: -0.0012 },
-      'Vegetable Section': { lat: 0.0002, lng: -0.0008 },
-      'Fish Section': { lat: -0.0003, lng: 0.0005 },
-      'Fruit Section': { lat: 0.0005, lng: 0.0002 },
-      'Dry Goods': { lat: -0.0001, lng: -0.0015 },
-      'Poultry Section': { lat: 0.0010, lng: -0.0005 },
-    };
-    const offset = sectionOffsets[section] || { lat: 0, lng: 0 };
+    const offset = getSectionMapOffset(section);
     const stallOffset = (parseInt(stallNumber) || 0) * 0.00002;
     return {
       latitude: baseLat + offset.lat + stallOffset,

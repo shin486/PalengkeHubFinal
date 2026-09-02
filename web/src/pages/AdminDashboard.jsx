@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import AdminSidebar from './admin/AdminSidebar';
 import AdminTopbar from './admin/AdminTopbar';
 import { ToastContainer, toast } from '../components/admin/Toast';
+import { categoryLabel } from '../constants/productCategories';
 import { Skeleton, SkeletonTable, SkeletonStatCard, SkeletonChart } from '../components/admin/Skeleton';
 import {
   exportToCSV,
@@ -402,6 +403,7 @@ function Overview({ onNavigate }) {
   const [orderStatusData, setOrderStatusData] = useState([]);
   const [revenueByStall, setRevenueByStall] = useState([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
+  const [recentPriceUpdates, setRecentPriceUpdates] = useState([]);
   const [range, setRange] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -445,6 +447,15 @@ function Overview({ onNavigate }) {
       // Revenue by stall
       const { data: stallOrders } = await supabase.from('orders').select('*, stall:stall_id(stall_name, stall_number)').eq('status', 'completed').limit(1000);
       setRevenueByStall(aggregateRevenueByStall(stallOrders || []));
+      // Recent price changes — shown above Sales Trend so admins see what
+      // moved the numbers before looking at the trend itself.
+      const { data: priceUpdates, error: priceUpdatesError } = await supabase
+        .from('price_history')
+        .select('previous_price, new_price, changed_at, product:product_id(name, stall:stall_id(stall_name))')
+        .order('changed_at', { ascending: false })
+        .limit(5);
+      if (priceUpdatesError) console.error('Recent price updates load error:', priceUpdatesError.message);
+      setRecentPriceUpdates(priceUpdates || []);
       toast({ message: 'Dashboard data refreshed successfully', type: 'success' });
     } catch (err) {
       setError(err.message || 'Failed to load dashboard data');
@@ -552,6 +563,35 @@ function Overview({ onNavigate }) {
           ))}
         </div>
       )}
+
+      {/* ── Recent Price Updates: shown before Sales Trend so admins see
+          what changed before looking at the trend it fed into ── */}
+      <div className="chart-card" style={{ marginBottom: 'var(--admin-radius, 24px)' }}>
+        <div className="chart-card-header">
+          <h3 className="chart-card-title">Recent Price Updates</h3>
+          <button className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('price-history')}>View All</button>
+        </div>
+        {recentPriceUpdates.length === 0 ? (
+          <EmptyState message="No price changes recorded yet" />
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>Product</th><th>Stall</th><th>Previous</th><th>New</th><th>Changed</th></tr></thead>
+              <tbody>
+                {recentPriceUpdates.map((h, i) => (
+                  <tr key={i}>
+                    <td><strong>{h.product?.name || 'N/A'}</strong></td>
+                    <td>{h.product?.stall?.stall_name || 'N/A'}</td>
+                    <td>{h.previous_price != null ? `₱${PH(h.previous_price)}` : 'N/A'}</td>
+                    <td style={{ fontWeight: 700 }}>₱{PH(h.new_price)}</td>
+                    <td>{PH_DATETIME(h.changed_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── Toolbar: filters / date range / export ── */}
       <div className="overview-toolbar">
@@ -723,6 +763,33 @@ function StallManagement() {
     load();
   };
 
+  const deleteStall = async (stall) => {
+    const label = stall.stall_name || `Stall #${stall.stall_number}`;
+    if (!window.confirm(`Permanently delete "${label}"? This also deletes all of its products. This cannot be undone.`)) return;
+
+    // Products carry a stall_id FK — deleted first so the stalls delete
+    // below doesn't fail on a foreign-key violation. Orders/conversations/
+    // carts/promotions/ratings also reference stall_id but are left alone
+    // (order history shouldn't disappear because a stall was removed); if
+    // any of those has a live DB constraint blocking the stall delete, the
+    // error below surfaces that instead of silently corrupting data.
+    const { error: productsError } = await supabase.from('products').delete().eq('stall_id', stall.id);
+    if (productsError) {
+      toast({ message: `Failed to delete stall's products: ${productsError.message}`, type: 'error' });
+      return;
+    }
+
+    const { error } = await supabase.from('stalls').delete().eq('id', stall.id);
+    if (error) {
+      toast({ message: `Failed to delete stall: ${error.message}. It likely still has existing orders — remove or reassign those first.`, type: 'error' });
+      return;
+    }
+
+    await logAudit('stall_deleted', 'stalls', stall.id, `${label} deleted`);
+    toast({ message: `${label} deleted`, type: 'success' });
+    load();
+  };
+
   const saveEdit = async () => {
     setSaving(true);
     await supabase.from('stalls').update({
@@ -793,6 +860,7 @@ function StallManagement() {
                       <button className="btn btn-sm btn-primary" onClick={() => setEditing(s)}>Edit</button>
                       <button className="btn btn-sm btn-success" onClick={() => viewTransactions(s)}>Transactions</button>
                       <button className={`btn btn-sm ${s.is_active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteStall(s)}>Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -1478,12 +1546,19 @@ function ProductCategories() {
   const [stallFilter, setStallFilter] = useState('');
 
   const load = useCallback(async () => {
-    const [p, c, s] = await Promise.all([
+    const [p, c, s, ph] = await Promise.all([
       supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
       supabase.from('product_categories').select('*').order('name'),
       supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
+      supabase.from('price_history').select('*').order('changed_at', { ascending: false }),
     ]);
-    setProducts(p.data || []);
+    // First row per product after ordering by changed_at desc = most recent change.
+    const histByProduct = {};
+    (ph.data || []).forEach(h => { if (!histByProduct[h.product_id]) histByProduct[h.product_id] = h; });
+    setProducts((p.data || []).map(prod => ({
+      ...prod,
+      price_history: histByProduct[prod.id] ? [histByProduct[prod.id]] : [],
+    })));
     setCategories(c.data || []);
     setStalls(s.data || []);
   }, []);
@@ -1512,8 +1587,11 @@ function ProductCategories() {
     generatePdf({
       title: 'Product Report',
       subtitle: `Products${categoryFilter ? ` — ${categoryFilter}` : ''} (${filtered.length} records)`,
-      headers: ['Product', 'Category', 'Stall', 'Price', 'Status'],
-      rows: filtered.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, p.is_available === false ? 'Not Available' : 'Available']),
+      headers: ['Product', 'Category', 'Stall', 'Price', 'Last Updated', 'Status'],
+      rows: filtered.map(p => {
+        const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
+        return [p.name, categoryLabel(p.category), p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A', p.is_available === false ? 'Not Available' : 'Available'];
+      }),
       filename: printFilename('products', categoryFilter),
       summary: [`Total Products: ${filtered.length}`],
     });
@@ -1524,26 +1602,30 @@ function ProductCategories() {
       <div className="admin-section-header">Product Categories</div>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
-        <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={uniqueCatOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+        <FilterSelect value={categoryFilter} onChange={setCategoryFilter} options={uniqueCatOptions.map(c => ({ value: c, label: categoryLabel(c) }))} placeholder="All Categories" />
         <FilterSelect value={stallFilter} onChange={setStallFilter} options={stalls.map(s => ({ value: s.id, label: s.stall_name || s.stall_number || `Stall #${s.stall_number}` }))} placeholder="All Stalls" />
         <button className="btn btn-secondary" onClick={handlePrint}>Print</button>
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Status</th></tr></thead>
+          <thead><tr><th>Product</th><th>Category</th><th>Stall</th><th>Price</th><th>Last Updated</th><th>Status</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No products found" /></td></tr>
-              : filtered.map(p => (
+            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No products found" /></td></tr>
+              : filtered.map(p => {
+                const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
+                return (
                 <tr key={p.id}>
                   <td><strong>{p.name}</strong></td>
-                  <td><span className="status-badge status-confirmed">{p.category || 'Uncategorized'}</span></td>
+                  <td><span className="status-badge status-confirmed">{categoryLabel(p.category)}</span></td>
                   <td>{p.stall?.stall_name || p.stall?.stall_number || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
                   <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
+                  <td>{lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A'}</td>
                   {/* A palengke doesn't track live stock counts — the vendor's own
                       is_available toggle (set in the vendor app) is the real signal. */}
                   <td><span className={`status-badge ${p.is_available === false ? 'status-cancelled' : 'status-completed'}`}>{p.is_available === false ? 'Not Available' : 'Available'}</span></td>
                 </tr>
-              ))}
+                );
+              })}
           </tbody>
         </table>
       </div>
@@ -1568,7 +1650,7 @@ function PriceMonitor() {
       const [p, s, ph] = await Promise.all([
         supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
         supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
-        supabase.from('price_history').select('*'),
+        supabase.from('price_history').select('*').order('changed_at', { ascending: false }),
       ]);
       if (p.error) throw p.error;
       if (s.error) throw s.error;
@@ -1646,7 +1728,7 @@ function PriceMonitor() {
       headers: ['Product', 'Category', 'Stall', 'Price', 'Last Updated', 'Status'],
       rows: filtered.map(p => {
         const lastUpdate = p.price_history?.[0]?.changed_at || p.updated_at || null;
-        return [p.name, p.category || 'Uncategorized', p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A', p.is_available === false ? 'Not Available' : 'Available'];
+        return [p.name, categoryLabel(p.category), p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A', `₱${PH(p.price)}`, lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A', p.is_available === false ? 'Not Available' : 'Available'];
       }),
       filename: printFilename('price_monitoring', categoryFilter),
       summary: [`Total Products: ${filtered.length}`],
@@ -1672,7 +1754,7 @@ function PriceMonitor() {
                 return (
                   <tr key={p.id}>
                     <td><strong>{p.name}</strong></td>
-                    <td><span className="status-badge status-confirmed">{p.category || 'Uncategorized'}</span></td>
+                    <td><span className="status-badge status-confirmed">{categoryLabel(p.category)}</span></td>
                     <td>{p.stall?.stall_name || `Stall #${p.stall?.stall_number}` || 'N/A'}</td>
                     <td style={{ fontWeight: 700 }}>₱{PH(p.price)}</td>
                     <td>{lastUpdate ? PH_DATETIME(lastUpdate) : 'N/A'}</td>
@@ -2774,7 +2856,7 @@ function AnalyticsReports() {
     try {
       if (type === 'products-pdf') {
         const scoped = byCategory(products, 'products');
-        const rows = scoped.map(p => [p.name, p.category || 'Uncategorized', p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.is_available === false ? 'Not Available' : 'Available']);
+        const rows = scoped.map(p => [p.name, categoryLabel(p.category), p.stall?.stall_name || 'N/A', `₱${PH(p.price)}`, p.is_available === false ? 'Not Available' : 'Available']);
         generatePdf({
           title: 'Product Price Report',
           subtitle: `Complete list of products and their current prices${filters.products ? ` — ${filters.products}` : ''} (${formatDateRange(customStart, customEnd)})`,
@@ -2891,7 +2973,7 @@ function AnalyticsReports() {
         toast({ message: 'Price history exported to CSV', type: 'success' });
       } else if (type === 'price-per-product-pdf') {
         const scoped = byCategory(products, 'pricePerProduct');
-        const rows = scoped.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
+        const rows = scoped.map(p => [p.name, categoryLabel(p.category), `₱${PH(p.price)}`, p.stall?.stall_name || 'N/A']);
         generatePdf({
           title: 'Price Per Product Report',
           subtitle: `Current price of each product per stall${filters.pricePerProduct ? ` — ${filters.pricePerProduct}` : ''}`,
@@ -2948,7 +3030,7 @@ function AnalyticsReports() {
       } else if (type === 'product-performance-pdf') {
         const scoped = byCategory(products, 'productPerformance');
         const productPerf = calculateProductPerformance(scoped, orderItems);
-        const rows = productPerf.map(p => [p.name, p.category || 'Uncategorized', `₱${PH(p.totalRevenue)}`, p.totalSold, p.orderCount]);
+        const rows = productPerf.map(p => [p.name, categoryLabel(p.category), `₱${PH(p.totalRevenue)}`, p.totalSold, p.orderCount]);
         generatePdf({
           title: 'Product Performance Report',
           subtitle: `Top selling products by revenue${filters.productPerformance ? ` — ${filters.productPerformance}` : ''}`,
@@ -3034,7 +3116,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Product Price Report</h4>
             <p>Complete list of all products with current prices and availability.</p>
-            <FilterSelect value={filters.products} onChange={v => setFilter('products', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+            <FilterSelect value={filters.products} onChange={v => setFilter('products', v)} options={categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('products-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('products-csv')} disabled={loading || exporting}>CSV</button>
@@ -3070,7 +3152,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Price Change Report</h4>
             <p>Historical price changes per product with timestamps.</p>
-            <FilterSelect value={filters.priceHistory} onChange={v => setFilter('priceHistory', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+            <FilterSelect value={filters.priceHistory} onChange={v => setFilter('priceHistory', v)} options={categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-history-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('price-history-csv')} disabled={loading || exporting}>CSV</button>
@@ -3079,7 +3161,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Price Per Product</h4>
             <p>Current price of each product per stall for market comparison.</p>
-            <FilterSelect value={filters.pricePerProduct} onChange={v => setFilter('pricePerProduct', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+            <FilterSelect value={filters.pricePerProduct} onChange={v => setFilter('pricePerProduct', v)} options={categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('price-per-product-pdf')} disabled={loading || exporting}>PDF</button>
             </div>
@@ -3105,7 +3187,7 @@ function AnalyticsReports() {
           <div className="report-card">
             <h4>Product Performance</h4>
             <p>Top selling products by revenue and units sold.</p>
-            <FilterSelect value={filters.productPerformance} onChange={v => setFilter('productPerformance', v)} options={categoryOptions.map(c => ({ value: c, label: c }))} placeholder="All Categories" />
+            <FilterSelect value={filters.productPerformance} onChange={v => setFilter('productPerformance', v)} options={categoryOptions.map(c => ({ value: c, label: categoryLabel(c) }))} placeholder="All Categories" />
             <div className="export-btn-group">
               <button className="btn btn-sm btn-primary" onClick={() => handleExport('product-performance-pdf')} disabled={loading || exporting}>PDF</button>
               <button className="btn btn-sm btn-success" onClick={() => handleExport('product-performance-csv')} disabled={loading || exporting}>CSV</button>

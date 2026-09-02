@@ -27,6 +27,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS as STATIC_COLORS } from '../../theme/tokens';
+import { STALL_SECTIONS } from '../../constants/marketSections';
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,20 +41,6 @@ const SquiggleDivider = () => {
   </svg>`;
   return <SvgXml xml={xml} width="100%" height={14} />;
 };
-
-// Stall sections available in the market
-const STALL_SECTIONS = [
-  'Meat Section',
-  'Vegetable Section',
-  'Fish Section',
-  'Fruit Section',
-  'Dry Goods',
-  'Poultry Section',
-  'Rice Section',
-  'Condiments Section',
-  'Frozen Goods',
-  'Beverages Section',
-];
 
 // Stable module-scope OTP modal — avoids the component-identity re-render loop
 // that happens when the modal is defined inside the screen component.

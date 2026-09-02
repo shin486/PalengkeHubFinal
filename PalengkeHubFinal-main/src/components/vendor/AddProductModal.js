@@ -21,6 +21,7 @@ import { getPriceSuggestion, classifyPrice } from '../../services/priceSuggestio
 import { supabase } from '../../../lib/supabase';
 import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
+import { CATEGORY_OPTIONS } from '../../constants/productCategories';
 
 // Available unit options with labels
 const UNIT_OPTIONS = [
@@ -31,16 +32,6 @@ const UNIT_OPTIONS = [
   { id: 'bundle', label: 'Per Bundle', icon: 'leaf-outline', defaultPrice: 0 },
   { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: 'egg-outline', defaultPrice: 0 },
   { id: 'pack', label: 'Per Pack', icon: 'cube-outline', defaultPrice: 0 },
-];
-
-// Predefined categories
-const CATEGORY_OPTIONS = [
-  { id: 'vegetables', label: 'Vegetables', icon: 'leaf' },
-  { id: 'meat', label: 'Meat', icon: 'restaurant' },
-  { id: 'rice', label: 'Rice & Grains', icon: 'grain' },
-  { id: 'fruits', label: 'Fruits', icon: 'nutrition' },
-  { id: 'poultry', label: 'Poultry', icon: 'egg' },
-  { id: 'other', label: 'Other', icon: 'construct' },
 ];
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
