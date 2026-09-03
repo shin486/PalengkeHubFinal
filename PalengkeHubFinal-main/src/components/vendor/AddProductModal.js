@@ -18,6 +18,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { Ionicons } from '@expo/vector-icons';
 import { getPriceSuggestion, classifyPrice } from '../../services/priceSuggestion';
+import { checkAnomaly } from '../../services/priceAnomalyService';
 import { supabase } from '../../../lib/supabase';
 import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
@@ -209,6 +210,16 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     }
   };
 
+  // Alert.alert is callback-based, not awaitable — this wraps it so
+  // handleSubmit can pause on the confirm dialog like everything else.
+  const confirmAsync = (title, message) =>
+    new Promise((resolve) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Yes, Continue', onPress: () => resolve(true) },
+      ]);
+    });
+
   const handleSubmit = async () => {
     if (!formData.name || !formData.price) {
       Alert.alert('Error', 'Please fill in all required fields');
@@ -220,6 +231,20 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       return;
     }
 
+    const parsedPrice = parseFloat(formData.price);
+
+    // Fresh check at save time, not the debounced priceSuggestion state
+    // above — that's 600ms-debounced off the name field and can be
+    // stale/null if the vendor submits quickly after typing.
+    const anomaly = await checkAnomaly(formData.name, parsedPrice);
+    if (anomaly) {
+      const proceed = await confirmAsync(
+        'Price may be flagged',
+        `This price is ${anomaly.deviationPct}% above the market average (₱${anomaly.marketAvgPrice.toFixed(2)}) and may be flagged as a price anomaly for admin review. Do you want to continue?`
+      );
+      if (!proceed) return;
+    }
+
     console.log(' SUBMITTING - Image URL:', formData.image_url);
 
     setLoading(true);
@@ -229,20 +254,25 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       if (unitPrices[unit] && unitPrices[unit] > 0) {
         priceOptions[unit] = unitPrices[unit];
       } else if (unit === 'kg') {
-        priceOptions[unit] = parseFloat(formData.price);
+        priceOptions[unit] = parsedPrice;
       }
     });
 
     const productData = {
       name: formData.name,
       description: formData.description,
-      price: parseFloat(formData.price),
+      price: parsedPrice,
       unit: formData.unit,
       category: formData.category,
       image_url: formData.image_url,
       price_options: Object.keys(priceOptions).length > 0 ? priceOptions : null,
       unit_options: selectedUnits,
       is_available: editingProduct ? editingProduct.is_available : true,
+      // Read by VendorProductsScreen to record the anomaly against the
+      // saved product's id, then discarded — not a products-table column
+      // (useVendorProducts' insert/update only pick known fields off this
+      // object, so this is never sent to Supabase).
+      _priceFlag: anomaly || null,
     };
 
     console.log(' Product Data being sent:', productData);

@@ -33,6 +33,31 @@ export const chatService = {
     return newConv;
   },
 
+  // The admin<->vendor channel, isolated from any real customer's chat
+  // with the same stall — one per stall, no customer_id at all.
+  async getOrCreateAdminConversation(stallId) {
+    let { data: existing } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('stall_id', stallId)
+      .eq('conversation_type', 'admin_vendor')
+      .maybeSingle();
+
+    if (existing) return existing;
+
+    const { data: newConv, error } = await supabase
+      .from('conversations')
+      .insert({
+        stall_id: stallId,
+        conversation_type: 'admin_vendor',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return newConv;
+  },
+
   async getCustomerConversations(customerId) {
     const { data, error } = await supabase
       .from('conversations')

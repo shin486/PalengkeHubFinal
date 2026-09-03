@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/i18nContext';
 import { useVendorProducts } from '../../hooks/useVendorProducts';
+import { priceAnomalyService } from '../../services/priceAnomalyService';
 import { ModernProductCard } from '../../components/vendor/ModernProductCard';
 import { AddProductModal } from '../../components/vendor/AddProductModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
@@ -112,15 +113,52 @@ export default function VendorProductsScreen({ navigation }) {
     setRefreshing(false);
   };
 
+  // productData._priceFlag comes from AddProductModal's own fresh
+  // market check at submit time — set only when the vendor confirmed
+  // past the warning dialog. Stripped before handing the rest off to
+  // addProduct/updateProduct (which only insert/update known columns
+  // anyway, but this keeps the data flow explicit).
   const handleAddProduct = async (productData) => {
-    const success = await addProduct(productData);
-    if (success) setShowAddModal(false);
+    const { _priceFlag, ...cleanData } = productData;
+    const created = await addProduct(cleanData);
+    if (created) {
+      setShowAddModal(false);
+      if (_priceFlag && stall?.id && user?.id) {
+        await priceAnomalyService.flagAuto({
+          productId: created.id,
+          stallId: stall.id,
+          vendorId: user.id,
+          unit: cleanData.unit,
+          price: cleanData.price,
+          marketAvgPrice: _priceFlag.marketAvgPrice,
+          deviationPct: _priceFlag.deviationPct,
+        });
+      }
+    }
   };
 
   const handleUpdateProduct = async (productData) => {
     if (!editingProduct) return;
-    const success = await updateProduct(editingProduct.id, productData);
-    if (success) setEditingProduct(null);
+    const { _priceFlag, ...cleanData } = productData;
+    const success = await updateProduct(editingProduct.id, cleanData);
+    if (success) {
+      setEditingProduct(null);
+      if (_priceFlag && stall?.id && user?.id) {
+        await priceAnomalyService.flagAuto({
+          productId: editingProduct.id,
+          stallId: stall.id,
+          vendorId: user.id,
+          unit: cleanData.unit,
+          price: cleanData.price,
+          marketAvgPrice: _priceFlag.marketAvgPrice,
+          deviationPct: _priceFlag.deviationPct,
+        });
+      } else {
+        // Not flagged this time — if an earlier save on this product
+        // left a pending/deactivated anomaly, this price may now clear it.
+        await priceAnomalyService.autoResolveIfCompliant(editingProduct.id, cleanData.name, cleanData.price);
+      }
+    }
   };
 
   //  Get icon and color for stat cards

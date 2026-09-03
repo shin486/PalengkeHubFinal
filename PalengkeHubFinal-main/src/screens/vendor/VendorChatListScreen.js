@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
 import { supabase } from '../../../lib/supabase';
+import { chatService } from '../../services/chatService';
 
 export default function VendorChatListScreen({ navigation }) {
   const { user } = useAuth();
@@ -73,6 +74,7 @@ export default function VendorChatListScreen({ navigation }) {
           )
         `)
         .eq('stall_id', stallData.id)
+        .eq('conversation_type', 'customer_vendor')
         .order('last_message_time', { ascending: false });
 
       if (convError) throw convError;
@@ -148,6 +150,26 @@ export default function VendorChatListScreen({ navigation }) {
     });
   };
 
+  //  Open (or start) the dedicated admin channel — separate from any
+  // customer conversation, so this never mixes with the list above.
+  const [openingAdminChat, setOpeningAdminChat] = useState(false);
+  const handleChatWithAdmin = async () => {
+    if (!stall?.id || openingAdminChat) return;
+    setOpeningAdminChat(true);
+    try {
+      const conv = await chatService.getOrCreateAdminConversation(stall.id);
+      navigation.navigate('VendorChatDetail', {
+        conversationId: conv.id,
+        isAdminChat: true,
+        stall,
+      });
+    } catch (error) {
+      console.error('Error opening admin chat:', error);
+    } finally {
+      setOpeningAdminChat(false);
+    }
+  };
+
   const renderChatItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.chatItem}
@@ -220,6 +242,28 @@ export default function VendorChatListScreen({ navigation }) {
         </Text>
       </View>
 
+      <TouchableOpacity
+        style={styles.adminChatCard}
+        onPress={handleChatWithAdmin}
+        activeOpacity={0.7}
+        disabled={openingAdminChat}
+      >
+        <View style={styles.adminChatIconWrap}>
+          <Ionicons name="shield-checkmark" size={22} color={COLORS.primary} />
+        </View>
+        <View style={styles.chatContent}>
+          <Text style={styles.customerName}>PalengkeHub Admin</Text>
+          <Text style={styles.lastMessage} numberOfLines={1}>
+            Questions, issues, or a flagged price? Chat with admin.
+          </Text>
+        </View>
+        {openingAdminChat ? (
+          <ActivityIndicator size="small" color={COLORS.primary} />
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color={COLORS.text.lighter} />
+        )}
+      </TouchableOpacity>
+
       {chats.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="chatbubble-ellipses-outline" size={64} color={COLORS.text.lighter} />
@@ -274,6 +318,29 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 14,
     color: COLORS.text.light,
     marginTop: 2,
+  },
+
+  // Admin chat — pinned above the customer list, styled distinctly
+  // so it doesn't read as just another customer conversation
+  adminChatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '33',
+  },
+  adminChatIconWrap: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary + '1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
 
   // Chat List

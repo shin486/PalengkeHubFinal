@@ -1916,7 +1916,7 @@ function PriceAnomaly() {
 
   const detect = useCallback(async () => {
     setLoading(true);
-    const { data: products } = await supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)');
+    const { data: products } = await supabase.from('products').select('*, stall:stall_id(stall_name, stall_number, vendor_id)');
     if (!products) { setLoading(false); return; }
     const prices = products.map(p => parseFloat(p.price || 0)).filter(p => p > 0);
     const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
@@ -1954,11 +1954,89 @@ function PriceAnomaly() {
     });
   };
 
+  // ── Persisted, actionable anomalies (auto-flagged when a vendor
+  // confirms past the warning dialog, or manually flagged below) ──
+  const [tracked, setTracked] = useState([]);
+  const [trackedLoading, setTrackedLoading] = useState(false);
+  const [flagging, setFlagging] = useState(null);
+  const [flagNote, setFlagNote] = useState('');
+  const [flagSubmitting, setFlagSubmitting] = useState(false);
+
+  const loadTracked = useCallback(async () => {
+    setTrackedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('price_anomalies')
+        .select('*, product:product_id(name), stall:stall_id(id, stall_name, stall_number, is_active), vendor:vendor_id(full_name, email)')
+        .in('status', ['pending', 'deactivated'])
+        .order('flagged_at', { ascending: false });
+      if (error) throw error;
+      setTracked(data || []);
+    } catch (err) {
+      console.error('Tracked anomalies load error:', err.message);
+      toast({ message: `Failed to load tracked anomalies: ${err.message}`, type: 'error' });
+    } finally {
+      setTrackedLoading(false);
+    }
+  }, []);
+  useEffect(() => { loadTracked(); }, [loadTracked]);
+
+  const submitFlag = async () => {
+    if (!flagging) return;
+    setFlagSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { error } = await supabase.from('price_anomalies').insert({
+        product_id: flagging.id,
+        stall_id: flagging.stall_id,
+        vendor_id: flagging.stall?.vendor_id,
+        flagged_price: flagging.price,
+        deviation_pct: flagging.deviation ? Number(flagging.deviation) : null,
+        source: 'admin_manual',
+        status: 'pending',
+        flagged_by: session.user.id,
+        admin_note: flagNote.trim() || null,
+      });
+      if (error) throw error;
+
+      await logAudit('price_anomaly_flagged', 'price_anomalies', flagging.id, `Flagged ${flagging.name} (₱${PH(flagging.price)}) for vendor review`);
+      toast({ message: 'Price flagged — vendor notified', type: 'success' });
+      setFlagging(null);
+      setFlagNote('');
+      await loadTracked();
+    } catch (err) {
+      console.error('Flag error:', err);
+      toast({ message: 'Failed to flag price: ' + (err.message || 'Unknown error'), type: 'error' });
+    } finally {
+      setFlagSubmitting(false);
+    }
+  };
+
+  const reactivateStall = async (stallId) => {
+    try {
+      const { error } = await supabase.from('stalls').update({ is_active: true }).eq('id', stallId);
+      if (error) throw error;
+      await logAudit('stall_reactivated', 'stalls', stallId, 'Reactivated after price anomaly review');
+      toast({ message: 'Stall reactivated', type: 'success' });
+      await loadTracked();
+    } catch (err) {
+      toast({ message: 'Failed to reactivate: ' + (err.message || 'Unknown error'), type: 'error' });
+    }
+  };
+
+  const trackedByStall = {};
+  tracked.forEach(a => {
+    const key = a.stall_id;
+    if (!trackedByStall[key]) trackedByStall[key] = { stall: a.stall, vendor: a.vendor, items: [] };
+    trackedByStall[key].items.push(a);
+  });
+
   return (
     <div className="admin-section">
       <div className="admin-section-header">Price Anomaly Detection</div>
       <p style={{ color: 'var(--admin-text-muted)', marginBottom: '20px', fontSize: '0.9rem' }}>
         Products with prices significantly above or below the market average (statistical deviation) are flagged below.
+        Use "Flag" to notify the vendor and start a 3-day fix-it window.
       </p>
       <div className="admin-toolbar-row">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
@@ -1968,9 +2046,9 @@ function PriceAnomaly() {
       </div>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Product</th><th>Stall</th><th>Price</th><th>Deviation</th><th>Flag</th></tr></thead>
+          <thead><tr><th>Product</th><th>Stall</th><th>Price</th><th>Deviation</th><th>Flag</th><th>Action</th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan="5"><EmptyState message="No anomalies detected - all prices are within normal range" /></td></tr>
+            {filtered.length === 0 ? <tr><td colSpan="6"><EmptyState message="No anomalies detected - all prices are within normal range" /></td></tr>
               : filtered.map(p => (
                 <tr key={p.id}>
                   <td><strong>{p.name}</strong></td>
@@ -1978,11 +2056,71 @@ function PriceAnomaly() {
                   <td style={{ color: p.isHigh ? 'var(--verdict-dear-text)' : 'var(--gold-dark)', fontWeight: 700 }}>₱{PH(p.price)}</td>
                   <td>{p.deviation}% {p.isHigh ? 'above' : 'below'} average</td>
                   <td><span className={`status-badge ${p.isHigh ? 'status-cancelled' : 'status-pending'}`}>{p.isHigh ? 'Overpriced' : 'Underpriced'}</span></td>
+                  <td>
+                    {p.stall?.vendor_id
+                      ? <button className="btn btn-sm btn-danger" onClick={() => setFlagging(p)}>Flag</button>
+                      : <span style={{ color: 'var(--admin-text-muted)', fontSize: '0.8rem' }}>No vendor</span>}
+                  </td>
                 </tr>
               ))}
           </tbody>
         </table>
       </div>
+
+      <div className="admin-section-header" style={{ marginTop: 32 }}>Tracked Anomalies</div>
+      <p style={{ color: 'var(--admin-text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
+        Prices vendors confirmed past the warning dialog, or that you flagged manually — grouped by
+        stall so you can review everything before reactivating.
+      </p>
+      {trackedLoading ? <Skeleton count={3} height="60px" />
+        : Object.keys(trackedByStall).length === 0 ? <EmptyState message="No tracked price anomalies" />
+        : Object.entries(trackedByStall).map(([stallId, group]) => (
+          <div key={stallId} className="admin-table-wrap" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
+              <strong>{group.stall?.stall_name || `Stall #${group.stall?.stall_number}`} — {group.vendor?.full_name || group.vendor?.email || 'Unknown vendor'}</strong>
+              {group.stall?.is_active === false && group.items.some(i => i.status === 'deactivated') && (
+                <button className="btn btn-sm btn-success" onClick={() => reactivateStall(Number(stallId))}>Reactivate Stall</button>
+              )}
+            </div>
+            <table className="admin-table">
+              <thead><tr><th>Product</th><th>Flagged Price</th><th>Market Avg</th><th>Source</th><th>Status</th><th>Flagged</th></tr></thead>
+              <tbody>
+                {group.items.map(a => (
+                  <tr key={a.id}>
+                    <td>{a.product?.name || 'Unknown'}</td>
+                    <td>₱{PH(a.flagged_price)}</td>
+                    <td>{a.market_avg_price ? `₱${PH(a.market_avg_price)}` : 'N/A'}</td>
+                    <td>{a.source === 'admin_manual' ? 'Admin flag' : 'Auto (vendor confirmed)'}</td>
+                    <td><span className={`status-badge ${a.status === 'pending' ? 'status-pending' : 'status-cancelled'}`}>{a.status}</span></td>
+                    <td>{PH_DATETIME(a.flagged_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+
+      {flagging && (
+        <Modal title={`Flag ${flagging.name}`} onClose={() => { setFlagging(null); setFlagNote(''); }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--admin-text-muted)', marginBottom: 12 }}>
+            This notifies the vendor immediately and starts a 3-day window to fix the price before
+            their stall is deactivated.
+          </p>
+          <textarea
+            className="form-input"
+            rows={3}
+            placeholder="Optional note to the vendor..."
+            value={flagNote}
+            onChange={e => setFlagNote(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={() => { setFlagging(null); setFlagNote(''); }}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitFlag} disabled={flagSubmitting}>
+              {flagSubmitting ? 'Flagging...' : 'Flag & Notify Vendor'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2387,6 +2525,7 @@ function Chat() {
       const { data, error } = await supabase
         .from('conversations')
         .select('*, customer:customer_id(id, full_name, email), stall:stall_id(id, stall_name, stall_number, vendor_id)')
+        .eq('conversation_type', 'admin_vendor')
         .order('updated_at', { ascending: false });
       if (error) throw error;
       const list = data || [];
@@ -2472,9 +2611,19 @@ function Chat() {
       });
       if (insertError) throw insertError;
 
+      // Bump the vendor's unread count too — this is what the vendor
+      // app's Chats-tab badge reads. Without it, a vendor has no
+      // proactive signal that admin messaged them.
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select('vendor_unread_count')
+        .eq('id', active)
+        .single();
+
       await supabase.from('conversations').update({
         last_message: input,
         last_message_time: new Date().toISOString(),
+        vendor_unread_count: (convRow?.vendor_unread_count || 0) + 1,
       }).eq('id', active);
 
       setInput('');
@@ -2531,9 +2680,17 @@ function Chat() {
         message: imageUrl,
         is_image: true,
       });
+
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select('vendor_unread_count')
+        .eq('id', active)
+        .single();
+
       await supabase.from('conversations').update({
         last_message: '📷 Image',
         last_message_time: new Date().toISOString(),
+        vendor_unread_count: (convRow?.vendor_unread_count || 0) + 1,
       }).eq('id', active);
 
       toast({ message: 'Image sent', type: 'success' });

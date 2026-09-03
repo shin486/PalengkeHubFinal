@@ -28,12 +28,14 @@ export default function AdminTopbar({ setActiveSection }) {
           supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
           supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
           supabase.from('vendor_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('price_anomalies').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         ]);
         if (cancelled) return;
         const items = [
           { label: 'orders', text: `${r[0].count || 0} pending order${(r[0].count || 0) === 1 ? '' : 's'}`, section: 'orders' },
           { label: 'complaints', text: `${r[1].count || 0} open complaint${(r[1].count || 0) === 1 ? '' : 's'}`, section: 'complaints' },
           { label: 'applications', text: `${r[2].count || 0} vendor application${(r[2].count || 0) === 1 ? '' : 's'} awaiting review`, section: 'stalls' },
+          { label: 'anomalies', text: `${r[3].count || 0} price anomal${(r[3].count || 0) === 1 ? 'y' : 'ies'} awaiting vendor fix`, section: 'price-anomaly' },
         ].filter(a => !a.text.startsWith('0 '));
         setAlerts(items);
       } catch { /* bell stays empty on failure */ }

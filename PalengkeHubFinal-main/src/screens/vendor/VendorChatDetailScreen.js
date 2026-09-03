@@ -32,6 +32,7 @@ export default function VendorChatDetailScreen({ navigation, route }) {
   const conversationId = route.params?.conversationId;
   const customer = route.params?.customer || {};
   const stall = route.params?.stall || null;
+  const isAdminChat = route.params?.isAdminChat === true;
 
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
@@ -50,17 +51,21 @@ export default function VendorChatDetailScreen({ navigation, route }) {
     sendImage,
   } = useChat(conversationId, user, 'vendor');
 
-  // Get chat partner info for the header
-  const chatPartnerName = customerName;
-  const chatPartnerAvatar = customer?.avatar_url || null;
-  const chatPartnerSubtitle = stallInfo?.stall_number
-    ? `Stall #${stallInfo.stall_number}${stallInfo?.stall_name ? ` - ${stallInfo.stall_name}` : ''}`
-    : stallInfo?.stall_name || 'Vendor';
+  // Get chat partner info for the header — admin isn't a "customer" of
+  // this stall, so it skips the customer/stall-derived labels entirely.
+  const chatPartnerName = isAdminChat ? 'PalengkeHub Admin' : customerName;
+  const chatPartnerAvatar = isAdminChat ? null : (customer?.avatar_url || null);
+  const chatPartnerSubtitle = isAdminChat
+    ? 'Support & price review'
+    : stallInfo?.stall_number
+      ? `Stall #${stallInfo.stall_number}${stallInfo?.stall_name ? ` - ${stallInfo.stall_name}` : ''}`
+      : stallInfo?.stall_name || 'Vendor';
 
-  // Fetch stall info if not provided
+  // Fetch stall info if not provided (irrelevant for the admin thread —
+  // it's not shown, and there's no customer row to look anything up for)
   useEffect(() => {
     const fetchStallInfo = async () => {
-      if (!stall && conversationId) {
+      if (!stall && conversationId && !isAdminChat) {
         try {
           const { data, error } = await supabase
             .from('conversations')
@@ -78,7 +83,7 @@ export default function VendorChatDetailScreen({ navigation, route }) {
       }
     };
     fetchStallInfo();
-  }, [conversationId, stall]);
+  }, [conversationId, stall, isAdminChat]);
 
   //  Hide the default header
   useEffect(() => {
@@ -241,23 +246,26 @@ export default function VendorChatDetailScreen({ navigation, route }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* Suggested Messages Row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.suggestedContainer}
-          contentContainerStyle={styles.suggestedContent}
-        >
-          {suggestedMessages.map((suggested) => (
-            <TouchableOpacity
-              key={suggested.id}
-              style={styles.suggestedButton}
-              onPress={() => handleSuggestedMessage(suggested.text)}
-            >
-              <Text style={styles.suggestedText}>{suggested.text}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Suggested Messages Row — customer-service shortcuts
+            ("Confirm Payment", "Order Ready") don't apply to admin */}
+        {!isAdminChat && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.suggestedContainer}
+            contentContainerStyle={styles.suggestedContent}
+          >
+            {suggestedMessages.map((suggested) => (
+              <TouchableOpacity
+                key={suggested.id}
+                style={styles.suggestedButton}
+                onPress={() => handleSuggestedMessage(suggested.text)}
+              >
+                <Text style={styles.suggestedText}>{suggested.text}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.inputContainer}>
           <TextInput

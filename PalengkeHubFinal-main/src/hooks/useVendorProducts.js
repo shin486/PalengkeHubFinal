@@ -38,7 +38,7 @@ export const useVendorProducts = (stallId) => {
     }
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('products')
         .insert([{
           stall_id: stallId,
@@ -52,13 +52,20 @@ export const useVendorProducts = (stallId) => {
           image_url: productData.image_url || null,
  price_options: productData.price_options || null, // added
  unit_options: productData.unit_options || null, // added
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
-      
+
       Alert.alert('Success', 'Product added successfully');
       await fetchProducts();
-      return true;
+      // The created row (not just `true`) — callers that need the new
+      // product's id (e.g. to record a price-anomaly flag against it)
+      // would otherwise have no way to get it. Still truthy on success
+      // and falsy on failure, so existing `if (await addProduct(...))`
+      // callers keep working unchanged.
+      return data;
     } catch (error) {
       console.error('Error adding product:', error);
       Alert.alert('Error', error.message || 'Failed to add product');

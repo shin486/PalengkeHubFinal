@@ -37,6 +37,7 @@ import { LoginScreen } from './src/screens/auth/LoginScreen';
 import { SignUpScreen } from './src/screens/auth/SignUpScreen';
 import NotificationScreen from './src/screens/customer/NotificationScreen';
 import VendorApplicationStatusScreen from './src/screens/customer/VendorApplicationStatusScreen';
+import VendorSuspendedScreen from './src/screens/vendor/VendorSuspendedScreen';
 import VendorDashboardScreen from './src/screens/vendor/VendorDashboardScreen';
 import VendorOrdersScreen from './src/screens/vendor/VendorOrdersScreen';
 import VendorOrderDetailScreen from './src/screens/vendor/VendorOrderDetailScreen';
@@ -501,23 +502,34 @@ function RootNavigator() {
   // and it's also correct for accounts that were seeded directly in the
   // database with no application row at all, which a status-only check
   // would permanently lock out with no application for anyone to approve.
-  const [vendorApproved, setVendorApproved] = useState(null);
+  //
+  // Three-way rather than boolean: is_active=false covers two different
+  // situations that need different screens. A never-approved applicant
+  // goes to VendorApplicationStatus (ID/permit review) same as always.
+  // A vendor deactivated for an unresolved price anomaly must still be
+  // able to log in — to fix the price and to message admin — so that
+  // case gets its own VendorSuspended screen instead of being treated
+  // as "not yet approved". null = still checking (fail-closed default
+  // below sends an unverified vendor to the pending screen first).
+  const [vendorStatus, setVendorStatus] = useState(null);
 
   useEffect(() => {
     if (profile?.role !== 'vendor' || !user?.id) {
-      setVendorApproved(null);
+      setVendorStatus(null);
       return;
     }
     let cancelled = false;
     const checkApproved = async () => {
       const { data } = await supabase
         .from('stalls')
-        .select('is_active')
+        .select('is_active, deactivation_reason')
         .eq('vendor_id', user.id)
-        .eq('is_active', true)
         .limit(1)
         .maybeSingle();
-      if (!cancelled) setVendorApproved(!!data);
+      if (cancelled) return;
+      if (data?.is_active) setVendorStatus('approved');
+      else if (data?.deactivation_reason === 'price_anomaly') setVendorStatus('suspended');
+      else setVendorStatus('pending');
     };
     checkApproved();
     // This only ran once on mount, keyed on [user?.id, profile?.role] —
@@ -540,14 +552,17 @@ function RootNavigator() {
     }
   }, [isGuest]);
 
+  const vendorRouteFor = (status) =>
+    status === 'approved' ? 'VendorDashboard'
+    : status === 'suspended' ? 'VendorSuspended'
+    : 'VendorApplicationStatus';
+
   useEffect(() => {
     if (loading || !user || !global.navigationRef) return;
     // Wait for the approval check before deciding a vendor's destination.
-    if (profile?.role === 'vendor' && vendorApproved === null) return;
+    if (profile?.role === 'vendor' && vendorStatus === null) return;
 
-    const target =
-      profile?.role === 'vendor' ? (vendorApproved ? 'VendorDashboard' : 'VendorApplicationStatus')
-      : 'App';
+    const target = profile?.role === 'vendor' ? vendorRouteFor(vendorStatus) : 'App';
 
     console.log('🔀 Redirecting authenticated user to:', target);
 
@@ -555,7 +570,7 @@ function RootNavigator() {
       index: 0,
       routes: [{ name: target }],
     });
-  }, [user, profile, loading, vendorApproved]);
+  }, [user, profile, loading, vendorStatus]);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -566,7 +581,7 @@ function RootNavigator() {
   if (isGuest) {
     initialRoute = 'App';
   } else if (user && profile?.role === 'vendor') {
-    initialRoute = vendorApproved ? 'VendorDashboard' : 'VendorApplicationStatus';
+    initialRoute = vendorRouteFor(vendorStatus);
   } else if (user && profile?.role === 'consumer') {
     initialRoute = 'App';
   }
@@ -609,6 +624,11 @@ function RootNavigator() {
             that only exists on a sibling navigator's route table is a silent
             no-op, not an error. */}
         <Stack.Screen name="VendorApplicationStatus" component={VendorApplicationStatusScreen} />
+        {/* Deactivated for an unresolved price anomaly — distinct from
+            VendorApplicationStatus above (that one's for never-approved
+            applicants). Registered here for the same reason as that
+            comment explains. */}
+        <Stack.Screen name="VendorSuspended" component={VendorSuspendedScreen} />
 
         {/* Customer / Guest App */}
         <Stack.Screen name="App">
