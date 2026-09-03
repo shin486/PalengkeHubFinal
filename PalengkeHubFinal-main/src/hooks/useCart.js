@@ -278,6 +278,23 @@ export const useCart = () => {
       .eq('user_id', user.id);
   }, [cart, user]);
 
+  // Removes a specific set of items rather than the whole cart — used
+  // after checking out only a subset of the cart (per-item selection),
+  // so items the customer left unchecked stay put for later instead of
+  // getting swept away by a full clearCart().
+  const removeItems = useCallback(async (productIds) => {
+    if (!user || !productIds?.length) return;
+
+    const idSet = new Set(productIds);
+    const updatedCart = cart.filter(item => !idSet.has(item.product_id));
+    updateSharedCart(updatedCart);
+
+    await supabase
+      .from('carts')
+      .update({ items: updatedCart, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+  }, [cart, user]);
+
   const clearCart = useCallback(async () => {
     console.log(' Clearing cart');
     
@@ -326,6 +343,7 @@ export const useCart = () => {
     addToCart,
     updateQuantity,
     removeItem,
+    removeItems,
     clearCart,
     refreshCart,
   };

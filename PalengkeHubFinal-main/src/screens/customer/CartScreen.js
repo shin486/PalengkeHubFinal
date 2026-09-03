@@ -1,7 +1,7 @@
 import { useColors } from '../../contexts/ThemeContext';
 // src/screens/customer/CartScreen.js
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,16 +25,60 @@ const TABS = {
   CHECKOUT: 'checkout',
 };
 
-export default function CartScreen({ navigation }) {
+export default function CartScreen({ navigation, route }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
-  const { cart, cartTotal, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
+  const { cart, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
   const { t } = useI18n();
   const [refreshing, setRefreshing] = useState(false);
   const [hasClosedStall, setHasClosedStall] = useState(false);
   const [closedStallNames, setClosedStallNames] = useState([]);
   const [closedStallIds, setClosedStallIds] = useState([]);
   const [activeTab, setActiveTab] = useState(TABS.CART);
+
+  // Which cart items are checked in for "this checkout" — the rest stay
+  // in the cart untouched. Defaults to everything selected on a normal
+  // cart visit; arriving via ProductDetailsScreen's "Proceed to Checkout"
+  // (route.params.checkoutOnlyProductId) starts with only that one item
+  // checked, so a "buy this now" tap doesn't sweep up unrelated items the
+  // customer was saving for later.
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const selectionInitialized = useRef(false);
+  useEffect(() => {
+    if (cart.length === 0) return;
+    setSelectedIds(prev => {
+      if (!selectionInitialized.current) {
+        selectionInitialized.current = true;
+        const onlyId = route?.params?.checkoutOnlyProductId;
+        if (onlyId != null) {
+          if (route?.params?.openCheckout) setActiveTab(TABS.CHECKOUT);
+          return new Set([onlyId]);
+        }
+        return new Set(cart.map(item => item.product_id));
+      }
+      // Newly-added items (added while already on this screen) default
+      // to checked; ids no longer in the cart are harmless to leave —
+      // selection is only ever read via cart.filter(selectedIds.has(...)).
+      const next = new Set(prev);
+      let changed = false;
+      cart.forEach(item => {
+        if (!next.has(item.product_id)) { next.add(item.product_id); changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [cart, route?.params?.checkoutOnlyProductId]);
+
+  const toggleSelected = (productId) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  };
+
+  const selectedItems = cart.filter(item => selectedIds.has(item.product_id));
+  const selectedTotal = selectedItems.reduce((sum, item) => sum + (item.quantity || 1) * item.price, 0);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,6 +185,10 @@ export default function CartScreen({ navigation }) {
       Alert.alert(t('checkout.empty_cart_title'), t('checkout.empty_cart_body'));
       return;
     }
+    if (selectedItems.length === 0) {
+      Alert.alert('Nothing Selected', 'Check at least one item to check out — the rest will stay in your cart.');
+      return;
+    }
     if (hasClosedStall) {
       Alert.alert(t('cart.closed_stalls_title'), t('cart.closed_stalls_body'));
       return;
@@ -218,7 +266,22 @@ export default function CartScreen({ navigation }) {
               <View key={item.product_id} style={styles.cartItem}>
                 {/* Product name on top, full width */}
                 <View style={styles.itemTopRow}>
-                  <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                  <View style={styles.itemNameRow}>
+                    {!data.isClosed && (
+                      <TouchableOpacity
+                        onPress={() => toggleSelected(item.product_id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={selectedIds.has(item.product_id) ? 'checkbox' : 'square-outline'}
+                          size={22}
+                          color={selectedIds.has(item.product_id) ? COLORS.primary : COLORS.text.tertiary}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                  </View>
                   {!data.isClosed && (
                     <TouchableOpacity
                       style={styles.removeBtn}
@@ -318,9 +381,9 @@ export default function CartScreen({ navigation }) {
         </ScrollView>
       ) : (
         <ScrollView style={styles.scrollView}>
-          <CheckoutContent 
-            cart={cart}
-            cartTotal={cartTotal}
+          <CheckoutContent
+            cart={selectedItems}
+            cartTotal={selectedTotal}
             navigation={navigation}
             onBack={handleBackToCart}
           />
@@ -333,9 +396,11 @@ export default function CartScreen({ navigation }) {
           <View style={styles.footerRow}>
             <View style={styles.footerTotalLeft}>
               <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
-              <Text style={styles.footerTotalItems}>{cart.length} item{cart.length !== 1 ? 's' : ''}</Text>
+              <Text style={styles.footerTotalItems}>
+                {selectedItems.length} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected
+              </Text>
             </View>
-            <Text style={styles.footerTotalAmount}>₱{cartTotal.toFixed(2)}</Text>
+            <Text style={styles.footerTotalAmount}>₱{selectedTotal.toFixed(2)}</Text>
           </View>
           
           {hasClosedStall ? (
@@ -566,6 +631,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  itemNameRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingRight: 8,
   },
   itemBottomRow: {
     flexDirection: 'row',

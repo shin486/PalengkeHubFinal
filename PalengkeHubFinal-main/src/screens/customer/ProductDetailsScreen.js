@@ -709,7 +709,11 @@ export default function ProductDetailsScreen({ route, navigation }) {
       };
       
       addToCart(cartProduct, stall.id, stall, quantity);
-      navigation.navigate('Cart');
+      // checkoutOnlyProductId: CartScreen defaults selection to just this
+      // item (not the whole cart) so this is a real "buy this now"
+      // shortcut rather than accidentally sweeping in things saved for
+      // later. openCheckout jumps straight to the Checkout tab.
+      navigation.navigate('Cart', { checkoutOnlyProductId: product.id, openCheckout: true });
     }
   };
 
@@ -1365,8 +1369,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        <View style={styles.secondaryActionsRow}>
-          {!hasAcceptedHaggle && (
+        {!hasAcceptedHaggle && (
+          <View style={styles.secondaryActionsRow}>
             <Button
               variant="outline"
               size="sm"
@@ -1381,17 +1385,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
             >
               {isVendorTurn ? 'Counter Offer' : isCustomerTurn ? 'Offer Pending' : 'Make an Offer'}
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleBuyNow}
-            disabled={!product?.is_available}
-            style={{ flex: 1 }}
-          >
-            {product?.is_available ? t('products.buy_now') : 'Unavailable'}
-          </Button>
-        </View>
+          </View>
+        )}
       </View>
 
       {product.description ? (
@@ -1417,22 +1412,37 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
     </ScrollView>
 
-      {/* Sticky action bar — replaces the tab bar, not stacked on it */}
+      {/* Sticky action bar — replaces the tab bar, not stacked on it.
+          Total sits on its own row so both CTAs below get full width;
+          two "lg" buttons never fit beside a price block on phone-width
+          screens without clipping their labels. */}
       <View style={styles.stickyBar}>
         <View style={styles.stickyTotalBlock}>
           <Text style={styles.stickyTotalLabel}>Total ({quantity} x {unitSuffix})</Text>
           <Text style={styles.stickyTotalAmount}>₱{totalPrice.toFixed(2)}</Text>
         </View>
-        <Button
-          variant="primary"
-          size="lg"
-          shape="square"
-          onPress={handleAddToCart}
-          disabled={!product?.is_available}
-          style={styles.stickyCta}
-        >
-          {product?.is_available ? 'Idagdag sa Kart' : t('products.out_of_stock')}
-        </Button>
+        <View style={styles.stickyButtonRow}>
+          <Button
+            variant="outline"
+            size="md"
+            shape="square"
+            onPress={handleBuyNow}
+            disabled={!product?.is_available}
+            style={styles.stickyCta}
+          >
+            {product?.is_available ? t('cart.proceed_checkout') : 'Unavailable'}
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            shape="square"
+            onPress={handleAddToCart}
+            disabled={!product?.is_available}
+            style={styles.stickyCta}
+          >
+            {product?.is_available ? 'Idagdag sa Kart' : t('products.out_of_stock')}
+          </Button>
+        </View>
       </View>
 
       {/* Haggle Offer Modal */}
@@ -1888,20 +1898,22 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginTop: SPACING.sm,
     textAlign: 'center',
   },
-  // ── Sticky action bar (D-18): total left, one orange CTA filling the rest ──
+  // ── Sticky action bar (D-18, revised): total on its own row, then two
+  // full-width CTAs — "Proceed to Checkout" + "Idagdag sa Kart" don't both
+  // fit beside a price block without clipping on phone-width screens ──
   stickyBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.card,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    gap: SPACING.md,
+    gap: SPACING.sm,
     borderTopWidth: LAYOUT.borderWidth,
     borderTopColor: COLORS.border,
     ...SHADOWS.bar,
   },
   stickyTotalBlock: {
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
   stickyTotalLabel: {
     fontSize: TYPE.size.caption,
@@ -1911,6 +1923,10 @@ const createStyles = (COLORS) => StyleSheet.create({
   stickyTotalAmount: {
     ...TEXT_STYLES.h3,
     color: COLORS.text.primary,
+  },
+  stickyButtonRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
   },
   stickyCta: {
     flex: 1,

@@ -73,7 +73,7 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
-  const { clearCart } = useCart();
+  const { removeItems } = useCart();
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
@@ -753,7 +753,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         });
       }
 
-      clearCart();
+      // Only removes the items that were actually part of THIS checkout
+      // (the cart prop is whatever subset CartScreen passed in via its
+      // per-item selection) — anything the customer left unchecked stays
+      // in the cart for later instead of a full clearCart() sweeping it.
+      removeItems(cart.map(item => item.product_id));
       setGcashPayments(payments);
       setCurrentVendorIndex(0);
       setAllPaymentsCompleted(false);
