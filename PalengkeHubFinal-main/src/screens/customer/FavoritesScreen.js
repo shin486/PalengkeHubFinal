@@ -14,6 +14,47 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
+
+// Own component (not inline in renderProductItem, which is a plain closure
+// called from a loop — can't safely use per-item state there) so each
+// thumbnail can track its own image load failure independently. A stale
+// image_url (e.g. a leftover link from before the Supabase Storage
+// migration) rendered nothing at all with no onError handling — not
+// broken, not a placeholder, just blank space.
+const FavoriteProductThumb = ({ product, style, placeholderStyle }) => {
+  const [imageError, setImageError] = useState(false);
+  const fallbackPhoto = (!product.image_url || imageError) ? getProductFallbackPhoto(product.name) : null;
+
+  if (product.image_url && !imageError) {
+    return <Image source={{ uri: product.image_url }} style={style} onError={() => setImageError(true)} />;
+  }
+  if (fallbackPhoto) {
+    return <Image source={fallbackPhoto} style={style} resizeMode="cover" />;
+  }
+  return (
+    <View style={placeholderStyle}>
+      <Ionicons name="cart-outline" size={18} />
+    </View>
+  );
+};
+
+// Same reasoning as FavoriteProductThumb above — stalls have no curated
+// fallback photo, but still need onError so a broken image_url falls back
+// to the existing gradient/icon instead of rendering blank.
+const FavoriteStallAvatar = ({ stall, colors }) => {
+  const [imageError, setImageError] = useState(false);
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  if (stall.image_url && !imageError) {
+    return <Image source={{ uri: stall.image_url }} style={styles.stallAvatar} onError={() => setImageError(true)} />;
+  }
+  return (
+    <LinearGradient colors={[colors.primary, colors.primaryLight]} style={styles.stallAvatarGradient}>
+      <Ionicons name="storefront-outline" size={18} />
+    </LinearGradient>
+  );
+};
 
 export default function FavoritesScreen({ navigation }) {
   const COLORS = useColors();
@@ -44,13 +85,7 @@ export default function FavoritesScreen({ navigation }) {
       onPress={() => handleProductPress(product)}
       activeOpacity={0.7}
     >
-      {product.image_url ? (
-        <Image source={{ uri: product.image_url }} style={styles.productImage} />
-      ) : (
-        <View style={styles.productImagePlaceholder}>
-          <Ionicons name="cart-outline" size={18} />
-        </View>
-      )}
+      <FavoriteProductThumb product={product} style={styles.productImage} placeholderStyle={styles.productImagePlaceholder} />
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
         <Text style={styles.productPrice}>₱{parseFloat(product.price || 0).toFixed(2)}</Text>
@@ -73,13 +108,7 @@ export default function FavoritesScreen({ navigation }) {
       activeOpacity={0.7}
     >
       <View style={styles.stallAvatarContainer}>
-        {stall.image_url ? (
-          <Image source={{ uri: stall.image_url }} style={styles.stallAvatar} />
-        ) : (
-          <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.stallAvatarGradient}>
-            <Ionicons name="storefront-outline" size={18} />
-          </LinearGradient>
-        )}
+        <FavoriteStallAvatar stall={stall} colors={COLORS} />
       </View>
       <View style={styles.stallInfo}>
         <Text style={styles.stallName} numberOfLines={1}>{stall.name || 'Stall'}</Text>

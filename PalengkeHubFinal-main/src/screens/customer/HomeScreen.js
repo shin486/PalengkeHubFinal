@@ -39,6 +39,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Chip } from '../../components/ui/Chip';
 import { VerdictChip } from '../../components/ui/VerdictChip';
 import { PriceText } from '../../components/ui/PriceText';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
+import { getProductEnglishName } from '../../utils/productNameTranslations';
 import { WovenBackground } from '../../components/WovenBackground';
 
 // Tagalog first, English underneath — that is how the market is spoken.
@@ -485,6 +487,85 @@ const CategoryChip = ({ cat, styles, colors, onPress }) => {
       </View>
       <Text style={styles.categoryChipLabel} numberOfLines={1}>{cat.tagalog}</Text>
       <Text style={styles.categoryChipSubLabel} numberOfLines={1}>{cat.english}</Text>
+    </TouchableOpacity>
+  );
+};
+
+// "Presyo Check" (cheapest-per-kilo) card. item.image_url here is always a
+// real value pulled from an actual product row (see the comparisons.push
+// building it below), never empty — so unlike a plain missing-photo case,
+// the old ternary rendering `<Image>` with no onError meant a stale/dead
+// URL (e.g. a leftover ImgBB link from before the Supabase Storage
+// migration) rendered nothing at all: not broken, not a placeholder icon,
+// just blank space, since React Native shows nothing for a failed image
+// load by default. Needs its own component (not inline in the .map()
+// below) so each card can track its own load failure independently.
+const PresyoCard = ({ item, colors, styles, navigation }) => {
+  const [imageError, setImageError] = useState(false);
+  const goTo = () => item.productId
+    ? navigation.navigate('ProductDetails', { productId: item.productId })
+    : navigation.navigate('Search');
+  const fillPct = item.maxPrice > 0 ? Math.min(100, (item.minPrice / item.maxPrice) * 100) : 0;
+  const tickPct = item.maxPrice > 0 ? Math.min(100, (item.avgPrice / item.maxPrice) * 100) : 0;
+  const fallbackPhoto = (!item.image_url || imageError) ? getProductFallbackPhoto(item.name) : null;
+
+  const englishName = getProductEnglishName(item.name);
+
+  return (
+    <TouchableOpacity
+      style={styles.presyoCard}
+      activeOpacity={0.85}
+      onPress={goTo}
+    >
+      <View style={styles.presyoTopRow}>
+        {item.image_url && !imageError ? (
+          <Image
+            source={{ uri: item.image_url }}
+            style={styles.presyoImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : fallbackPhoto ? (
+          <Image source={fallbackPhoto} style={styles.presyoImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.presyoImagePlaceholder}>
+            <Ionicons name="pricetag-outline" size={22} color={colors.text.quaternary} />
+          </View>
+        )}
+        <View style={styles.presyoTitleCol}>
+          <Text style={styles.presyoName} numberOfLines={1}>{item.name}</Text>
+          {englishName && (
+            <Text style={styles.presyoSubtitle} numberOfLines={1}>{englishName}</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.presyoPriceRow}>
+        <PriceText price={item.minPrice} unit={item.unit} />
+        <VerdictChip verdict="PINAKAMURA" />
+      </View>
+
+      <View style={styles.presyoBarTrack}>
+        <View style={[styles.presyoBarFill, { width: `${fillPct}%` }]} />
+        <View style={[styles.presyoBarTick, { left: `${tickPct}%` }]} />
+      </View>
+      <View style={styles.presyoBarLabels}>
+        <Text style={styles.presyoBarLabel}>₱{item.minPrice.toFixed(0)} pinakamura</Text>
+        <Text style={styles.presyoBarLabel}>avg ₱{item.avgPrice.toFixed(0)}</Text>
+      </View>
+
+      <View style={styles.presyoFooterRow}>
+        <View style={styles.presyoStallCountRow}>
+          <Ionicons name="storefront-outline" size={13} color={colors.text.tertiary} />
+          <Text style={styles.presyoStallCount}>{item.stallCount} na stalls</Text>
+        </View>
+        <TouchableOpacity onPress={goTo} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <View style={styles.presyoCompareRow}>
+            <Text style={styles.presyoCompareText}>Ikumpara</Text>
+            <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
+          </View>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -1338,64 +1419,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            >
-              {presyoCheckItems.map((item) => {
-                const goTo = () => item.productId
-                  ? navigation.navigate('ProductDetails', { productId: item.productId })
-                  : navigation.navigate('Search');
-                const fillPct = item.maxPrice > 0 ? Math.min(100, (item.minPrice / item.maxPrice) * 100) : 0;
-                const tickPct = item.maxPrice > 0 ? Math.min(100, (item.avgPrice / item.maxPrice) * 100) : 0;
-                return (
-                  <TouchableOpacity
-                    key={item.name}
-                    style={styles.presyoCard}
-                    activeOpacity={0.85}
-                    onPress={goTo}
-                  >
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.presyoImage} resizeMode="cover" />
-                    ) : (
-                      <View style={styles.presyoImagePlaceholder}>
-                        <Ionicons name="pricetag-outline" size={26} color={colors.text.quaternary} />
-                      </View>
-                    )}
-                    <View style={styles.presyoDetails}>
-                      <Text style={styles.presyoName} numberOfLines={1}>{item.name}</Text>
-                      <View style={styles.presyoPriceRow}>
-                        <PriceText price={item.minPrice} unit={item.unit} />
-                        <VerdictChip verdict="PINAKAMURA" solid />
-                      </View>
-
-                      <View style={styles.presyoBarTrack}>
-                        <View style={[styles.presyoBarFill, { width: `${fillPct}%` }]} />
-                        <View style={[styles.presyoBarTick, { left: `${tickPct}%` }]} />
-                      </View>
-                      <View style={styles.presyoBarLabels}>
-                        <Text style={styles.presyoBarLabel}>₱{item.minPrice.toFixed(0)} pinakamura</Text>
-                        <Text style={styles.presyoBarLabel}>avg ₱{item.avgPrice.toFixed(0)}</Text>
-                      </View>
-
-                      <View style={styles.presyoFooterRow}>
-                        <View style={styles.presyoStallCountRow}>
-                          <Ionicons name="storefront-outline" size={13} color={colors.text.tertiary} />
-                          <Text style={styles.presyoStallCount}>{item.stallCount} na stalls</Text>
-                        </View>
-                        <TouchableOpacity onPress={goTo} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                          <View style={styles.presyoCompareRow}>
-                            <Text style={styles.presyoCompareText}>Ikumpara</Text>
-                            <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
-                          </View>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <View>
+              {presyoCheckItems.map((item) => (
+                <PresyoCard key={item.name} item={item} colors={colors} styles={styles} navigation={navigation} />
+              ))}
+            </View>
           </View>
         )}
 
@@ -2234,32 +2262,44 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
 
   // ── Presyo Check Cards ──
   presyoCard: {
-    width: cardWidth * 1.25,
     backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
-    overflow: 'hidden',
     borderWidth: LAYOUT.borderWidth,
     borderColor: colors.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  presyoTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   presyoImage: {
-    width: '100%',
-    height: 90,
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
   },
   presyoImagePlaceholder: {
-    width: '100%',
-    height: 90,
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.inputBg,
   },
-  presyoDetails: {
-    padding: SPACING.md,
+  presyoTitleCol: {
+    flex: 1,
   },
   presyoName: {
-    ...TEXT_STYLES.bodySmall,
+    ...TEXT_STYLES.h3,
     color: colors.text.primary,
-    marginBottom: 6,
+  },
+  presyoSubtitle: {
+    fontSize: TYPE.size.bodySmall,
+    color: colors.text.tertiary,
+    marginTop: 2,
   },
   presyoPriceRow: {
     flexDirection: 'row',

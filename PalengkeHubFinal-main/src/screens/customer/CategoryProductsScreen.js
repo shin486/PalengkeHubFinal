@@ -23,6 +23,7 @@ import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
 import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
 import { ProductCard } from '../../components/ProductCard';
 import { Chip } from '../../components/ui/Chip';
@@ -118,6 +119,35 @@ const StarRating = ({ rating, size = 12 }) => {
 // shared src/components/ProductCard.js primitive from phase 2, matching
 // HomeScreen.js (phase 4).
 
+// Own component (not inline in StallGroupCard's .map() below) so each
+// thumbnail can track its own image load failure independently. A stale
+// image_url (e.g. a leftover link from before the Supabase Storage
+// migration) rendered nothing at all with no onError handling — not
+// broken, not a placeholder, just blank space.
+const StallGroupProductThumb = ({ item, styles }) => {
+  const [imageError, setImageError] = useState(false);
+  const fallbackPhoto = (!item.image_url || imageError) ? getProductFallbackPhoto(item.name) : null;
+
+  return (
+    <View style={styles.stallGroupProductImage}>
+      {item.image_url && !imageError ? (
+        <Image
+          source={{ uri: item.image_url }}
+          style={styles.stallGroupProductImageInner}
+          resizeMode="cover"
+          onError={() => setImageError(true)}
+        />
+      ) : fallbackPhoto ? (
+        <Image source={fallbackPhoto} style={styles.stallGroupProductImageInner} resizeMode="cover" />
+      ) : (
+        <View style={styles.stallGroupProductImagePlaceholder}>
+          <Ionicons name="image-outline" size={16} color="#D1D5DB" />
+        </View>
+      )}
+    </View>
+  );
+};
+
 // ============================================================
 // STALL GROUP CARD (for grouped view)
 // ============================================================
@@ -163,19 +193,7 @@ const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewSt
               onPress={() => onProductPress(item)}
               activeOpacity={0.7}
             >
-              <View style={styles.stallGroupProductImage}>
-                {item.image_url ? (
-                  <Image 
-                    source={{ uri: item.image_url }} 
-                    style={styles.stallGroupProductImageInner}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.stallGroupProductImagePlaceholder}>
-                    <Ionicons name="image-outline" size={16} color="#D1D5DB" />
-                  </View>
-                )}
-              </View>
+              <StallGroupProductThumb item={item} styles={styles} />
               <View style={styles.stallGroupProductInfo}>
                 <Text style={styles.stallGroupProductName} numberOfLines={1}>{item.name}</Text>
                 <View style={styles.stallGroupProductPrice}>
