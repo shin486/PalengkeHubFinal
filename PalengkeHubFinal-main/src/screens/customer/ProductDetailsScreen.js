@@ -288,6 +288,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [offerPrice, setOfferPrice] = useState('');
   const [offerNote, setOfferNote] = useState('');
   const [sendingOffer, setSendingOffer] = useState(false);
+  // The live haggle_offers row for this product+customer+unit, if any —
+  // null means no open negotiation and no accepted-but-unused price.
+  const [activeHaggle, setActiveHaggle] = useState(null);
+  const [withdrawingHaggle, setWithdrawingHaggle] = useState(false);
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [stall, setStall] = useState(null);
@@ -386,6 +390,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           *,
           stalls (
             id,
+            vendor_id,
             stall_number,
             stall_name,
             section,
@@ -453,7 +458,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
       }
       const discountedPrice = getDiscountedPrice(unitOriginalPrice, promoData);
       setCurrentPrice(discountedPrice);
-      
+      fetchActiveHaggle(units[0]);
+
     } catch (error) {
       console.error('Error fetching product:', error);
       Alert.alert('Error', 'Failed to load product details');
@@ -481,6 +487,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     const newPrice = getUnitPrice(unit);
     setCurrentPrice(newPrice);
     setQuantity(1);
+    fetchActiveHaggle(unit);
   };
 
   const getUnitDisplayText = (unit) => {
@@ -516,7 +523,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     if (product && stall) {
       const cartProduct = {
         ...product,
-        price: currentPrice,
+        price: effectiveUnitPrice,
         selected_unit: selectedUnit,
         selected_unit_label: getUnitDisplayText(selectedUnit),
         selected_unit_suffix: getUnitSuffix(selectedUnit),
@@ -538,17 +545,57 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
   };
 
-  // ── Haggle: send a price offer to the stall via chat ──
+  // ── Haggle: structured offer stored in haggle_offers, not just a chat
+  // message — the vendor gets real Accept/Reject/Counter actions on their
+  // Offers tab, and an accepted offer actually changes what this specific
+  // customer pays (see fetchActiveHaggle / the price display below and
+  // useCart.js's addToCart, which applies it automatically). ──
+  const fetchActiveHaggle = async (unit) => {
+    if (!user || !productId || !unit) { setActiveHaggle(null); return; }
+    try {
+      const { data, error } = await supabase
+        .from('haggle_offers')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('customer_id', user.id)
+        .eq('unit', unit)
+        .in('status', ['pending', 'accepted'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      // Postgres numeric columns come back as strings over PostgREST —
+      // normalized here so every .toFixed() on activeHaggle.current_price
+      // below can trust it's an actual number.
+      setActiveHaggle(data ? { ...data, current_price: Number(data.current_price), listed_price: Number(data.listed_price) } : null);
+    } catch (err) {
+      // Table may not exist yet if the migration hasn't been run —
+      // haggling just isn't offered rather than crashing the page.
+      console.warn('fetchActiveHaggle failed:', err.message);
+      setActiveHaggle(null);
+    }
+  };
+
+  // Vendor's turn to respond -> customer can only counter (never accept
+  // directly here; only the vendor's own Accept on their Offers tab locks
+  // in a price — see the PLAN.md-equivalent conversation this was
+  // designed from). Prefilled with the vendor's own counter so a customer
+  // happy with it can just hit Send to effectively agree.
+  const isVendorTurn = activeHaggle?.status === 'pending' && activeHaggle?.last_offered_by === 'vendor';
+  const isCustomerTurn = activeHaggle?.status === 'pending' && activeHaggle?.last_offered_by === 'customer';
+  const hasAcceptedHaggle = activeHaggle?.status === 'accepted';
+
   const submitOffer = async () => {
     const offerNum = parseFloat(offerPrice);
     if (isNaN(offerNum) || offerNum <= 0) {
       Alert.alert('Invalid Offer', 'Please enter a valid offer amount.');
       return;
     }
-    if (offerNum >= currentPrice) {
+    const referencePrice = isVendorTurn ? activeHaggle.current_price : currentPrice;
+    if (offerNum >= referencePrice) {
       Alert.alert(
         'Offer Too High',
-        `Your offer (₱${offerNum.toFixed(2)}) is not lower than the listed price (₱${currentPrice.toFixed(2)}). Just add to cart instead! 😊`
+        `Your offer (₱${offerNum.toFixed(2)}) is not lower than ${isVendorTurn ? "the vendor's counter" : 'the listed price'} (₱${referencePrice.toFixed(2)}). Just add to cart instead! 😊`
       );
       return;
     }
@@ -556,39 +603,77 @@ export default function ProductDetailsScreen({ route, navigation }) {
       Alert.alert('Login Required', 'Please login to make an offer.');
       return;
     }
-    if (!stall?.id) {
+    if (!stall?.id || !stall?.vendor_id) {
       Alert.alert('Error', 'Stall information unavailable.');
       return;
     }
 
     setSendingOffer(true);
     try {
-      const conversation = await chatService.getOrCreateConversation(user.id, stall.id);
-      const message = [
-        '🤝 HAGGLE OFFER',
-        `Product: ${product.name}`,
-        `Listed price: ₱${currentPrice.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`,
-        `Quantity: ${quantity}`,
-        `My offer: ₱${offerNum.toFixed(2)} each`,
-        offerNote.trim() ? `Note: ${offerNote.trim()}` : null,
-        '',
-        'Reply here to accept or counter my offer. 🙏',
-      ].filter(Boolean).join('\n');
+      if (isVendorTurn) {
+        // Countering the vendor's counter — same negotiation, ball back
+        // in the vendor's court.
+        const { error } = await supabase
+          .from('haggle_offers')
+          .update({ current_price: offerNum, last_offered_by: 'customer' })
+          .eq('id', activeHaggle.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('haggle_offers').insert({
+          product_id: product.id,
+          stall_id: stall.id,
+          customer_id: user.id,
+          vendor_id: stall.vendor_id,
+          listed_price: currentPrice,
+          unit: selectedUnit,
+          current_price: offerNum,
+          last_offered_by: 'customer',
+          status: 'pending',
+        });
+        if (error) throw error;
+      }
 
-      await chatService.sendMessage(conversation.id, user.id, 'customer', message);
+      // Best-effort nudge so the vendor notices — the Offers tab (not this
+      // message) is the actual source of truth for accept/reject/counter.
+      try {
+        const conversation = await chatService.getOrCreateConversation(user.id, stall.id);
+        await chatService.sendMessage(
+          conversation.id, user.id, 'customer',
+          `🤝 Sent a price offer on ${product.name}: ₱${offerNum.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}. Check your Offers tab to respond.`
+        );
+      } catch (chatErr) {
+        console.warn('Offer chat nudge failed (non-fatal):', chatErr.message);
+      }
+
       hapticSuccess();
       setOfferVisible(false);
       setOfferPrice('');
       setOfferNote('');
-      Alert.alert('Offer Sent! 🤝', 'Your offer was sent to the vendor. Track their reply in Chats.', [
-        { text: 'View Chats', onPress: () => navigation.navigate('ChatDetail', { conversationId: conversation.id, stall, vendor: stall?.profiles || null }) },
-        { text: 'OK' },
-      ]);
+      await fetchActiveHaggle(selectedUnit);
+      Alert.alert('Offer Sent! 🤝', "The vendor will accept, reject, or counter it — you'll see their answer here.");
     } catch (err) {
       console.error('Failed to send offer:', err);
       Alert.alert('Error', 'Could not send your offer. Please try again.');
     } finally {
       setSendingOffer(false);
+    }
+  };
+
+  const withdrawOffer = async () => {
+    if (!activeHaggle) return;
+    setWithdrawingHaggle(true);
+    try {
+      const { error } = await supabase
+        .from('haggle_offers')
+        .update({ status: 'cancelled' })
+        .eq('id', activeHaggle.id);
+      if (error) throw error;
+      setActiveHaggle(null);
+    } catch (err) {
+      console.error('Failed to withdraw offer:', err);
+      Alert.alert('Error', 'Could not withdraw your offer. Please try again.');
+    } finally {
+      setWithdrawingHaggle(false);
     }
   };
 
@@ -614,7 +699,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     if (product && stall) {
       const cartProduct = {
         ...product,
-        price: currentPrice,
+        price: effectiveUnitPrice,
         selected_unit: selectedUnit,
         selected_unit_label: getUnitDisplayText(selectedUnit),
         selected_unit_suffix: getUnitSuffix(selectedUnit),
@@ -796,7 +881,11 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
   const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
 
-  const totalPrice = currentPrice * quantity;
+  // What this customer actually pays right now — the listed/promo price,
+  // unless they have a vendor-accepted haggle on this exact unit, which
+  // useCart.js's addToCart independently re-verifies and applies too.
+  const effectiveUnitPrice = hasAcceptedHaggle ? activeHaggle.current_price : currentPrice;
+  const totalPrice = effectiveUnitPrice * quantity;
 
   if (loading) {
     return (
@@ -1246,21 +1335,53 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Haggle status — visible only to this customer (the vendor sees
+            the same negotiation on their own Offers tab); nobody else. */}
+        {hasAcceptedHaggle && (
+          <View style={styles.haggleBanner}>
+            <Ionicons name="pricetag" size={16} color={COLORS.success} />
+            <Text style={styles.haggleBannerText}>
+              Your haggled price: <Text style={{ fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
+            </Text>
+          </View>
+        )}
+        {isCustomerTurn && (
+          <View style={styles.haggleBanner}>
+            <Ionicons name="time-outline" size={16} color={COLORS.text.tertiary} />
+            <Text style={styles.haggleBannerText}>
+              Offer sent: ₱{activeHaggle.current_price.toFixed(2)} / {getUnitDisplayText(selectedUnit)} — waiting for the vendor
+            </Text>
+            <TouchableOpacity onPress={withdrawOffer} disabled={withdrawingHaggle} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.haggleWithdrawText}>{withdrawingHaggle ? '...' : 'Withdraw'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {isVendorTurn && (
+          <View style={[styles.haggleBanner, { backgroundColor: COLORS.warningLight || COLORS.inputBg }]}>
+            <Ionicons name="swap-horizontal" size={16} color={COLORS.warning || COLORS.text.primary} />
+            <Text style={styles.haggleBannerText}>
+              Vendor countered: <Text style={{ fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.secondaryActionsRow}>
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.text.primary} />}
-            onPress={() => {
-              hapticLight();
-              setOfferPrice((currentPrice * 0.9).toFixed(2));
-              setOfferVisible(true);
-            }}
-            disabled={!product?.is_available}
-            style={{ flex: 1 }}
-          >
-            Make an Offer
-          </Button>
+          {!hasAcceptedHaggle && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.text.primary} />}
+              onPress={() => {
+                hapticLight();
+                setOfferPrice(isVendorTurn ? activeHaggle.current_price.toFixed(2) : (currentPrice * 0.9).toFixed(2));
+                setOfferVisible(true);
+              }}
+              disabled={!product?.is_available || isCustomerTurn}
+              style={{ flex: 1 }}
+            >
+              {isVendorTurn ? 'Counter Offer' : isCustomerTurn ? 'Offer Pending' : 'Make an Offer'}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1324,9 +1445,11 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <View style={styles.offerOverlay}>
           <View style={[styles.offerSheet, { backgroundColor: COLORS.surface }]}>
             <View style={styles.offerHandle} />
-            <Text style={styles.offerTitle}>Make an Offer 🤝</Text>
+            <Text style={styles.offerTitle}>{isVendorTurn ? 'Counter Their Offer 🤝' : 'Make an Offer 🤝'}</Text>
             <Text style={styles.offerSubtitle}>
-              {product?.name} · Listed at ₱{currentPrice.toFixed(2)} / {getUnitDisplayText(selectedUnit)}
+              {product?.name} · {isVendorTurn
+                ? `Vendor's counter: ₱${activeHaggle.current_price.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`
+                : `Listed at ₱${currentPrice.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`}
             </Text>
 
             <Text style={styles.offerLabel}>Your offer per unit</Text>
@@ -1342,7 +1465,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
               />
             </View>
             <Text style={styles.offerHint}>
-              Offers are sent to the vendor via chat — they can accept or counter.
+              {isVendorTurn
+                ? "Happy with their price? Send the same amount back and they can accept it. Only the vendor's Accept locks in a deal."
+                : 'Sent straight to the vendor — they can accept, reject, or counter.'}
             </Text>
 
             <TouchableOpacity
@@ -1656,6 +1781,26 @@ const createStyles = (COLORS) => StyleSheet.create({
   secondaryActionsRow: {
     flexDirection: 'row',
     gap: SPACING.md,
+  },
+  haggleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.successLight || COLORS.inputBg,
+    borderRadius: 12,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  haggleBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text.primary,
+  },
+  haggleWithdrawText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.error,
   },
   stallSection: {
     marginTop: SPACING.sm,

@@ -638,7 +638,7 @@ export default function VendorDashboardScreen({ navigation }) {
                 the header above, both opening the same VendorNotifications
                 screen. */}
             <TouchableOpacity
-              style={[styles.quickAction, styles.quickActionFull]}
+              style={styles.quickAction}
               onPress={() => navigation.navigate('VendorReports')}
               activeOpacity={0.7}
             >
@@ -646,6 +646,16 @@ export default function VendorDashboardScreen({ navigation }) {
                 <Ionicons name="bar-chart-outline" size={24} color={COLORS.info} />
               </View>
               <Text style={styles.quickActionLabel}>Reports</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={() => navigation.navigate('VendorOffers')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.warningLight }]}>
+                <Ionicons name="pricetags-outline" size={24} color={COLORS.warning} />
+              </View>
+              <Text style={styles.quickActionLabel}>Offers</Text>
             </TouchableOpacity>
           </View>
         </View>

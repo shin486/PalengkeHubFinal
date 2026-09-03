@@ -152,6 +152,35 @@ export const useCart = () => {
       original_price: item.original_price || item.price
     };
 
+    // A vendor-accepted haggle overrides whatever price the caller
+    // computed — looked up fresh here (not trusted from the screen that
+    // called addToCart) so the discount applies no matter which screen
+    // added this product, and can't be spoofed by a stale client price.
+    // Scoped to this exact customer + product + unit, matching how the
+    // offer was made; haggle_offer_id lets checkout mark it 'used' once
+    // the order is actually placed, so it reverts to the normal price.
+    try {
+      const { data: haggle } = await supabase
+        .from('haggle_offers')
+        .select('id, current_price')
+        .eq('product_id', item.id)
+        .eq('customer_id', user.id)
+        .eq('unit', newItem.selected_unit)
+        .eq('status', 'accepted')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (haggle) {
+        // Postgres numeric columns come back as strings over PostgREST —
+        // normalized so downstream .toFixed() calls on cart item prices
+        // (checkout, cart screen) don't break on a string.
+        newItem.price = Number(haggle.current_price);
+        newItem.haggle_offer_id = haggle.id;
+      }
+    } catch (haggleErr) {
+      console.warn('Haggle price lookup failed (non-fatal):', haggleErr.message);
+    }
+
     const existingItemIndex = cart.findIndex(cartItem => cartItem.product_id === item.id);
     let updatedCart;
     
@@ -159,7 +188,12 @@ export const useCart = () => {
       updatedCart = [...cart];
       updatedCart[existingItemIndex] = {
         ...updatedCart[existingItemIndex],
-        quantity: updatedCart[existingItemIndex].quantity + quantity
+        quantity: updatedCart[existingItemIndex].quantity + quantity,
+        // Re-applied on every add, not just the first — a haggle accepted
+        // after this item was already in the cart would otherwise stay
+        // invisible until the item was removed and re-added.
+        price: newItem.price,
+        haggle_offer_id: newItem.haggle_offer_id,
       };
     } else {
       updatedCart = [...cart, newItem];

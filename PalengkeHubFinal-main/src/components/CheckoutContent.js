@@ -707,6 +707,21 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
         if (error) throw error;
 
+        // Placing the order is what "spends" an accepted haggle — it
+        // reverts to the normal listed price after this, per how the
+        // feature was designed (one use per acceptance, consumed at
+        // checkout regardless of whether the order later gets cancelled).
+        const haggleIdsForStall = cart
+          .filter(item => item.stall_id === Number(stallId) && item.haggle_offer_id)
+          .map(item => item.haggle_offer_id);
+        if (haggleIdsForStall.length) {
+          const { error: haggleUseError } = await supabase
+            .from('haggle_offers')
+            .update({ status: 'used', used_order_id: order.id })
+            .in('id', haggleIdsForStall);
+          if (haggleUseError) console.warn('Failed to mark haggle(s) as used:', haggleUseError.message);
+        }
+
         // Fetch the vendor's CURRENT GCash details rather than trusting
         // data.stall (a snapshot frozen onto the cart item back when it was
         // added — a cart can sit for hours/days, and if the vendor updates
