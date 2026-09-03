@@ -20,6 +20,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
 import { shareProduct } from '../../services/shareService';
@@ -276,6 +277,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }, [announceActiveScreen])
   );
 
+  // Tracks a broken/expired image_url so the render below can fall
+  // through to the curated fallback photo instead of a dead image.
+  const [imageError, setImageError] = useState(false);
+
   // Micro-interaction: spring pulse on the wishlist heart
   const heartScale = useRef(new Animated.Value(1)).current;
   // Haggle offer sheet
@@ -400,6 +405,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
       
       setProduct(productData);
       setStall(productData.stalls);
+      setImageError(false);
 
       // 1b. Fetch price history trend (Bumaba/Tumaas badge)
       fetchPriceTrends([productId]).then((trends) => {
@@ -828,11 +834,24 @@ export default function ProductDetailsScreen({ route, navigation }) {
       <Ionicons name="arrow-back" size={22} color={COLORS.onInk} />
     </TouchableOpacity>
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-      {/* Product Image — full bleed, bottom corners only */}
+      {/* Product Image — full bleed, bottom corners only.
+          Same three-tier fallback as ProductCard.js (real photo -> curated
+          fallback photo -> generic icon): this screen previously jumped
+          straight from a real image_url to the bare icon, so a product
+          with no vendor photo showed a nice category photo on every grid
+          card and then a plain gray cart icon the instant you tapped in —
+          and a broken/expired image_url had no fallback at all. */}
       <View style={styles.imageContainer}>
-        {product.image_url ? (
+        {product.image_url && !imageError ? (
           <Image
             source={{ uri: product.image_url }}
+            style={styles.productImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : getProductFallbackPhoto(product.name) ? (
+          <Image
+            source={getProductFallbackPhoto(product.name)}
             style={styles.productImage}
             resizeMode="cover"
           />
