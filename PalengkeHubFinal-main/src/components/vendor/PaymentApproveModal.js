@@ -3,7 +3,7 @@
 // they reviewed the receipt AND checked their own GCash app for the incoming
 // amount + reference before the payment can be marked as verified.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { vendorColors, vendorSpacing, vendorBorderRadius, vendorShadows } from '../../theme/vendorTheme';
+import { useVendorColors, vendorSpacing, vendorBorderRadius, vendorShadows } from '../../theme/vendorTheme';
 
 const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm }) => {
+  const vendorColors = useVendorColors();
+  const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const [checkedReceipt, setCheckedReceipt] = useState(false);
   const [checkedGcash, setCheckedGcash] = useState(false);
 
@@ -117,7 +119,10 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
 };
 
 
-const styles = StyleSheet.create({
+// Was a plain module-level StyleSheet.create keyed off the static
+// (light-mode-only) vendorColors import — see VendorOrderDetailScreen.js
+// for the same fix and why.
+const createStyles = (vendorColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',

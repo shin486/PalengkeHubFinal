@@ -43,6 +43,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   const HINT_COLORS = { high: COLORS.error, low: COLORS.warning, fair: COLORS.success };
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const MAX_PHOTOS = 3;
 
   // Base form data
   const [formData, setFormData] = useState({
@@ -53,6 +54,11 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     category: '',
     image_url: '',
   });
+
+  // Up to MAX_PHOTOS vendor photos. image_url (above) always mirrors
+  // images[0] so every other screen that still reads the single legacy
+  // field (cards, search results, cart, related products) keeps working.
+  const [images, setImages] = useState([]);
 
   // Unit prices for different options
   const [unitPrices, setUnitPrices] = useState({});
@@ -92,6 +98,11 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
         category: editingProduct.category || '',
         image_url: editingProduct.image_url || '',
       });
+      setImages(
+        Array.isArray(editingProduct.image_urls) && editingProduct.image_urls.length > 0
+          ? editingProduct.image_urls
+          : editingProduct.image_url ? [editingProduct.image_url] : []
+      );
 
       if (editingProduct.price_options && typeof editingProduct.price_options === 'object') {
         setUnitPrices(editingProduct.price_options);
@@ -113,12 +124,16 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
         category: '',
         image_url: '',
       });
+      setImages([]);
       setUnitPrices({});
       setSelectedUnits(['kg', '500g', '250g']);
     }
   }, [editingProduct]);
 
   const pickImage = async () => {
+    const remaining = MAX_PHOTOS - images.length;
+    if (remaining <= 0) return;
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== 'granted') {
@@ -128,60 +143,71 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsMultipleSelection: remaining > 1,
+      selectionLimit: remaining,
+      allowsEditing: remaining === 1,
       aspect: [1, 1],
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      await uploadProductImage(result.assets[0].uri);
+    if (!result.canceled && result.assets?.length > 0) {
+      await uploadProductImages(result.assets.slice(0, remaining).map(a => a.uri));
     }
+  };
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   // Uploads to Supabase Storage — was previously sent to ImgBB (a
   // third-party host with an API key hardcoded in the client bundle,
   // no ownership tie to the vendor/product, files not under our control).
-  const uploadProductImage = async (uri) => {
+  const uploadProductImages = async (uris) => {
     setUploadingImage(true);
     try {
-      console.log(' Uploading product image:', uri);
+      const uploaded = [];
+      for (const uri of uris) {
+        console.log(' Uploading product image:', uri);
 
-      // fetch(uri).blob() is unreliable on Android for the content:// URIs
-      // the image picker can return — it fails silently for some
-      // pickers/OS versions. Reading the file as base64 and decoding to an
-      // ArrayBuffer works consistently on both platforms. expo-file-system
-      // has no web implementation of readAsStringAsync at all, so this used
-      // to reject on every web upload — same fix as the profile avatar and
-      // vendor document uploads.
-      let blob;
-      if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        blob = await response.blob();
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        blob = decodeBase64(base64);
+        // fetch(uri).blob() is unreliable on Android for the content:// URIs
+        // the image picker can return — it fails silently for some
+        // pickers/OS versions. Reading the file as base64 and decoding to an
+        // ArrayBuffer works consistently on both platforms. expo-file-system
+        // has no web implementation of readAsStringAsync at all, so this used
+        // to reject on every web upload — same fix as the profile avatar and
+        // vendor document uploads.
+        let blob;
+        if (Platform.OS === 'web') {
+          const response = await fetch(uri);
+          blob = await response.blob();
+        } else {
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          blob = decodeBase64(base64);
+        }
+        const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
+        const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+        const path = `product_images/${user?.id || 'unknown'}/${Date.now()}-${uploaded.length}.${ext}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('vendor_documents')
+          .upload(path, blob, { cacheControl: '3600', upsert: false, contentType });
+        if (uploadError) throw uploadError;
+
+        // vendor_documents is a private bucket — a long-lived signed URL is
+        // used since getPublicUrl() 400s for any request without an auth
+        // header (which every customer browsing products never sends).
+        const { data: urlData, error: signError } = await supabase.storage
+          .from('vendor_documents')
+          .createSignedUrl(uploadData.path, SIGNED_URL_TTL_SECONDS);
+        if (signError) throw signError;
+        console.log(' Product image uploaded:', urlData.signedUrl);
+        uploaded.push(urlData.signedUrl);
       }
-      const ext = uri.split('.').pop()?.split('?')[0] || 'jpg';
-      const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
-      const path = `product_images/${user?.id || 'unknown'}/${Date.now()}.${ext}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('vendor_documents')
-        .upload(path, blob, { cacheControl: '3600', upsert: false, contentType });
-      if (uploadError) throw uploadError;
 
-      // vendor_documents is a private bucket — a long-lived signed URL is
-      // used since getPublicUrl() 400s for any request without an auth
-      // header (which every customer browsing products never sends).
-      const { data: urlData, error: signError } = await supabase.storage
-        .from('vendor_documents')
-        .createSignedUrl(uploadData.path, SIGNED_URL_TTL_SECONDS);
-      if (signError) throw signError;
-      const imageUrl = urlData.signedUrl;
-      console.log(' Product image uploaded:', imageUrl);
-
-      setFormData(prev => ({ ...prev, image_url: imageUrl }));
-
-      Alert.alert('Success', 'Product image uploaded successfully!');
+      setImages(prev => {
+        const next = [...prev, ...uploaded].slice(0, MAX_PHOTOS);
+        setFormData(f => ({ ...f, image_url: next[0] || '' }));
+        return next;
+      });
     } catch (error) {
       console.error('Error uploading product image:', error);
       Alert.alert('Error', 'Failed to upload image. Please try again.');
@@ -264,7 +290,8 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       price: parsedPrice,
       unit: formData.unit,
       category: formData.category,
-      image_url: formData.image_url,
+      image_url: images[0] || '',
+      image_urls: images.length > 0 ? images : null,
       price_options: Object.keys(priceOptions).length > 0 ? priceOptions : null,
       unit_options: selectedUnits,
       is_available: editingProduct ? editingProduct.is_available : true,
@@ -291,28 +318,44 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
           </Text>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Product Image */}
-            <Text style={styles.label}>Product Image</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-              {formData.image_url ? (
-                <Image
-                  source={{ uri: formData.image_url }}
-                  style={styles.productImage}
- onError={() => console.log(' Image failed to load')}
- onLoad={() => console.log(' Image loaded')}
-                />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="image-outline" size={44} color={COLORS.text.quaternary} />
-                  <Text style={styles.imagePlaceholderText}>Tap to add image</Text>
+            {/* Product Photos — up to MAX_PHOTOS, shown swipeable to customers */}
+            <Text style={styles.label}>Product Photos</Text>
+            <Text style={styles.subLabel}>
+              Add {MAX_PHOTOS === 1 ? '1 photo' : `up to ${MAX_PHOTOS} photos`} — customers can swipe through them
+            </Text>
+            <View style={styles.photoRow}>
+              {images.map((uri, index) => (
+                <View key={uri + index} style={styles.photoTile}>
+                  <Image source={{ uri }} style={styles.productImage} />
+                  <TouchableOpacity
+                    style={styles.photoRemoveButton}
+                    onPress={() => removeImage(index)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={14} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  {index === 0 && (
+                    <View style={styles.photoCoverBadge}>
+                      <Text style={styles.photoCoverBadgeText}>Cover</Text>
+                    </View>
+                  )}
                 </View>
+              ))}
+              {images.length < MAX_PHOTOS && (
+                <TouchableOpacity style={[styles.photoTile, styles.imagePicker]} onPress={pickImage} disabled={uploadingImage}>
+                  <View style={styles.imagePlaceholder}>
+                    {uploadingImage ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="add" size={28} color={COLORS.text.quaternary} />
+                        <Text style={styles.imagePlaceholderText}>Add photo</Text>
+                      </>
+                    )}
+                  </View>
+                </TouchableOpacity>
               )}
-              {uploadingImage && (
-                <View style={styles.uploadOverlay}>
-                  <ActivityIndicator size="large" color="#FFFFFF" />
-                </View>
-              )}
-            </TouchableOpacity>
+            </View>
 
             {/* Product Name */}
             <Text style={styles.label}>Product Name *</Text>
@@ -576,10 +619,19 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
-  imagePicker: {
+  photoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
     marginBottom: 16,
+  },
+  photoTile: {
+    width: 96,
+    height: 96,
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  imagePicker: {
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: 'dashed',
@@ -587,11 +639,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   productImage: {
     width: '100%',
-    height: 200,
+    height: '100%',
     resizeMode: 'cover',
   },
   imagePlaceholder: {
-    height: 150,
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.background,
@@ -601,18 +654,34 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginBottom: 8,
   },
   imagePlaceholderText: {
-    fontSize: 14,
+    fontSize: 11,
     color: COLORS.text.tertiary,
+    marginTop: 4,
   },
-  uploadOverlay: {
+  photoRemoveButton: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  photoCoverBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+  },
+  photoCoverBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   categoryContainer: {
     flexDirection: 'row',

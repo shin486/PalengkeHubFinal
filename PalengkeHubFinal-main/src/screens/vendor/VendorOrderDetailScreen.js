@@ -1,5 +1,5 @@
 // src/screens/vendor/VendorOrderDetailScreen.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import { Header } from '../../components/Header';
 import {
-  vendorColors,
+  useVendorColors,
   vendorSpacing,
   vendorBorderRadius,
   vendorShadows,
@@ -68,6 +68,8 @@ const getTimeline = (status) => {
 };
 
 export default function VendorOrderDetailScreen({ navigation, route }) {
+  const vendorColors = useVendorColors();
+  const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const { orderId } = route.params || {};
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -673,7 +675,12 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+// Was a plain module-level StyleSheet.create keyed off the static
+// (light-mode-only) vendorColors import — that bakes the colors in once
+// at file-load time, so this screen never responded to a dark-mode
+// toggle no matter what the rest of the app did. Now a function called
+// per-render with the theme-aware useVendorColors() hook result below.
+const createStyles = (vendorColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: vendorColors.background,

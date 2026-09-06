@@ -1,4 +1,4 @@
-import { useColors } from '../../contexts/ThemeContext';
+import { useColors, useTheme } from '../../contexts/ThemeContext';
 // src/screens/customer/CategoryProductsScreen.js
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -29,6 +29,8 @@ import { ProductCard } from '../../components/ProductCard';
 import { Chip } from '../../components/ui/Chip';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { CATEGORY_CHIPS_BY_NAME, CATEGORY_TONES } from '../../constants/categoryChips';
+import { WovenBackground } from '../../components/WovenBackground';
 
 const { width } = Dimensions.get('window');
 // D-08: 2 columns at 375px, widening on larger (web) viewports rather than
@@ -36,41 +38,11 @@ const { width } = Dimensions.get('window');
 const numColumns = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
 const gridCardWidthPct = `${Math.floor(100 / numColumns) - 2}%`;
 
-// ============================================================
-// CATEGORY CONFIG
-// ============================================================
-const CATEGORY_CONFIG = {
-  'Vegetables': {
-    icon: 'leaf',
-    description: 'Fresh vegetables from Lipa City Public Market',
-    emoji: 'leaf',
-  },
-  'Meat': {
-    icon: 'restaurant',
-    description: 'Premium meat cuts from trusted vendors',
-    emoji: 'restaurant',
-  },
-  'Rice': {
-    icon: 'cafe',
-    description: 'Daily rice essentials from local suppliers',
-    emoji: 'restaurant-outline',
-  },
-  'Fruits': {
-    icon: 'basket',
-    description: 'Sweet and fresh fruits from the market',
-    emoji: 'nutrition',
-  },
-  'Poultry': {
-    icon: 'egg',
-    description: 'Farm fresh poultry products',
-    emoji: 'egg',
-  },
-  'Other': {
-    icon: 'apps',
-    description: 'More products from Lipa City Public Market',
-    emoji: 'cube-outline',
-  },
-};
+// CATEGORY_CONFIG used to be its own hand-maintained copy of icon +
+// description, kept in sync with HomeScreen.js's category chips "by
+// convention" only — which is exactly how its icon drifted from what
+// HomeScreen actually shows. Now reads from the same shared list
+// (src/constants/categoryChips.js) HomeScreen imports too.
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -274,6 +246,7 @@ const SkeletonLoader = () => {
 // ============================================================
 export default function CategoryProductsScreen({ route, navigation }) {
   const COLORS = useColors();
+  const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
 
   // See ChatDetailScreen.js for why this screen announces itself directly
@@ -299,7 +272,10 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const { user, isGuest } = useAuth();
   const { addToCart } = useCart();
 
-  const config = CATEGORY_CONFIG[categoryName] || CATEGORY_CONFIG['Other'];
+  const config = CATEGORY_CHIPS_BY_NAME[categoryName] || CATEGORY_CHIPS_BY_NAME['Other'];
+  const tone = CATEGORY_TONES[config.tone] || CATEGORY_TONES.neutral;
+  const [headerImageError, setHeaderImageError] = useState(false);
+  const showHeaderImage = config.image && !headerImageError;
   const sortOptions = [
     { label: 'Recommended', value: 'recommended' },
     { label: 'Lowest Price', value: 'price_asc' },
@@ -509,6 +485,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
+        <WovenBackground isDark={isDark} />
         <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
         <SkeletonLoader />
       </View>
@@ -529,6 +506,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
+      <WovenBackground isDark={isDark} />
       <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.background} />
 
       {/* ============================================================
@@ -544,8 +522,17 @@ export default function CategoryProductsScreen({ route, navigation }) {
         </TouchableOpacity>
 
         <View style={styles.headerContent}>
-          <View style={styles.headerIconContainer}>
-            <Ionicons name={config.icon} size={32} color={COLORS.primary} />
+          <View style={[styles.headerIconContainer, { backgroundColor: tone.bg(COLORS) }]}>
+            {showHeaderImage ? (
+              <Image
+                source={config.image}
+                style={styles.headerIconImage}
+                resizeMode="contain"
+                onError={() => setHeaderImageError(true)}
+              />
+            ) : (
+              <Ionicons name={config.icon} size={32} color={tone.icon(COLORS)} />
+            )}
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -724,7 +711,10 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
 
   header: {
-    backgroundColor: COLORS.surface,
+    // No opaque backgroundColor here on purpose — this used to be a
+    // solid COLORS.surface fill, which sat on top of and completely hid
+    // the WovenBackground texture added below it, leaving the header
+    // area looking flat/plain against the textured content underneath.
     paddingTop: Platform.OS === 'ios' ? 50 : 30,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.lg,
@@ -747,6 +737,10 @@ const createStyles = (COLORS) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
+  },
+  headerIconImage: {
+    width: 36,
+    height: 36,
   },
   headerEmoji: {
     fontSize: 32,

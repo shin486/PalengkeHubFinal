@@ -17,5 +17,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Explicit rather than relying on the library default — Google/Facebook
+    // OAuth (AuthContext.js's signInWithOAuthProvider) exchanges the
+    // returned URL via exchangeCodeForSession(), which expects a `code`
+    // query param. That's the PKCE flow's shape, not the older implicit
+    // flow's #access_token fragment.
+    flowType: 'pkce',
   },
 })

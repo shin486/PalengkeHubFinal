@@ -407,6 +407,13 @@ export const TYPE = {
 export const TEXT_STYLES = {
   priceHero: { fontSize: TYPE.size.priceHero, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.black, letterSpacing: TYPE.letterSpacing.price },
   price: { fontSize: TYPE.size.h2, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.black, letterSpacing: -0.3 },
+  // TYPE.size.display existed on its own for a while with no styled
+  // entry here to go with it — ProductDetailsScreen's `...TEXT_STYLES.display`
+  // was silently spreading `undefined` (a no-op, not an error), so the
+  // product title rendered with no font styling applied at all: default
+  // system font/weight instead of Baloo 2, which is what "the font looks
+  // off" on that screen actually was.
+  display: { fontSize: TYPE.size.display, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
   h1: { fontSize: TYPE.size.h1, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
   h2: { fontSize: TYPE.size.h2, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },
   h3: { fontSize: TYPE.size.h3, fontFamily: 'Baloo2_800ExtraBold', fontWeight: TYPE.weight.bold },

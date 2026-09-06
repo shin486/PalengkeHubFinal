@@ -1,15 +1,17 @@
 // src/components/vendor/ModernProductCard.js
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Switch, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  vendorColors,
+  useVendorColors,
   vendorSpacing,
   vendorBorderRadius,
   vendorShadows,
 } from '../../theme/vendorTheme';
 
 const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onPress }) => {
+  const vendorColors = useVendorColors();
+  const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const handleDelete = () => {
     Alert.alert(
       'Delete Product',
@@ -83,7 +85,11 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
 
 export const ModernProductCard = memo(ProductCardInner);
 
-const styles = StyleSheet.create({
+// Was a plain module-level StyleSheet.create keyed off the static
+// (light-mode-only) vendorColors import — see VendorOrderDetailScreen.js
+// for the same fix and why. This is the card rendered per-product in
+// the vendor's Products list.
+const createStyles = (vendorColors) => StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: vendorColors.surface,

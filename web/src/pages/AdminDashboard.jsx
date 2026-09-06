@@ -2552,6 +2552,85 @@ function Chat() {
   }, []);
   useEffect(() => { loadConvs(); }, [loadConvs]);
 
+  // Search stalls to start a new admin<->vendor chat — separate from
+  // the search box below, which only filters conversations that
+  // already exist. Two-step (stalls, then profiles for the vendor_ids
+  // found) rather than an embedded `vendor:vendor_id(...)` select —
+  // stalls.vendor_id references auth.users(id) directly, which
+  // PostgREST can't auto-embed profiles through (see loadConvs above,
+  // which already works around this the same way).
+  const [stallSearchOpen, setStallSearchOpen] = useState(false);
+  const [stallQuery, setStallQuery] = useState('');
+  const [stallResults, setStallResults] = useState([]);
+  const [stallSearching, setStallSearching] = useState(false);
+
+  const searchStalls = useCallback(async (q) => {
+    const term = q.trim();
+    if (term.length < 2) { setStallResults([]); return; }
+    setStallSearching(true);
+    try {
+      const { data: stallRows, error } = await supabase
+        .from('stalls')
+        .select('id, stall_name, stall_number, section, vendor_id')
+        .not('vendor_id', 'is', null)
+        .or(`stall_name.ilike.%${term}%,stall_number.eq.${term}`)
+        .limit(10);
+      if (error) throw error;
+
+      const vendorIds = [...new Set((stallRows || []).map(s => s.vendor_id).filter(Boolean))];
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const { data: vendors } = await supabase.from('profiles').select('id, full_name, email').in('id', vendorIds);
+        (vendors || []).forEach(v => { vendorMap[v.id] = v; });
+      }
+      setStallResults((stallRows || []).map(s => ({ ...s, vendor: vendorMap[s.vendor_id] || null })));
+    } catch (err) {
+      console.error('Stall search error:', err);
+    } finally {
+      setStallSearching(false);
+    }
+  }, []);
+
+  const handleStallQueryChange = (val) => {
+    setStallQuery(val);
+    searchStalls(val);
+  };
+
+  // Opens the stall's existing admin<->vendor conversation, or
+  // creates one — same get-or-create shape as the mobile app's
+  // chatService.getOrCreateAdminConversation, reimplemented here since
+  // this is a separate codebase from the React Native app.
+  const startChatWithStall = async (stall) => {
+    try {
+      let { data: existing } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('stall_id', stall.id)
+        .eq('conversation_type', 'admin_vendor')
+        .maybeSingle();
+
+      let conv = existing;
+      if (!conv) {
+        const { data: newConv, error } = await supabase
+          .from('conversations')
+          .insert({ stall_id: stall.id, conversation_type: 'admin_vendor' })
+          .select()
+          .single();
+        if (error) throw error;
+        conv = newConv;
+      }
+
+      setStallSearchOpen(false);
+      setStallQuery('');
+      setStallResults([]);
+      await loadConvs();
+      await loadMsgs(conv.id);
+    } catch (err) {
+      console.error('Start chat error:', err);
+      toast({ message: 'Failed to start chat: ' + (err.message || 'Unknown error'), type: 'error' });
+    }
+  };
+
   // Filter conversations by search query
   const filtered = convs.filter(c => {
     const q = search.toLowerCase().trim();
@@ -2715,6 +2794,9 @@ function Chat() {
           <div className="chat-sidebar-header">
             <span>Conversations</span>
             <span className="chat-count-badge">{filtered.length}</span>
+            <button className="btn btn-sm btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setStallSearchOpen(true)}>
+              + New Chat
+            </button>
           </div>
           <div className="chat-search-wrap">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2725,7 +2807,7 @@ function Chat() {
               className="chat-search-input"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search vendor, customer, stall..."
+              placeholder="Search vendor or stall..."
             />
             {search && <button className="chat-search-clear" onClick={() => setSearch('')}>&times;</button>}
           </div>
@@ -2832,6 +2914,45 @@ function Chat() {
           )}
         </div>
       </div>
+
+      {stallSearchOpen && (
+        <Modal title="Start a new chat" onClose={() => { setStallSearchOpen(false); setStallQuery(''); setStallResults([]); }} width="480px">
+          <div className="chat-search-wrap" style={{ marginBottom: 12 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              className="chat-search-input"
+              autoFocus
+              value={stallQuery}
+              onChange={e => handleStallQueryChange(e.target.value)}
+              placeholder="Search by stall name or number..."
+            />
+          </div>
+          {stallSearching ? (
+            <Skeleton count={3} height="48px" />
+          ) : stallQuery.trim().length < 2 ? (
+            <div className="chat-empty-sub">Type at least 2 characters to search</div>
+          ) : stallResults.length === 0 ? (
+            <div className="chat-empty-sub">No stalls found</div>
+          ) : (
+            <div className="chat-sidebar-list" style={{ maxHeight: 320 }}>
+              {stallResults.map(s => (
+                <div key={s.id} className="chat-conv-item" onClick={() => startChatWithStall(s)}>
+                  <div className="chat-conv-avatar">{(s.stall_name || s.vendor?.full_name || '?').charAt(0).toUpperCase()}</div>
+                  <div className="chat-conv-info">
+                    <div className="chat-conv-name">{s.vendor?.full_name || s.stall_name || 'Vendor'}</div>
+                    <div className="chat-conv-meta">
+                      {s.stall_name || `Stall #${s.stall_number}`}{s.section ? ` • ${s.section}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

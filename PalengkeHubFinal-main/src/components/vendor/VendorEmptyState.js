@@ -2,9 +2,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { vendorColors, vendorBorderRadius, vendorSpacing } from '../../theme/vendorTheme';
+import { useVendorColors, vendorBorderRadius, vendorSpacing } from '../../theme/vendorTheme';
 
 export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, variant = 'default' }) => {
+  const vendorColors = useVendorColors();
+  const styles = createStyles(vendorColors);
+
   if (variant === 'compact') {
     return (
       <View style={styles.compact}>
@@ -38,22 +41,29 @@ export const VendorEmptyState = ({ icon, title, message, actionLabel, onAction, 
   );
 };
 
-export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = 'alert-circle-outline' }) => (
-  <View style={styles.container}>
-    <View style={styles.iconContainer}>
-      <Ionicons name={icon} size={48} color={vendorColors.danger} />
+export const VendorErrorState = ({ message = 'Something went wrong', onRetry, icon = 'alert-circle-outline' }) => {
+  const vendorColors = useVendorColors();
+  const styles = createStyles(vendorColors);
+  return (
+    <View style={styles.container}>
+      <View style={styles.iconContainer}>
+        <Ionicons name={icon} size={48} color={vendorColors.danger} />
+      </View>
+      <Text style={styles.title}>Oops!</Text>
+      <Text style={styles.message}>{message}</Text>
+      {onRetry && (
+        <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      )}
     </View>
-    <Text style={styles.title}>Oops!</Text>
-    <Text style={styles.message}>{message}</Text>
-    {onRetry && (
-      <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-        <Text style={styles.retryButtonText}>Try Again</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
+  );
+};
 
-const styles = StyleSheet.create({
+// Was a plain module-level StyleSheet.create keyed off the static
+// (light-mode-only) vendorColors import — see VendorOrderDetailScreen.js
+// for the same fix and why.
+const createStyles = (vendorColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',

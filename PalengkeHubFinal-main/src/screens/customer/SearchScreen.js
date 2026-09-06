@@ -15,6 +15,8 @@ import {
   SafeAreaView,
   StatusBar,
   Animated,
+  Modal,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,9 +34,31 @@ import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme
 import { Badge } from '../../components/ui/Badge';
 import { Chip } from '../../components/ui/Chip';
 import { VerdictChip } from '../../components/ui/VerdictChip';
+import { getProductPriceRange } from '../../utils/priceRange';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
+import { CATEGORY_OPTIONS } from '../../constants/productCategories';
 
 const RECENT_SEARCHES_KEY = '@palengkehub_recent_searches';
 const MAX_RECENT_SEARCHES = 10;
+
+// Sort chips shown above the comparison list.
+const SORT_OPTIONS = [
+  { id: 'best_match', label: 'Best Match' },
+  { id: 'price_asc', label: '₱ Mababa' },
+  { id: 'price_desc', label: '₱ Mataas' },
+  { id: 'rating', label: 'Rating' },
+];
+
+// Preset buckets rather than a true drag slider — no slider component
+// exists yet in this app and adding one pulls in a new native
+// dependency (needs a rebuild, not just a reload). These solve the
+// same "filter by price" need without that.
+const PRICE_RANGES = [
+  { id: 'under_100', label: 'Under ₱100', min: null, max: 100 },
+  { id: '100_300', label: '₱100 – ₱300', min: 100, max: 300 },
+  { id: '300_500', label: '₱300 – ₱500', min: 300, max: 500 },
+  { id: 'over_500', label: '₱500+', min: 500, max: null },
+];
 
 // Generate a stable pseudo-random rating seeded by stall id
 const getStallRating = (stallId, realRating) => {
@@ -70,6 +94,50 @@ const getReferenceUnit = (items) => {
   });
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
 };
+
+// Fallback-aware thumbnail for the compact suggestion strip — same
+// real-photo -> fallback-photo -> icon chain ProductCard.js uses, just
+// sized for this smaller card. Needs its own component (not inline in
+// the .map() below) since it tracks its own image-load error in state.
+const SuggestionThumbnail = ({ product }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  // Safety net: a stale/dead image_url can fail to load without ever
+  // firing onError on every platform, leaving a permanently blank box
+  // instead of falling back — see ProductCard.js for the same pattern.
+  useEffect(() => { setImageLoaded(false); setImageError(false); }, [product?.image_url]);
+  useEffect(() => {
+    if (!product?.image_url || imageError || imageLoaded) return;
+    const timer = setTimeout(() => setImageError(true), 4000);
+    return () => clearTimeout(timer);
+  }, [product?.image_url, imageError, imageLoaded]);
+  const fallbackPhoto = !product?.image_url || imageError ? getProductFallbackPhoto(product?.name) : null;
+
+  if (product?.image_url && !imageError) {
+    return (
+      <Image
+        source={{ uri: product.image_url }}
+        style={thumbnailStyles.image}
+        onLoad={() => setImageLoaded(true)}
+        onError={() => setImageError(true)}
+        resizeMode="cover"
+      />
+    );
+  }
+  if (fallbackPhoto) {
+    return <Image source={fallbackPhoto} style={thumbnailStyles.image} resizeMode="cover" />;
+  }
+  return (
+    <View style={thumbnailStyles.placeholder}>
+      <Ionicons name="cart-outline" size={24} color="#9CA3AF" />
+    </View>
+  );
+};
+
+const thumbnailStyles = StyleSheet.create({
+  image: { width: '100%', height: 90, backgroundColor: '#F3F4F6' },
+  placeholder: { width: '100%', height: 90, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+});
 
 const getDiscountedPrice = (originalPrice, promotion) => {
   if (!promotion) return originalPrice;
@@ -334,8 +402,20 @@ export default function SearchScreen({ navigation }) {
   const [stalls, setStalls] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchType, setSearchType] = useState('products');
+  const [sortOption, setSortOption] = useState('best_match');
+  const [categoryFilter, setCategoryFilter] = useState(null);
+  const [priceRangeFilter, setPriceRangeFilter] = useState(null);
+  const [filterSheetVisible, setFilterSheetVisible] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
   const [showRecent, setShowRecent] = useState(true);
+  // Separate from "has results" — live search-as-you-type populates
+  // productsData on every keystroke (300ms after typing pauses), so
+  // gating the sort/filter row on results alone made it pop in mid-type,
+  // before the search was actually finished. This only flips true on a
+  // real completed search (Enter, a recent/suggested query, or finished
+  // voice input) and flips back false the moment the query is edited
+  // again, so the row can't show for a stale/in-progress query either.
+  const [searchSubmitted, setSearchSubmitted] = useState(false);
   const [fadeAnim] = useState(() => new Animated.Value(0));
   const [suggestion, setSuggestion] = useState(null);
 
@@ -434,22 +514,13 @@ export default function SearchScreen({ navigation }) {
     }
   };
 
-  const clearRecentSearches = () => {
-    Alert.alert(
-      'Clear Recent Searches',
-      'Are you sure you want to clear all recent searches?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            setRecentSearches([]);
-            await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
-          }
-        }
-      ]
-    );
+  // No confirmation dialog — matches removeRecentSearch's (the "X" button)
+  // own no-confirm pattern below, and a multi-button Alert.alert doesn't
+  // reliably fire its onPress callbacks on React Native Web, which is why
+  // this button silently did nothing there while "X" worked fine.
+  const clearRecentSearches = async () => {
+    setRecentSearches([]);
+    await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
   };
 
   const removeRecentSearch = async (queryToRemove) => {
@@ -527,6 +598,7 @@ export default function SearchScreen({ navigation }) {
   const applySuggestion = (suggestedName) => {
     setSuggestion(null);
     setSearchQuery(suggestedName);
+    setSearchSubmitted(true);
     performSearch(suggestedName);
   };
 
@@ -552,6 +624,7 @@ export default function SearchScreen({ navigation }) {
         setSearchQuery(text.trim());
         if (isFinal) {
           setIsListening(false);
+          setSearchSubmitted(true);
           performSearch(text.trim());
         }
       },
@@ -769,6 +842,7 @@ export default function SearchScreen({ navigation }) {
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
+      setSearchSubmitted(true);
       saveRecentSearch(searchQuery.trim());
       performSearch();
     }
@@ -777,8 +851,31 @@ export default function SearchScreen({ navigation }) {
   const handleRecentSearch = (query) => {
     setSearchQuery(query);
     setShowRecent(false);
+    setSearchSubmitted(true);
     saveRecentSearch(query);
     setTimeout(() => performSearch(), 100);
+  };
+
+  // Explicit, immediate reset rather than only relying on the
+  // searchQuery-watching useEffect further up to clear productsData —
+  // that effect does the same thing, but firing it directly here means
+  // results (and the sort/filter row that depends on them) drop the
+  // instant the X is tapped, not just once state settles.
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setProductsData([]);
+    setStalls([]);
+    setShowRecent(true);
+    setSuggestion(null);
+    setSearchSubmitted(false);
+  };
+
+  // Editing the query again after a completed search means the results
+  // on screen (and the filter row) are for a now-stale query — hide the
+  // row until this new query is itself finished/submitted.
+  const handleQueryChange = (text) => {
+    setSearchQuery(text);
+    setSearchSubmitted(false);
   };
 
   const addToCartFromComparison = (product, stall, qty) => {
@@ -797,9 +894,67 @@ export default function SearchScreen({ navigation }) {
     }, 1400);
   };
 
+  // Derived from productsData (the raw search result), never mutates it —
+  // re-filters + re-groups + re-sorts on every change to the sort/filter
+  // controls. Re-grouping (not just filtering the flat list) matters
+  // because each header's "N stalls" count and each product's rank need
+  // to reflect what's actually visible, not the original unfiltered set.
+  const displayedResults = useMemo(() => {
+    const rawProducts = productsData.filter(i => i.type === 'product').map(i => i.data);
+
+    const filtered = rawProducts.filter((p) => {
+      if (categoryFilter && p.category !== categoryFilter) return false;
+      if (priceRangeFilter) {
+        const price = Number(p.price) || 0;
+        if (priceRangeFilter.min != null && price < priceRangeFilter.min) return false;
+        if (priceRangeFilter.max != null && price > priceRangeFilter.max) return false;
+      }
+      return true;
+    });
+
+    const grouped = {};
+    filtered.forEach((product) => {
+      if (!grouped[product.name]) grouped[product.name] = [];
+      grouped[product.name].push(product);
+    });
+
+    let groupEntries = Object.entries(grouped);
+    if (sortOption === 'price_asc' || sortOption === 'price_desc') {
+      groupEntries = groupEntries.sort((a, b) => {
+        const aMin = Math.min(...a[1].map((p) => Number(p.price) || 0));
+        const bMin = Math.min(...b[1].map((p) => Number(p.price) || 0));
+        return sortOption === 'price_asc' ? aMin - bMin : bMin - aMin;
+      });
+    } else if (sortOption === 'rating') {
+      groupEntries = groupEntries.sort((a, b) => {
+        const aRating = Math.max(...a[1].map((p) => getStallRating(p.stalls?.id, p.stalls?.average_rating)));
+        const bRating = Math.max(...b[1].map((p) => getStallRating(p.stalls?.id, p.stalls?.average_rating)));
+        return bRating - aRating;
+      });
+    }
+
+    const out = [];
+    groupEntries.forEach(([productName, variants]) => {
+      // Same reference-unit-first-by-price ordering the original fetch
+      // uses (D-14) — kept identical so ranking/Pinakamura stay correct.
+      const referenceUnit = getReferenceUnit(variants);
+      const sortedVariants = [...variants].sort((a, b) => {
+        const aRef = a.unit === referenceUnit ? 0 : 1;
+        const bRef = b.unit === referenceUnit ? 0 : 1;
+        return aRef !== bRef ? aRef - bRef : a.price - b.price;
+      });
+      out.push({ type: 'header', name: productName });
+      sortedVariants.forEach((variant) => out.push({ type: 'product', data: variant }));
+    });
+
+    return out;
+  }, [productsData, categoryFilter, priceRangeFilter, sortOption]);
+
+  const activeFilterCount = (categoryFilter ? 1 : 0) + (priceRangeFilter ? 1 : 0);
+
   const renderProductComparisonItem = ({ item }) => {
     if (item.type === 'header') {
-      const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === item.name);
+      const groupItems = displayedResults.filter(i => i.type === 'product' && i.data.name === item.name);
       const referenceUnit = getReferenceUnit(groupItems);
       const comparableCount = groupItems.filter(i => i.data.unit === referenceUnit).length;
       const differentUnitCount = groupItems.length - comparableCount;
@@ -819,7 +974,7 @@ export default function SearchScreen({ navigation }) {
 
     const product = item.data;
     const stall = product.stalls;
-    const groupItems = productsData.filter(i => i.type === 'product' && i.data.name === product.name);
+    const groupItems = displayedResults.filter(i => i.type === 'product' && i.data.name === product.name);
 
     // D-11/D-14: the reference unit is whichever unit most stalls in this
     // group use. Only rows in that unit ever rank or carry Pinakamura — a
@@ -956,27 +1111,24 @@ export default function SearchScreen({ navigation }) {
     );
   };
 
-  const renderRecentSearches = () => (
+  const renderRecentSearches = () => {
+    // Nothing to show and nothing useful to say beyond that — the section
+    // (header included) just doesn't render, rather than showing an empty
+    // state for a "recent searches" list on someone's very first visit.
+    if (recentSearches.length === 0) return null;
+
+    return (
     <Animated.View style={[styles.recentSection, { opacity: fadeAnim }]}>
       <View style={styles.recentHeader}>
         <View style={styles.recentHeaderLeft}>
           <Ionicons name="time-outline" size={18} color={COLORS.primary} />
           <Text style={styles.recentTitle}>{t('search.recent_searches')}</Text>
         </View>
-        {recentSearches.length > 0 && (
-          <TouchableOpacity onPress={clearRecentSearches} activeOpacity={0.7}>
-            <Text style={styles.clearRecentText}>Clear All</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={clearRecentSearches} activeOpacity={0.7}>
+          <Text style={styles.clearRecentText}>Clear All</Text>
+        </TouchableOpacity>
       </View>
-      {recentSearches.length === 0 ? (
-        <View style={styles.noRecentContainer}>
-          <Ionicons name="search-outline" size={48} color={COLORS.text.lighter} />
-          <Text style={styles.noRecentText}>{t('search.no_recent')}</Text>
-          <Text style={styles.noRecentSubtext}>{t('search.recent_subtitle')}</Text>
-        </View>
-      ) : (
-        recentSearches.map((item, index) => (
+      {recentSearches.map((item, index) => (
           <TouchableOpacity
             key={index}
             style={styles.recentItem}
@@ -994,10 +1146,10 @@ export default function SearchScreen({ navigation }) {
               <Ionicons name="close" size={16} color={COLORS.text.lighter} />
             </TouchableOpacity>
           </TouchableOpacity>
-        ))
-      )}
+      ))}
     </Animated.View>
-  );
+    );
+  };
 
   const renderSuggestions = () => {
     if (suggestedProducts.length === 0 && suggestedStalls.length === 0) return null;
@@ -1012,18 +1164,28 @@ export default function SearchScreen({ navigation }) {
               </View>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionRow}>
-              {suggestedProducts.map((product) => (
-                <TouchableOpacity
-                  key={product.id}
-                  style={styles.suggestionCard}
-                  activeOpacity={0.8}
-                  onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
-                >
-                  <Text style={styles.suggestionCardName} numberOfLines={2}>{product.name}</Text>
-                  <Text style={styles.suggestionCardPrice}>₱{Number(product.price).toFixed(2)} / {product.unit}</Text>
-                  <Text style={styles.suggestionCardStall} numberOfLines={1}>{product.stalls?.stall_name || 'Market Stall'}</Text>
-                </TouchableOpacity>
-              ))}
+              {suggestedProducts.map((product) => {
+                const priceRange = getProductPriceRange(product);
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={styles.suggestionCard}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+                  >
+                    <SuggestionThumbnail product={product} />
+                    <View style={styles.suggestionCardBody}>
+                      <Text style={styles.suggestionCardName} numberOfLines={2}>{product.name}</Text>
+                      <Text style={styles.suggestionCardPrice}>
+                        {priceRange
+                          ? `₱${priceRange.min.toFixed(2)} – ₱${priceRange.max.toFixed(2)}`
+                          : `₱${Number(product.price).toFixed(2)} / ${product.unit}`}
+                      </Text>
+                      <Text style={styles.suggestionCardStall} numberOfLines={1}>{product.stalls?.stall_name || 'Market Stall'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </>
         )}
@@ -1075,12 +1237,12 @@ export default function SearchScreen({ navigation }) {
               placeholder={isListening ? 'Listening... speak now (Tagalog or English)' : t('search.placeholder')}
               placeholderTextColor={isListening ? COLORS.primary : COLORS.text.lighter}
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={handleQueryChange}
               onSubmitEditing={handleSearchSubmit}
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <TouchableOpacity onPress={handleClearSearch} style={styles.clearButton}>
                 <Ionicons name="close-circle" size={20} color={COLORS.text.lighter} />
               </TouchableOpacity>
             )}
@@ -1145,6 +1307,45 @@ export default function SearchScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Sort + filter chips — only once a search has actually been
+          submitted (not mid-keystroke from live search-as-you-type) and
+          has results; never while still typing, before typing at all, or
+          right after clearing the search box. */}
+      {searchType === 'products' && searchSubmitted && productsData.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.sortFilterRow}
+          contentContainerStyle={styles.sortFilterContent}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.id}
+              size="compact"
+              isOn={sortOption === opt.id}
+              onPress={() => setSortOption(opt.id)}
+              style={styles.sortChip}
+            >
+              {opt.label}
+            </Chip>
+          ))}
+          <Chip
+            size="compact"
+            icon={<Ionicons name="options-outline" size={14} color={activeFilterCount > 0 ? COLORS.primaryDark : COLORS.text.primary} />}
+            isOn={activeFilterCount > 0}
+            onPress={() => setFilterSheetVisible(true)}
+            style={styles.sortChip}
+          >
+            Filters
+          </Chip>
+          {activeFilterCount > 0 && (
+            <View style={styles.filterCountDot}>
+              <Text style={styles.filterCountDotText}>{activeFilterCount}</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+
       {/* "Did you mean?" suggestion banner */}
       {suggestion && (
         <View style={styles.suggestionBanner}>
@@ -1179,7 +1380,7 @@ export default function SearchScreen({ navigation }) {
         </View>
       ) : searchType === 'products' ? (
         <FlatList
-          data={productsData}
+          data={displayedResults}
           keyExtractor={(item, index) => `${item.type}-${index}`}
           renderItem={renderProductComparisonItem}
           contentContainerStyle={styles.resultsList}
@@ -1196,6 +1397,68 @@ export default function SearchScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Filter bottom sheet — phones use a sheet rather than a side
+          drawer per the design system's Filters spec. */}
+      <Modal visible={filterSheetVisible} animationType="slide" transparent onRequestClose={() => setFilterSheetVisible(false)}>
+        <TouchableOpacity style={styles.filterSheetOverlay} activeOpacity={1} onPress={() => setFilterSheetVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.filterSheet} onPress={() => {}}>
+            <View style={styles.filterSheetHandle} />
+            <Text style={styles.filterSheetTitle}>Filters</Text>
+
+            <Text style={styles.filterSectionLabel}>Category</Text>
+            <View style={styles.filterChipWrap}>
+              <Chip size="compact" isOn={!categoryFilter} onPress={() => setCategoryFilter(null)} style={styles.filterChipItem}>
+                All
+              </Chip>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <Chip
+                  key={cat.id}
+                  size="compact"
+                  isOn={categoryFilter === cat.id}
+                  onPress={() => setCategoryFilter(categoryFilter === cat.id ? null : cat.id)}
+                  style={styles.filterChipItem}
+                >
+                  {cat.label}
+                </Chip>
+              ))}
+            </View>
+
+            <Text style={styles.filterSectionLabel}>Price Range</Text>
+            <View style={styles.filterChipWrap}>
+              <Chip size="compact" isOn={!priceRangeFilter} onPress={() => setPriceRangeFilter(null)} style={styles.filterChipItem}>
+                Any
+              </Chip>
+              {PRICE_RANGES.map((range) => (
+                <Chip
+                  key={range.id}
+                  size="compact"
+                  isOn={priceRangeFilter?.id === range.id}
+                  onPress={() => setPriceRangeFilter(priceRangeFilter?.id === range.id ? null : range)}
+                  style={styles.filterChipItem}
+                >
+                  {range.label}
+                </Chip>
+              ))}
+            </View>
+
+            <View style={styles.filterSheetActions}>
+              <TouchableOpacity
+                style={styles.filterClearButton}
+                onPress={() => { setCategoryFilter(null); setPriceRangeFilter(null); }}
+              >
+                <Text style={styles.filterClearButtonText}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterApplyButton, { backgroundColor: COLORS.primary }]}
+                onPress={() => setFilterSheetVisible(false)}
+              >
+                <Text style={styles.filterApplyButtonText}>Show Results</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1205,6 +1468,123 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
+  // ── Sort + filter chips ──
+  // Explicit height, not just paddingVertical around content — a
+  // horizontal ScrollView doesn't reliably auto-size its own cross-axis
+  // height from its content on every platform (React Native Web
+  // included), which is what was clipping the chips.
+  // flexGrow/flexShrink: 0 — ScrollView defaults to flexGrow:1 on web,
+  // which a bare `height` doesn't cancel. Left as-is, this row would
+  // stretch to fill whatever vertical space is free in the screen's flex
+  // column (shrinking the results list and shoving the chips/results
+  // apart with a blank gap) any time the results list is short enough,
+  // or the device tall enough, to leave slack for it to grow into.
+  sortFilterRow: {
+    height: 56,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  sortFilterContent: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  sortChip: {
+    marginRight: 0,
+  },
+  filterCountDot: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -SPACING.xs,
+    alignSelf: 'center',
+  },
+  filterCountDotText: {
+    fontSize: 10,
+    fontFamily: 'Nunito_800ExtraBold',
+    color: COLORS.onPrimary,
+  },
+
+  // ── Filter bottom sheet ──
+  filterSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(38,16,6,0.5)',
+    justifyContent: 'flex-end',
+  },
+  filterSheet: {
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+    maxHeight: '80%',
+  },
+  filterSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  filterSheetTitle: {
+    ...TEXT_STYLES.h2,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.lg,
+  },
+  filterSectionLabel: {
+    fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_800ExtraBold',
+    color: COLORS.text.primary,
+    marginBottom: SPACING.sm,
+  },
+  filterChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xl,
+  },
+  filterChipItem: {
+    marginRight: 0,
+  },
+  filterSheetActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  filterClearButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: RADIUS.full,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterClearButtonText: {
+    fontSize: TYPE.size.body,
+    fontFamily: 'Nunito_800ExtraBold',
+    color: COLORS.text.primary,
+  },
+  filterApplyButton: {
+    flex: 2,
+    height: 48,
+    borderRadius: RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterApplyButtonText: {
+    fontSize: TYPE.size.body,
+    fontFamily: 'Nunito_800ExtraBold',
+    color: COLORS.onPrimary,
+  },
+
   suggestionBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1356,6 +1736,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  suggestionCardBody: {
     padding: 12,
   },
   suggestionCardName: {

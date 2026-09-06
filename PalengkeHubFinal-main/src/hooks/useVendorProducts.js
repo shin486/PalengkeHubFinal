@@ -50,6 +50,7 @@ export const useVendorProducts = (stallId) => {
           is_available: productData.is_available ?? true,
           stock_quantity: productData.stock_quantity || 0,
           image_url: productData.image_url || null,
+          image_urls: productData.image_urls || null,
  price_options: productData.price_options || null, // added
  unit_options: productData.unit_options || null, // added
         }])
@@ -85,7 +86,11 @@ export const useVendorProducts = (stallId) => {
           category: updates.category,
           is_available: updates.is_available,
           stock_quantity: updates.stock_quantity || 0,
-          image_url: updates.image_url || null,
+          // undefined (not null) when the caller didn't pass these — a
+          // partial update like toggleAvailability's { is_available } only
+          // must not wipe out the vendor's photos, the way `|| null` would.
+          image_url: updates.image_url !== undefined ? (updates.image_url || null) : undefined,
+          image_urls: updates.image_urls !== undefined ? (updates.image_urls || null) : undefined,
  price_options: updates.price_options || null, // added
  unit_options: updates.unit_options || null, // added
           updated_at: new Date(),

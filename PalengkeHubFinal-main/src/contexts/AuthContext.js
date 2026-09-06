@@ -8,6 +8,14 @@ import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { CommonActions } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+
+// Required once at module scope — expo-web-browser's own recommendation —
+// so WebBrowser.openAuthSessionAsync's native browser overlay actually
+// dismisses itself when the OAuth provider redirects back into the app.
+WebBrowser.maybeCompleteAuthSession();
 
 const AuthContext = createContext({});
 
@@ -278,6 +286,161 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   }, []);
+
+  // ========== SOCIAL SIGN-IN (Google / Facebook) — customers only ==========
+  // OAuth "sign in" and "sign up" are literally the same handshake as far
+  // as Supabase is concerned — completing it always yields an
+  // authenticated auth.users row, created fresh on a first-ever attempt
+  // with that identity (or reused, and auto-linked by Supabase to an
+  // existing account if the verified email already matches one). Whether
+  // that's allowed to become a PalengkeHub account depends on `mode`,
+  // which the caller sets from which screen/button was tapped:
+  //   - mode 'signup': no matching profiles row yet -> create one (role
+  //     'consumer', populated from the provider's name/avatar/email).
+  //   - mode 'login': no matching profiles row yet -> this identity has
+  //     never been used here before. Sign back out and report it rather
+  //     than silently creating an account from a plain "sign in" tap —
+  //     an account must be created (via the signup button) first.
+  // If a profiles row already exists (this identity was used before, or
+  // got auto-linked), both modes just log the user in.
+  const finishOAuthSignIn = useCallback(async (sessionUser, mode) => {
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
+
+    if (existingProfile?.role) {
+      if (existingProfile.role !== 'consumer') {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        return { success: false, error: 'Google/Facebook sign-in is only available for customer accounts.' };
+      }
+      await checkUser();
+      return { success: true };
+    }
+
+    if (mode !== 'signup') {
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
+      return {
+        success: false,
+        needsSignup: true,
+        error: 'No PalengkeHub account is linked to this login yet. Please sign up first.',
+      };
+    }
+
+    const meta = sessionUser.user_metadata || {};
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: sessionUser.id,
+        email: sessionUser.email,
+        full_name: meta.full_name || meta.name || 'PalengkeHub Customer',
+        avatar_url: meta.avatar_url || meta.picture || null,
+        phone: '',
+        role: 'consumer',
+      }, { onConflict: 'id' });
+
+    if (upsertError) {
+      console.error(' OAuth profile creation error:', upsertError);
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
+      return { success: false, error: 'Could not finish creating your account. Please try again.' };
+    }
+
+    await checkUser();
+    return { success: true };
+  }, [checkUser]);
+
+  // Native: opens the provider's consent screen in an in-app browser tab
+  // and captures the redirect directly — no deep-link event needed. Web:
+  // signInWithOAuth navigates the whole tab away, so this never "returns"
+  // on web; the WEB OAUTH REDIRECT RETURN effect below picks the flow back
+  // up once the browser lands back on the app with the provider's response.
+  const signInWithOAuthProvider = useCallback(async (provider, mode) => {
+    try {
+      if (Platform.OS === 'web') {
+        await AsyncStorage.setItem('pk_oauth_mode', mode);
+        const redirectTo = window.location.origin + window.location.pathname;
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo },
+        });
+        if (error) {
+          await AsyncStorage.removeItem('pk_oauth_mode');
+          return { success: false, error: error.message };
+        }
+        return { success: true, redirecting: true };
+      }
+
+      const redirectTo = makeRedirectUri({ scheme: 'palengkehub', path: 'auth/callback' });
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error || !data?.url) {
+        return { success: false, error: error?.message || 'Could not start sign-in.' };
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success' || !result.url) {
+        return { success: false, cancelled: true, error: 'Sign-in was cancelled.' };
+      }
+
+      const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(result.url);
+      if (exchangeError || !exchangeData?.session) {
+        return { success: false, error: exchangeError?.message || 'Could not complete sign-in.' };
+      }
+
+      return await finishOAuthSignIn(exchangeData.session.user, mode);
+    } catch (error) {
+      console.error(' OAuth sign-in error:', error);
+      return { success: false, error: error.message };
+    }
+  }, [finishOAuthSignIn]);
+
+  // ========== WEB OAUTH REDIRECT RETURN ==========
+  // Web has no equivalent to WebBrowser.openAuthSessionAsync's captured
+  // redirect — signInWithOAuthProvider above navigates the tab away
+  // entirely, so the app remounts fresh once the provider sends it back
+  // here. `pk_oauth_mode` (stashed in AsyncStorage, which on web is
+  // backed by localStorage — survives the reload) is how this effect
+  // recovers whether the tap that started this was Login or Sign Up.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const url = window.location.href;
+    if (!url.includes('code=') && !url.includes('access_token=')) return;
+
+    (async () => {
+      try {
+        const mode = (await AsyncStorage.getItem('pk_oauth_mode')) || 'login';
+        await AsyncStorage.removeItem('pk_oauth_mode');
+
+        const { data, error } = await supabase.auth.exchangeCodeForSession(url);
+        // Strip the OAuth params so refreshing the page doesn't replay this.
+        window.history.replaceState(null, '', window.location.pathname);
+
+        if (error || !data?.session) {
+          console.error(' Web OAuth exchange error:', error);
+          return;
+        }
+
+        const result = await finishOAuthSignIn(data.session.user, mode);
+        if (!result.success) {
+          Alert.alert(
+            result.needsSignup ? 'No account found' : 'Sign-in failed',
+            result.error || 'Please try again.'
+          );
+        }
+      } catch (err) {
+        console.error(' Web OAuth return handling error:', err);
+      }
+    })();
+  }, [finishOAuthSignIn]);
 
   // ========== LOGIN ==========
   const login = useCallback(async (identifier, password) => {
@@ -722,6 +885,7 @@ export const AuthProvider = ({ children }) => {
     login,
     loginAsAccount,
     signUp,
+    signInWithOAuthProvider,
     sendAuthenticatorSms,
     sendEmailVerificationCode,
     logout,
@@ -736,6 +900,7 @@ export const AuthProvider = ({ children }) => {
     login,
     loginAsAccount,
     signUp,
+    signInWithOAuthProvider,
     sendAuthenticatorSms,
     sendEmailVerificationCode,
     logout,

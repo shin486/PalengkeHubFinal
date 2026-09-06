@@ -49,6 +49,7 @@ import VendorBottomNavigation from './src/components/vendor/VendorBottomNavigati
 import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
 import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
 import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
+import StallReviewsScreen from './src/screens/customer/StallReviewsScreen';
 import CartScreen from './src/screens/customer/CartScreen';
 import SearchScreen from './src/screens/customer/SearchScreen';
 import OrdersScreen from './src/screens/customer/OrdersScreen';
@@ -389,8 +390,15 @@ function AppStack({ isGuest }) {
         return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
       case 'Favorites':
         return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
+      case 'StallReviews':
+        return { title: 'Reviews', subtitle: 'What customers are saying', showBack: true };
       case 'Notifications':
-        return { title: 'Notifications', subtitle: 'Your alerts' };
+        // Reached by pushing from the bell icon, not a tab-bar destination
+        // like Cart/Orders/Profile above — needs its own way back. The
+        // screen used to render its own back+title header underneath this
+        // one for exactly that reason, which is the redundant-header bug:
+        // this same global header, now with showBack, replaces it.
+        return { title: 'Notifications', subtitle: 'Your alerts', showBack: true };
       case 'ReportIssue':
         return { title: 'Report Issue', subtitle: 'Help us improve' };
       case 'CustomerReports':
@@ -410,7 +418,7 @@ function AppStack({ isGuest }) {
     <View style={styles.container}>
       {/* ✅ Only show global Header if NOT on hidden screens */}
       {headerProps && (
-        <Header title={headerProps.title} subtitle={headerProps.subtitle} />
+        <Header title={headerProps.title} subtitle={headerProps.subtitle} showBack={headerProps.showBack} />
       )}
 
       <Stack.Navigator
@@ -448,6 +456,7 @@ function AppStack({ isGuest }) {
         
         <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
         <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
+        <Stack.Screen name="StallReviews" component={StallReviewsScreen} />
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />

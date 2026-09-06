@@ -65,3 +65,22 @@ export const classifyPrice = (price, suggestion) => {
   }
   return { level: 'fair', diffPct, label: 'Within market range' };
 };
+
+/**
+ * Customer-facing "is this a good deal" verdict — MURA / KATAMTAMAN /
+ * MAHAL, per the design system's Verdict Chip spec (±5% thresholds,
+ * "computed from stall roster, never hand-set"). Distinct from
+ * classifyPrice above (±25%, vendor-facing "is your own price
+ * reasonable" hint) — same underlying market-average data, different
+ * audience and threshold, so the two aren't interchangeable.
+ * Returns null when there isn't enough market data to judge by.
+ */
+export const computeVerdict = (price, suggestion) => {
+  const p = parseFloat(price);
+  if (isNaN(p) || p <= 0 || !suggestion?.avg) return null;
+
+  const diffPct = ((p - suggestion.avg) / suggestion.avg) * 100;
+  if (diffPct <= -5) return 'MURA';
+  if (diffPct >= 5) return 'MAHAL';
+  return 'KATAMTAMAN';
+};

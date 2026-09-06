@@ -33,6 +33,7 @@ import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
 import { hapticLight, hapticMedium } from '../../theme/motion';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { getPriceSuggestion, computeVerdict } from '../../services/priceSuggestion';
 import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
 import { ProductCard } from '../../components/ProductCard';
 import { Badge } from '../../components/ui/Badge';
@@ -41,36 +42,15 @@ import { VerdictChip } from '../../components/ui/VerdictChip';
 import { PriceText } from '../../components/ui/PriceText';
 import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
 import { getProductEnglishName } from '../../utils/productNameTranslations';
+import { CATEGORY_CHIPS, CATEGORY_TONES } from '../../constants/categoryChips';
 import { WovenBackground } from '../../components/WovenBackground';
 
-// Tagalog first, English underneath — that is how the market is spoken.
-// `categoryName` must stay the exact English string: CategoryProductsScreen
-// filters `.eq('category', categoryName)` against it. Matches
-// CATEGORY_CONFIG in CategoryProductsScreen.js exactly.
-// `tone` picks the icon circle's tint from the same semantic tokens the
-// rest of the app already uses (tokens.js: success/warning/info), not new
-// colors — 'neutral' keeps the existing wicker/orange treatment. `image`
-// is the reference design system's own illustration for that category
-// (design-directions/assets/generated/illustrations); 'Other' has no
-// illustration there either, so it keeps the Ionicons fallback.
 // No 'Fish' chip: it isn't a real value in CategoryProductsScreen's
-// CATEGORY_CONFIG, so navigating to it would silently return zero
+// category set, so navigating to it would silently return zero
 // products — the icon existing upstream doesn't make the category real.
-const CATEGORY_CHIPS = [
-  { categoryName: 'Vegetables', tagalog: 'Gulay', english: 'Vegetables', icon: 'leaf', tone: 'success', image: require('../../../src/assets/categories/ill-cat-vegetables.png') },
-  { categoryName: 'Meat', tagalog: 'Karne', english: 'Meat', icon: 'restaurant', tone: 'neutral', image: require('../../../src/assets/categories/ill-cat-meat.png') },
-  { categoryName: 'Fruits', tagalog: 'Prutas', english: 'Fruits', icon: 'basket', tone: 'warning', image: require('../../../src/assets/categories/ill-cat-fruits.png') },
-  { categoryName: 'Poultry', tagalog: 'Manok', english: 'Poultry', icon: 'egg', tone: 'info', image: require('../../../src/assets/categories/ill-cat-poultry.png') },
-  { categoryName: 'Rice', tagalog: 'Bigas', english: 'Rice', icon: 'cafe', tone: 'neutral', image: require('../../../src/assets/categories/ill-cat-rice.png') },
-  { categoryName: 'Other', tagalog: 'Iba pa', english: 'Other', icon: 'apps', tone: 'neutral', image: null },
-];
-
-const CATEGORY_TONES = {
-  neutral: { bg: (c) => c.wickerSoft, icon: (c) => c.primaryDark },
-  success: { bg: (c) => c.successLight, icon: (c) => c.success },
-  warning: { bg: (c) => c.warningLight, icon: (c) => c.warning },
-  info: { bg: (c) => c.infoLight, icon: (c) => c.info },
-};
+// CATEGORY_CHIPS/CATEGORY_TONES now live in src/constants/categoryChips.js,
+// shared with CategoryProductsScreen so its header icon can't drift from
+// what's tapped here again.
 
 // Same rule SearchScreen.js already uses for its own price comparison
 // (D-14): the reference unit for a product-name group is whichever unit
@@ -502,6 +482,18 @@ const CategoryChip = ({ cat, styles, colors, onPress }) => {
 // below) so each card can track its own load failure independently.
 const PresyoCard = ({ item, colors, styles, navigation }) => {
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  // Safety net: a stale/dead image_url (e.g. a leftover link from before
+  // the Supabase Storage migration) can fail to load without ever
+  // firing onError on every platform — leaving a permanently blank box
+  // instead of falling back. If neither onLoad nor onError resolves
+  // within a few seconds, force the fallback anyway.
+  useEffect(() => { setImageLoaded(false); setImageError(false); }, [item.image_url]);
+  useEffect(() => {
+    if (!item.image_url || imageError || imageLoaded) return;
+    const timer = setTimeout(() => setImageError(true), 4000);
+    return () => clearTimeout(timer);
+  }, [item.image_url, imageError, imageLoaded]);
   const goTo = () => item.productId
     ? navigation.navigate('ProductDetails', { productId: item.productId })
     : navigation.navigate('Search');
@@ -523,6 +515,7 @@ const PresyoCard = ({ item, colors, styles, navigation }) => {
             source={{ uri: item.image_url }}
             style={styles.presyoImage}
             resizeMode="cover"
+            onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
           />
         ) : fallbackPhoto ? (
@@ -588,6 +581,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
   const [priceTrends, setPriceTrends] = useState(new Map());
+  const [productVerdicts, setProductVerdicts] = useState(new Map());
   const [topRatedStalls, setTopRatedStalls] = useState([]);
   const [presyoCheckItems, setPresyoCheckItems] = useState([]);
   const [stallPriceRanges, setStallPriceRanges] = useState({});
@@ -639,6 +633,31 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     const trends = await fetchPriceTrends(ids);
     if (trends.size > 0) {
       setPriceTrends(prev => new Map([...prev, ...trends]));
+    }
+  };
+
+  // Real MURA/KATAMTAMAN/MAHAL verdicts for promo cards — was previously
+  // hardcoded to "MURA" on every single deal regardless of whether it
+  // actually beats the market average, which is exactly what the design
+  // system's own verdict rule warns against ("never hand-set"). One
+  // getPriceSuggestion() lookup per distinct product name, not per promo
+  // row, so a promo with several stall listings doesn't repeat the query.
+  const loadVerdicts = async (products) => {
+    const uniqueByName = new Map();
+    (products || []).forEach((p) => {
+      if (p?.id != null && p?.name && !uniqueByName.has(p.name)) uniqueByName.set(p.name, p);
+    });
+    if (uniqueByName.size === 0) return;
+
+    const entries = await Promise.all(
+      Array.from(uniqueByName.values()).map(async (p) => {
+        const suggestion = await getPriceSuggestion(p.name);
+        return [p.id, computeVerdict(p.price, suggestion)];
+      })
+    );
+    const resolved = new Map(entries.filter(([, verdict]) => verdict != null));
+    if (resolved.size > 0) {
+      setProductVerdicts(prev => new Map([...prev, ...resolved]));
     }
   };
 
@@ -869,6 +888,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         const validPromos = promosData.filter(p => p.product?.is_available === true);
         setPromoProducts(validPromos);
         loadPriceTrends(validPromos.map(p => p.product).filter(Boolean));
+        loadVerdicts(validPromos.map(p => ({ ...p.product, price: p.discounted_price })).filter(p => p.id));
       } else {
         setPromoProducts([]);
       }
@@ -1478,7 +1498,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                     stall={stall}
                     discountText={discountText}
                     hasPromotion={true}
-                    verdict="MURA"
+                    verdict={product?.id ? productVerdicts.get(product.id) : null}
                     rating={stallRating?.average}
                     ratingCount={stallRating?.count}
                     compareCount={compareCount}

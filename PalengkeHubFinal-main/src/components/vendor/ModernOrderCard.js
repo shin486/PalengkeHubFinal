@@ -1,5 +1,5 @@
 // src/components/vendor/ModernOrderCard.js
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import {
-  vendorColors,
+  useVendorColors,
   vendorSpacing,
   vendorBorderRadius,
   vendorShadows,
@@ -70,6 +70,8 @@ const getNextStatus = (status) => {
 
 // Extracted inner card for memoization
 const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment, onProposeChange, onPaymentApprove, onPaymentReject, onViewDetails }) => {
+  const vendorColors = useVendorColors();
+  const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const navigation = useNavigation();
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedReasonId, setSelectedReasonId] = useState(null);
@@ -313,7 +315,11 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
 
 export const ModernOrderCard = memo(OrderCardInner);
 
-const styles = StyleSheet.create({
+// Was a plain module-level StyleSheet.create keyed off the static
+// (light-mode-only) vendorColors import — see VendorOrderDetailScreen.js
+// for the same fix and why. This is the card rendered per-order in the
+// vendor's Orders list, so it's the most visible instance of the bug.
+const createStyles = (vendorColors) => StyleSheet.create({
   card: {
     backgroundColor: vendorColors.surface,
     borderRadius: vendorBorderRadius.lg,

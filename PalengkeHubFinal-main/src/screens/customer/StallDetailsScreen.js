@@ -23,7 +23,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useCart } from '../../hooks/useCart';
 import { chatService } from '../../services/chatService';
+import { ProductCard } from '../../components/ProductCard';
 import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import StallMap from '../../components/StallMap';
 import * as Location from 'expo-location';
@@ -64,23 +66,6 @@ const StarRating = ({ rating, size = 14 }) => {
 };
 
 // ============================================================
-// HELPER FUNCTIONS
-// ============================================================
-const getStallRating = (stallId, realRating) => {
-  if (realRating && realRating > 0) return realRating;
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  const rating = 2.5 + (randomValue * 2.5);
-  return Math.round(rating * 10) / 10;
-};
-
-const getRandomRatingCount = (stallId) => {
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  return Math.floor(5 + (randomValue * 195));
-};
-
-// ============================================================
 // MAIN COMPONENT
 // ============================================================
 export default function StallDetailsScreen({ navigation, route }) {
@@ -97,15 +82,22 @@ export default function StallDetailsScreen({ navigation, route }) {
       announceActiveScreen('StallDetails');
     }, [announceActiveScreen])
   );
-  const { isStallFavorite, toggleStallFavorite } = useFavorites();
+  const { isStallFavorite, toggleStallFavorite, isProductFavorite, toggleProductFavorite } = useFavorites();
+  const { addToCart } = useCart();
   const [stall, setStall] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [stallImageError, setStallImageError] = useState(false);
+  const [stallImageLoaded, setStallImageLoaded] = useState(false);
   const [vendorAvatarError, setVendorAvatarError] = useState(false);
   const [stallLocation, setStallLocation] = useState(null); // real captured GPS pin, or null if never set
+  // Computed from the real `ratings` table (same publicly-readable table
+  // HomeScreen's "top rated stalls" already reads), not stalls.average_rating
+  // — that column is never written to by any insert/update in the app, so
+  // it's permanently null/0 on every real stall.
+  const [ratingStats, setRatingStats] = useState({ average: 0, count: 0 });
   const [userLocation, setUserLocation] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -134,6 +126,17 @@ export default function StallDetailsScreen({ navigation, route }) {
     }).start();
   }, []);
 
+  // Safety net: a stale/dead stall.image_url can fail to load without
+  // ever firing onError on every platform, leaving a permanently blank
+  // banner instead of the gradient fallback below — see ProductCard.js
+  // for the same pattern.
+  useEffect(() => { setStallImageLoaded(false); setStallImageError(false); }, [stall?.image_url]);
+  useEffect(() => {
+    if (!stall?.image_url || stallImageError || stallImageLoaded) return;
+    const timer = setTimeout(() => setStallImageError(true), 4000);
+    return () => clearTimeout(timer);
+  }, [stall?.image_url, stallImageError, stallImageLoaded]);
+
   const fetchStallDetails = async () => {
     try {
       setLoading(true);
@@ -149,7 +152,10 @@ export default function StallDetailsScreen({ navigation, route }) {
       if (stallData?.vendor_id) {
         const { data: vendorData, error: vendorError } = await supabase
           .from('profiles')
-          .select('id, full_name, email, avatar_url, phone')
+          // email intentionally excluded — that's the vendor's account
+          // login, not a public contact channel, and this query runs for
+          // every customer who opens the stall page.
+          .select('id, full_name, avatar_url, phone')
           .eq('id', stallData.vendor_id)
           .single();
         
@@ -178,6 +184,20 @@ export default function StallDetailsScreen({ navigation, route }) {
 
       if (productsError) throw productsError;
       setProducts(productsData || []);
+
+      const { data: ratingsData } = await supabase
+        .from('ratings')
+        .select('rating')
+        .eq('stall_id', stallId);
+      if (ratingsData && ratingsData.length > 0) {
+        const sum = ratingsData.reduce((acc, r) => acc + (parseFloat(r.rating) || 0), 0);
+        setRatingStats({
+          average: Math.round((sum / ratingsData.length) * 10) / 10,
+          count: ratingsData.length,
+        });
+      } else {
+        setRatingStats({ average: 0, count: 0 });
+      }
 
       try {
         setStallLocation(await fetchCurrentStallLocation(stallId));
@@ -242,6 +262,34 @@ export default function StallDetailsScreen({ navigation, route }) {
     }
   };
 
+  // Every card on this screen is this same stall, so unlike
+  // CategoryProductsScreen (which juggles a stall per product) this
+  // just closes over the one `stall` already loaded above.
+  const handleAddToCart = async (product) => {
+    if (!user && !isGuest) {
+      Alert.alert(
+        'Login Required',
+        'Please login to add items to cart',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+    if (!product || !stall) return;
+    const result = await addToCart(product, stall.id, stall, 1);
+    if (result?.requiresAuth) return;
+    Alert.alert(
+      'Added to Cart',
+      `${product.name} added to your cart`,
+      [
+        { text: 'Continue Shopping', style: 'cancel' },
+        { text: 'View Cart', onPress: () => navigation.navigate('Cart') },
+      ]
+    );
+  };
+
   const handleReportVendor = () => {
     if (!user) {
       Alert.alert(
@@ -278,13 +326,12 @@ export default function StallDetailsScreen({ navigation, route }) {
   };
 
   const goToReviews = () => {
-    // Navigate to reviews screen - you can implement this later
-    Alert.alert('Reviews', 'Navigate to reviews screen');
-    // navigation.navigate('Reviews', { stallId: stall.id });
+    if (!stall) return;
+    navigation.navigate('StallReviews', { stallId: stall.id, stallName: stall.stall_name });
   };
 
-  const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
-  const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
+  const displayRating = ratingStats.average;
+  const ratingCount = ratingStats.count;
 
   const distanceLabel = useMemo(() => {
     if (!stallLocation || !userLocation) return null;
@@ -333,6 +380,7 @@ export default function StallDetailsScreen({ navigation, route }) {
             <Image
               source={{ uri: stall.image_url }}
               style={styles.bannerImage}
+              onLoad={() => setStallImageLoaded(true)}
               onError={() => setStallImageError(true)}
               resizeMode="cover"
             />
@@ -413,9 +461,6 @@ export default function StallDetailsScreen({ navigation, route }) {
               )}
               <View style={styles.infoStripText}>
                 <Text style={styles.infoStripName}>{vendor?.full_name || 'Vendor'}</Text>
-                {vendor?.email && (
-                  <Text style={styles.infoStripEmail}>{vendor.email}</Text>
-                )}
               </View>
             </View>
             
@@ -432,7 +477,9 @@ export default function StallDetailsScreen({ navigation, route }) {
                 </View>
                 {/*  Underline BELOW the number (3.4) - aligned to the right */}
                 <View style={styles.infoStripRatingUnderline} />
-                <Text style={styles.infoStripReviewCount}>{ratingCount} reviews</Text>
+                <Text style={styles.infoStripReviewCount}>
+                  {ratingCount === 0 ? 'No reviews yet' : `${ratingCount} review${ratingCount === 1 ? '' : 's'}`}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
             </TouchableOpacity>
@@ -470,12 +517,6 @@ export default function StallDetailsScreen({ navigation, route }) {
               <Text style={styles.vendorInfoLabel}>Vendor Name</Text>
               <Text style={styles.vendorInfoValue}>{vendor?.full_name || 'Not Available'}</Text>
             </View>
-            {vendor?.email && (
-              <View style={styles.vendorInfoItem}>
-                <Text style={styles.vendorInfoLabel}>Email</Text>
-                <Text style={styles.vendorInfoValue}>{vendor.email}</Text>
-              </View>
-            )}
             {vendor?.phone && (
               <View style={styles.vendorInfoItem}>
                 <Text style={styles.vendorInfoLabel}>Phone</Text>
@@ -579,28 +620,18 @@ export default function StallDetailsScreen({ navigation, route }) {
               </Text>
             </View>
           ) : (
-            <View style={styles.productsList}>
-              {products.map((product, index) => (
-                <TouchableOpacity
+            <View style={styles.productsGrid}>
+              {products.map((product) => (
+                <ProductCard
                   key={product.id}
-                  style={[
-                    styles.productItem,
-                    index === products.length - 1 && styles.productItemLast
-                  ]}
+                  product={product}
+                  stall={stall}
+                  style={styles.productCardGrid}
+                  isWishlisted={isProductFavorite(product.id)}
+                  onToggleWishlist={toggleProductFavorite}
                   onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.productLeft}>
-                    <View style={styles.productIcon}>
-                      <Ionicons name="cube-outline" size={20} color={COLORS.primary} />
-                    </View>
-                    <View style={styles.productInfo}>
-                      <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-                      <Text style={styles.productMeta}>₱{product.price} / {product.unit}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
-                </TouchableOpacity>
+                  onAddToCart={() => handleAddToCart(product)}
+                />
               ))}
             </View>
           )}
@@ -912,11 +943,6 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text.dark,
   },
-  infoStripEmail: {
-    fontSize: 12,
-    color: COLORS.text.medium,
-    marginTop: 1,
-  },
 
   // ── Rating on Right Side ──
   infoStripRight: {
@@ -1101,6 +1127,18 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
 
   // ── Products ──
+  // Replaced the old plain-row list with the shared ProductCard grid
+  // (same 2-column layout HomeScreen/CategoryProductsScreen already
+  // use) so this screen shows real photos and price ranges instead of
+  // a bare icon + single flat price.
+  productsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  productCardGrid: {
+    width: '48%',
+  },
   productsList: {
     gap: 0,
   },

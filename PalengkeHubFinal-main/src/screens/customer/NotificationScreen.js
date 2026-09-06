@@ -348,13 +348,9 @@ export default function NotificationScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={COLORS.statusBar === 'dark' ? 'dark-content' : 'light-content'} backgroundColor={COLORS.surface} />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color={COLORS.text.inverse} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={styles.placeholder} />
-      </View>
+      {/* App.js's global Header already renders "Notifications" / "Your
+          alerts" with a back button for this route — this screen's own
+          copy of the same title was the redundant second header. */}
 
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>

@@ -12,7 +12,7 @@
 //    min-height keeps rows an equal height.
 //  - Sensible activeOpacity (0.8) + press scale animation.
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import { PriceText } from './ui/PriceText';
 import { VerdictChip } from './ui/VerdictChip';
 import { RADIUS, LAYOUT, SPACING, TYPE } from '../theme/tokens';
 import { getProductFallbackPhoto } from '../utils/productPhotoFallbacks';
+import { getProductPriceRange } from '../utils/priceRange';
 
 const IMAGE_FADE = 180;
 
@@ -85,10 +86,25 @@ export const ProductCard = ({
   };
 
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  // Safety net for a class of bug already found once (a stale/dead
+  // image_url — e.g. a leftover link from before a storage migration —
+  // that fails to load without ever firing onError on every platform,
+  // leaving a permanently blank box instead of the fallback chain
+  // below). If neither onLoad nor onError has resolved within a few
+  // seconds, force the same fallback anyway.
+  useEffect(() => { setImageLoaded(false); }, [product?.image_url]);
+  useEffect(() => {
+    if (!product?.image_url || imageError || imageLoaded) return;
+    const timer = setTimeout(() => setImageError(true), 4000);
+    return () => clearTimeout(timer);
+  }, [product?.image_url, imageError, imageLoaded]);
+
   const handleImageLoad = () => {
+    setImageLoaded(true);
     Animated.timing(fadeAnim, { toValue: 1, duration: IMAGE_FADE, useNativeDriver: true }).start();
   };
 
@@ -106,6 +122,11 @@ export const ProductCard = ({
   const hasOriginal = hasPromotion && originalPrice != null && Number(originalPrice) > 0;
   const safePrice = Number(product?.price) || 0;
   const fallbackPhoto = !product?.image_url || imageError ? getProductFallbackPhoto(product?.name) : null;
+
+  const priceRange = getProductPriceRange(product);
+  const hasPriceRange = !!priceRange;
+  const rangeMin = priceRange?.min;
+  const rangeMax = priceRange?.max;
 
     return (
     <Animated.View
@@ -192,9 +213,11 @@ export const ProductCard = ({
 
           <View style={styles.priceVerdictRow}>
             <PriceText
-              price={safePrice}
+              price={hasPriceRange ? rangeMin : safePrice}
+              maxPrice={hasPriceRange ? rangeMax : undefined}
               unit={product?.unit}
               originalPrice={hasOriginal ? originalPrice : null}
+              stacked
               style={styles.priceRow}
             />
             {verdict ? <VerdictChip verdict={verdict} /> : null}
@@ -269,11 +292,20 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     backgroundColor: '#F3F4F6',
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
+    overflow: 'hidden',
   },
+  // Explicit top radius on the image itself, not just reliance on the
+  // parent card's overflow:hidden clip — that clip doesn't reliably
+  // round an Image's own corners on every platform (React Native Web
+  // in particular), which is what left this square on the web preview.
   image: {
     width: '100%',
     height: 110,
     backgroundColor: '#F3F4F6',
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
   },
   imagePlaceholder: {
     width: '100%',
@@ -281,6 +313,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
   },
   wishlistBtn: {
     position: 'absolute',

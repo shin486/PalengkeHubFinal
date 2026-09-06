@@ -16,9 +16,17 @@ export const Chip = ({
   onPress,
   removable = false,
   onRemove,
+  // Opt-in only — every existing caller renders at the same size as
+  // before, since none of them pass this. For a dense row of several
+  // chips at once (sort/filter strips) the standard size reads as
+  // oversized; 'compact' trims padding and text size while keeping a
+  // still-tappable 36px minimum height (below the design system's 42px
+  // baseline, but not so small it stops being a reasonable tap target).
+  size = 'default', // 'default' | 'compact'
   style,
 }) => {
   const COLORS = useColors();
+  const isCompact = size === 'compact';
 
   const handlePress = () => {
     hapticSelection();
@@ -31,6 +39,7 @@ export const Chip = ({
       activeOpacity={0.8}
       style={[
         styles.chip,
+        isCompact && styles.chipCompact,
         {
           backgroundColor: isOn ? COLORS.brandSoft : COLORS.card,
           borderColor: isOn ? COLORS.primary : COLORS.border,
@@ -42,6 +51,7 @@ export const Chip = ({
       <Text
         style={[
           styles.label,
+          isCompact && styles.labelCompact,
           { color: isOn ? COLORS.primaryDark : COLORS.text.primary },
         ]}
         numberOfLines={1}
@@ -63,6 +73,13 @@ export const Chip = ({
 
 const styles = StyleSheet.create({
   chip: {
+    // alignSelf: 'flex-start' pins this to its own content width no
+    // matter what flex context it's dropped into — without it, a chip
+    // placed in a container that stretches its children (React Native's
+    // actual default is alignItems:'stretch', not the web's "shrink to
+    // content") grows to fill available width instead of staying an
+    // oval pill, which is what "stretches through the screen" was.
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 42,
@@ -71,10 +88,18 @@ const styles = StyleSheet.create({
     borderWidth: LAYOUT.borderWidth,
     gap: SPACING.sm - 1,
   },
+  chipCompact: {
+    minHeight: 30,
+    paddingHorizontal: SPACING.sm + 2,
+    gap: 4,
+  },
   label: {
     fontSize: TYPE.size.bodySmall,
     fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
+  },
+  labelCompact: {
+    fontSize: TYPE.size.micro,
   },
   removeCircle: {
     width: 22,

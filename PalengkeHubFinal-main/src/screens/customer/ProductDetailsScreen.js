@@ -5,6 +5,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Image,
@@ -13,6 +14,7 @@ import {
   Animated,
   Modal,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -117,6 +119,31 @@ const RosterRow = ({ item, rank, isCheapest, isCurrentUserStall }) => {
   );
 };
 
+// One page of the swipeable product gallery — falls back to a plain
+// placeholder icon if that particular photo fails to load, rather than
+// pulling in the curated per-product fallback (that's for products with
+// no real photos at all, not one broken slide in a set of real ones).
+const GalleryPhoto = ({ uri, width, style }) => {
+  const COLORS = useColors();
+  const [failed, setFailed] = useState(false);
+  return (
+    <View style={{ width, height: '100%' }}>
+      {failed ? (
+        <View style={[style, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="image-outline" size={32} color={COLORS.text.quaternary} />
+        </View>
+      ) : (
+        <Image
+          source={{ uri }}
+          style={style}
+          resizeMode="cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </View>
+  );
+};
+
 const rosterStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -130,18 +157,23 @@ const rosterStyles = StyleSheet.create({
   rank: {
     width: 20,
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     textAlign: 'center',
   },
   info: {
     flex: 1,
   },
+  // Stall names are Baloo 2 app-wide (design system: "headings and stall
+  // names are Baloo 2"), matching StallDetailsScreen/HomeScreen.
   stallName: {
     fontSize: TYPE.size.h3,
+    fontFamily: 'Baloo2_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   stallSub: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     marginTop: 2,
   },
   priceCol: {
@@ -149,6 +181,7 @@ const rosterStyles = StyleSheet.create({
   },
   price: {
     fontSize: TYPE.size.h2,
+    fontFamily: 'Baloo2_800ExtraBold',
     fontWeight: TYPE.weight.black,
   },
   badge: {
@@ -280,6 +313,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
   // Tracks a broken/expired image_url so the render below can fall
   // through to the curated fallback photo instead of a dead image.
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
 
   // Micro-interaction: spring pulse on the wishlist heart
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -294,6 +329,29 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const [withdrawingHaggle, setWithdrawingHaggle] = useState(false);
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
+
+  // Up to 3 vendor-uploaded photos (image_urls), falling back to the
+  // single legacy image_url for products saved before multi-photo support.
+  const photos = useMemo(() => {
+    if (Array.isArray(product?.image_urls) && product.image_urls.length > 0) {
+      return product.image_urls.filter(Boolean);
+    }
+    return product?.image_url ? [product.image_url] : [];
+  }, [product]);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  useEffect(() => { setActivePhotoIndex(0); }, [product?.id]);
+
+  // Safety net: a stale/dead image_url can fail to load without ever
+  // firing onError on every platform, leaving a permanently blank hero
+  // image instead of falling back — see ProductCard.js for the same
+  // pattern (first found on the Presyo Check cards).
+  useEffect(() => { setImageLoaded(false); setImageError(false); }, [product?.image_url]);
+  useEffect(() => {
+    if (!product?.image_url || imageError || imageLoaded) return;
+    const timer = setTimeout(() => setImageError(true), 4000);
+    return () => clearTimeout(timer);
+  }, [product?.image_url, imageError, imageLoaded]);
+
   const [stall, setStall] = useState(null);
   const [promotion, setPromotion] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -935,11 +993,37 @@ export default function ProductDetailsScreen({ route, navigation }) {
           card and then a plain gray cart icon the instant you tapped in —
           and a broken/expired image_url had no fallback at all. */}
       <View style={styles.imageContainer}>
-        {product.image_url && !imageError ? (
+        {photos.length > 1 ? (
+          <>
+            <FlatList
+              data={photos}
+              keyExtractor={(uri, idx) => `${idx}-${uri}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+                setActivePhotoIndex(idx);
+              }}
+              renderItem={({ item }) => (
+                <GalleryPhoto uri={item} width={windowWidth} style={styles.productImage} />
+              )}
+            />
+            <View style={styles.photoDots} pointerEvents="none">
+              {photos.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[styles.photoDot, idx === activePhotoIndex && styles.photoDotActive]}
+                />
+              ))}
+            </View>
+          </>
+        ) : product.image_url && !imageError ? (
           <Image
             source={{ uri: product.image_url }}
             style={styles.productImage}
             resizeMode="cover"
+            onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
           />
         ) : getProductFallbackPhoto(product.name) ? (
@@ -1345,7 +1429,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <View style={styles.haggleBanner}>
             <Ionicons name="pricetag" size={16} color={COLORS.success} />
             <Text style={styles.haggleBannerText}>
-              Your haggled price: <Text style={{ fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
+              Your haggled price: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
             </Text>
           </View>
         )}
@@ -1364,7 +1448,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <View style={[styles.haggleBanner, { backgroundColor: COLORS.warningLight || COLORS.inputBg }]}>
             <Ionicons name="swap-horizontal" size={16} color={COLORS.warning || COLORS.text.primary} />
             <Text style={styles.haggleBannerText}>
-              Vendor countered: <Text style={{ fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
+              Vendor countered: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
             </Text>
           </View>
         )}
@@ -1578,11 +1662,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   toastTitle: {
     color: COLORS.onInk,
     fontSize: TYPE.size.bodySmall,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   toastSubtitle: {
     color: COLORS.onInk,
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     marginTop: 2,
     opacity: 0.8,
   },
@@ -1605,6 +1691,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   relatedName: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     fontWeight: TYPE.weight.medium,
     color: COLORS.text.primary,
     marginBottom: SPACING.xs,
@@ -1612,6 +1699,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   relatedPrice: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
   },
@@ -1624,10 +1712,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   loadingText: {
     marginTop: SPACING.md,
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
   },
   errorText: {
     fontSize: TYPE.size.body,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.errorDark,
     marginBottom: SPACING.xl,
   },
@@ -1640,6 +1730,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   backButtonText: {
     color: COLORS.onPrimary,
     fontSize: TYPE.size.body,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
   },
   imageContainer: {
@@ -1659,6 +1750,25 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  photoDots: {
+    position: 'absolute',
+    bottom: SPACING.sm,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  photoDotActive: {
+    backgroundColor: '#FFFFFF',
+    width: 16,
   },
   productInfo: {
     backgroundColor: COLORS.surface,
@@ -1693,6 +1803,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   productUnit: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.tertiary,
   },
@@ -1705,8 +1816,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
   },
+  // Same bug class as TEXT_STYLES.display (tokens.js): this only ever set
+  // fontSize manually, with no fontFamily/fontWeight, so it silently fell
+  // back to the system default font instead of the app's Nunito body
+  // style everything else uses — which is exactly what read as
+  // "inconsistent" next to "Detalye" above it (Baloo 2, correctly styled).
   productDescription: {
-    fontSize: TYPE.size.body,
+    ...TEXT_STYLES.body,
     color: COLORS.text.secondary,
     lineHeight: 22,
   },
@@ -1742,15 +1858,18 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   unitChipText: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.text.secondary,
   },
   unitChipTextActive: {
     color: COLORS.onPrimary,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   unitChipPrice: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.primaryDark,
     marginLeft: 4,
@@ -1777,11 +1896,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   quantityButtonText: {
     fontSize: 22,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.primaryDark,
   },
   quantityText: {
     fontSize: 22,
+    fontFamily: 'Nunito_900Black',
     fontWeight: TYPE.weight.black,
     marginHorizontal: SPACING.md,
     minWidth: 40,
@@ -1805,10 +1926,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   haggleBannerText: {
     flex: 1,
     fontSize: 13,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.primary,
   },
   haggleWithdrawText: {
     fontSize: 13,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: '700',
     color: COLORS.error,
   },
@@ -1833,6 +1956,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   stallNumber: {
     fontSize: TYPE.size.caption,
     color: COLORS.primaryDark,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   stallName: {
@@ -1842,12 +1966,14 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   stallSectionText: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
   },
   viewStallLink: {
     fontSize: TYPE.size.label,
     color: COLORS.primaryDark,
     marginTop: SPACING.sm,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
   },
   ratingContainer: {
@@ -1857,11 +1983,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   stallRatingText: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.warning,
   },
   stallRatingCount: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
   },
   reportSection: {
@@ -1889,11 +2017,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   reportButtonText: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.primaryDark,
   },
   reportNote: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
     marginTop: SPACING.sm,
     textAlign: 'center',
@@ -1917,6 +2047,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   stickyTotalLabel: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.text.tertiary,
   },
@@ -1959,6 +2090,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   offerSubtitle: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
     textAlign: 'center',
     marginTop: SPACING.xs,
@@ -1966,6 +2098,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   offerLabel: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.text.secondary,
     marginBottom: SPACING.sm,
@@ -1981,6 +2114,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   offerCurrency: {
     fontSize: 18,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.primaryDark,
     marginRight: SPACING.sm,
@@ -1989,11 +2123,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.md,
     fontSize: 18,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
   },
   offerHint: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
     marginTop: SPACING.sm,
     marginBottom: SPACING.lg,
@@ -2014,6 +2150,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   offerSubmitText: {
     color: COLORS.onPrimary,
     fontSize: TYPE.size.bodySmall,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
   },
   originalPriceRow: {
@@ -2023,11 +2160,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   originalPriceLabel: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.secondary,
     marginRight: SPACING.sm,
   },
   originalPriceValue: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
     textDecorationLine: 'line-through',
   },
@@ -2039,11 +2178,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   unitOriginalPrice: {
     fontSize: TYPE.size.micro - 2,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
     textDecorationLine: 'line-through',
   },
   unitDiscountedPrice: {
     color: COLORS.success,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
   },
   // ── Presyo Check ──
@@ -2070,6 +2211,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   presyoLoadingText: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
   },
   presyoEmpty: {
@@ -2089,6 +2231,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   presyoEmptyBody: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
     textAlign: 'center',
   },
@@ -2101,11 +2244,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   differentUnitHeading: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.secondary,
   },
   differentUnitNote: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.tertiary,
     marginTop: 2,
     marginBottom: SPACING.sm,
@@ -2124,15 +2269,18 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   differentUnitStallName: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.text.secondary,
   },
   differentUnitStallSub: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
   },
   differentUnitPrice: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.secondary,
   },
@@ -2192,6 +2340,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   vendorName: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
     marginBottom: 2,
@@ -2203,6 +2352,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   vendorSub: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
   },
   chartContainer: {
@@ -2215,6 +2365,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   chartTitle: {
     fontSize: TYPE.size.label,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
     color: COLORS.text.primary,
     marginBottom: SPACING.md,
@@ -2242,10 +2393,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   chartBarLabel: {
     fontSize: TYPE.size.micro - 2,
     color: COLORS.text.quaternary,
+    fontFamily: 'Nunito_700Bold',
     fontWeight: TYPE.weight.semibold,
   },
   chartBarDate: {
     fontSize: 9,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
   },
   chartInfo: {
@@ -2259,6 +2412,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   chartInfoText: {
     fontSize: TYPE.size.micro,
+    fontFamily: 'Nunito_600SemiBold',
     color: COLORS.text.quaternary,
   },
   subSection: {
@@ -2298,6 +2452,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   insightTitle: {
     fontSize: TYPE.size.caption,
+    fontFamily: 'Nunito_800ExtraBold',
     fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
     flex: 1,
