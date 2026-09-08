@@ -1399,6 +1399,14 @@ html{scroll-behavior:smooth}
     }
   });
 
+  /* Admin shortcut - Ctrl+1 redirects to admin subdomain */
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.key === '1') {
+      e.preventDefault();
+      window.location.href = 'https://admin.palengkehub.site';
+    }
+  });
+
   /* ---------- gate everything else ---------- */
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var haveGsap = typeof window.gsap !== 'undefined' && typeof window.ScrollTrigger !== 'undefined';
