@@ -4,6 +4,10 @@ import { supabase } from '../../lib/supabase';
 export const useVendorOrders = (stallId) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Previously fetch failures only went to console.error — nothing told
+  // the vendor the list failed to load, so a network blip or RLS hiccup
+  // looked identical to "you genuinely have zero orders."
+  const [error, setError] = useState(null);
 
   const fetchOrders = useCallback(async () => {
     if (!stallId) {
@@ -14,9 +18,10 @@ export const useVendorOrders = (stallId) => {
 
     try {
       setLoading(true);
+      setError(null);
       console.log(' Fetching orders for stall:', stallId);
-      
-      const { data, error } = await supabase
+
+      const { data, error: fetchError } = await supabase
         .from('orders')
         .select(`
           *,
@@ -28,30 +33,59 @@ export const useVendorOrders = (stallId) => {
         .eq('stall_id', stallId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
+      if (fetchError) throw fetchError;
+
       console.log(' Orders fetched:', data?.length || 0);
       setOrders(data || []);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      setError(err?.message || 'Failed to load orders.');
     } finally {
       setLoading(false);
     }
   }, [stallId]);
 
+  // Notify-the-customer text — kept identical to VendorOrderDetailScreen.js's
+  // own copy of this map, since this is the SECOND path that can advance an
+  // order's status (the Orders list's quick-action buttons) and previously
+  // updated the row with no notification at all. A vendor advancing an
+  // order from the list, rather than opening its detail screen, meant the
+  // customer never heard about it.
+  const STATUS_NOTIFICATION_MESSAGES = {
+    confirmed: 'Your order has been confirmed by the vendor!',
+    preparing: 'Your order is now being prepared.',
+    ready: 'Your order is ready for pickup!',
+    completed: 'Your order has been completed. Thank you!',
+  };
+
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       console.log(' Updating order:', orderId, 'to:', newStatus);
-      
+
+      const order = orders.find(o => o.id === orderId);
+
       const { error } = await supabase
         .from('orders')
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date()
         })
         .eq('id', orderId);
 
       if (error) throw error;
+
+      if (order?.consumer_id && STATUS_NOTIFICATION_MESSAGES[newStatus]) {
+        const { error: notifyError } = await supabase.from('notifications').insert({
+          user_id: order.consumer_id,
+          title: 'Order Update',
+          message: STATUS_NOTIFICATION_MESSAGES[newStatus],
+          type: 'order',
+          data: { order_id: orderId, type: 'status_update' },
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+        if (notifyError) console.error('Error notifying customer of status update:', notifyError);
+      }
 
       console.log(' Order status updated');
       await fetchOrders(); // Refresh orders
@@ -126,6 +160,7 @@ export const useVendorOrders = (stallId) => {
   return {
     orders,
     loading,
+    error,
     orderStats,
     updateOrderStatus,
     refreshOrders: fetchOrders,

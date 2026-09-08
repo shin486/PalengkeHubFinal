@@ -88,6 +88,7 @@ export default function StallDetailsScreen({ navigation, route }) {
   const [vendor, setVendor] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [stallImageError, setStallImageError] = useState(false);
   const [stallImageLoaded, setStallImageLoaded] = useState(false);
@@ -140,7 +141,8 @@ export default function StallDetailsScreen({ navigation, route }) {
   const fetchStallDetails = async () => {
     try {
       setLoading(true);
-      
+      setError(null);
+
       const { data: stallData, error: stallError } = await supabase
         .from('stalls')
         .select('*')
@@ -150,11 +152,12 @@ export default function StallDetailsScreen({ navigation, route }) {
       if (stallError) throw stallError;
       
       if (stallData?.vendor_id) {
+        // profiles_public, not profiles — this runs for every customer
+        // who opens the stall page, and the base table is now locked to
+        // own-row/admin only (see fix-profiles-select-lockdown.sql). The
+        // view exposes exactly this shape (no email) on purpose.
         const { data: vendorData, error: vendorError } = await supabase
-          .from('profiles')
-          // email intentionally excluded — that's the vendor's account
-          // login, not a public contact channel, and this query runs for
-          // every customer who opens the stall page.
+          .from('profiles_public')
           .select('id, full_name, avatar_url, phone')
           .eq('id', stallData.vendor_id)
           .single();
@@ -205,9 +208,9 @@ export default function StallDetailsScreen({ navigation, route }) {
         console.warn('Error fetching stall location:', locError.message);
       }
 
-    } catch (error) {
-      console.error('Error fetching stall:', error);
-      Alert.alert('Error', 'Failed to load stall details');
+    } catch (err) {
+      console.error('Error fetching stall:', err);
+      setError('Failed to load stall details');
     } finally {
       setLoading(false);
     }
@@ -239,6 +242,13 @@ export default function StallDetailsScreen({ navigation, route }) {
 
   const startChat = async () => {
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to message the stall')) {
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to message the stall',
@@ -267,6 +277,13 @@ export default function StallDetailsScreen({ navigation, route }) {
   // just closes over the one `stall` already loaded above.
   const handleAddToCart = async (product) => {
     if (!user && !isGuest) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to add items to cart',
@@ -280,6 +297,13 @@ export default function StallDetailsScreen({ navigation, route }) {
     if (!product || !stall) return;
     const result = await addToCart(product, stall.id, stall, 1);
     if (result?.requiresAuth) return;
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${product.name} added to your cart\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+        navigation.navigate('Cart');
+      }
+      return;
+    }
     Alert.alert(
       'Added to Cart',
       `${product.name} added to your cart`,
@@ -292,6 +316,13 @@ export default function StallDetailsScreen({ navigation, route }) {
 
   const handleReportVendor = () => {
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to report a vendor') && setIsGuest) {
+          setIsGuest(false);
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to report a vendor',
@@ -348,6 +379,22 @@ export default function StallDetailsScreen({ navigation, route }) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (error || !stall) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={{ color: COLORS.text.medium, fontSize: 15, marginBottom: 16 }}>
+          {error || 'Stall not found'}
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+          onPress={fetchStallDetails}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }

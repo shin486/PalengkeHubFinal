@@ -215,9 +215,12 @@ export default function VendorDashboardScreen({ navigation }) {
         return;
       }
 
+      // profiles_public, not profiles — the base table is now locked to
+      // own-row/admin only (see fix-profiles-select-lockdown.sql), and
+      // this needs to read many *other* customers' rows at once.
       const { data: consumersData, error: consumersError } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, email')
+        .from('profiles_public')
+        .select('id, full_name, avatar_url')
         .in('id', consumerIds);
 
       if (consumersError) throw consumersError;
@@ -228,7 +231,6 @@ export default function VendorDashboardScreen({ navigation }) {
           id: consumer.id,
           full_name: consumer.full_name || 'Customer',
           avatar_url: consumer.avatar_url,
-          email: consumer.email,
           orderCount: 0,
           totalSpent: 0,
           lastOrderDate: null,

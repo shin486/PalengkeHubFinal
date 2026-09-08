@@ -122,22 +122,28 @@ export default function ReportIssueScreen({ navigation, route }) {
 
       if (error) throw error;
 
-      Alert.alert(
- ' Report Submitted',
-        'Thank you for your report. Our team will review it and get back to you within 24-48 hours.',
-        [
-          {
-            text: 'View My Reports',
-            onPress: () => navigation.navigate('CustomerReports'),
-          },
-          {
-            text: 'Back to Home',
-            onPress: () => navigation.navigate('Home'),
-            style: 'cancel',
-          },
-        ]
-      );
-      
+      const reportSubmittedBody = 'Thank you for your report. Our team will review it and get back to you within 24-48 hours.';
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        navigation.navigate(window.confirm(`Report Submitted\n\n${reportSubmittedBody}\n\nOK = View My Reports, Cancel = Back to Home`) ? 'CustomerReports' : 'Home');
+      } else {
+        Alert.alert(
+          'Report Submitted',
+          reportSubmittedBody,
+          [
+            {
+              text: 'View My Reports',
+              onPress: () => navigation.navigate('CustomerReports'),
+            },
+            {
+              text: 'Back to Home',
+              onPress: () => navigation.navigate('Home'),
+              style: 'cancel',
+            },
+          ]
+        );
+      }
+
       // Reset form
       setSelectedType(null);
       setSelectedReason('');
@@ -147,7 +153,14 @@ export default function ReportIssueScreen({ navigation, route }) {
       setCustomReason('');
     } catch (error) {
       console.error('Error submitting report:', error);
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
+      // react-native-web does NOT implement Alert.alert — without this,
+      // a failed submission gave the customer zero feedback: the form
+      // just sat there looking like nothing happened.
+      if (Platform.OS === 'web') {
+        window.alert('Failed to submit report. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to submit report. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

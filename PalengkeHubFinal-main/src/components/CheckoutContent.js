@@ -73,7 +73,7 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
-  const { removeItems } = useCart();
+  const { removeItems, syncPrices } = useCart();
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
@@ -414,16 +414,22 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           ? 'We could not read your receipt automatically. Please check your internet connection or retake a clearer photo.'
           : softIssue.body;
 
-        const proceed = await new Promise((resolve) => {
-          Alert.alert(
-            title,
-            `${body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`,
-            [
-              { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Submit Anyway', onPress: () => resolve(true) },
-            ]
-          );
-        });
+        const confirmBody = `${body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`;
+        // react-native-web does NOT implement Alert.alert — its button
+        // callbacks never fire on web, so the Promise below would hang
+        // forever. window.confirm() is synchronous, so no Promise needed.
+        const proceed = Platform.OS === 'web'
+          ? window.confirm(`${title}\n\n${confirmBody}`)
+          : await new Promise((resolve) => {
+            Alert.alert(
+              title,
+              confirmBody,
+              [
+                { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Submit Anyway', onPress: () => resolve(true) },
+              ]
+            );
+          });
         if (!proceed) return;
       }
 
@@ -489,7 +495,24 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         .eq('id', payment.orderId);
       
       if (error) throw error;
-      
+
+      // Vendor otherwise only learns of a submitted GCash payment via
+      // realtime/polling on the orders list — no notifications row was ever
+      // written for this, unlike the vendor->customer direction (see
+      // useVendorOrders.js's status-change notifications).
+      if (payment.vendorId) {
+        const { error: notifyError } = await supabase.from('notifications').insert({
+          user_id: payment.vendorId,
+          title: 'Payment Submitted',
+          message: `A customer submitted a GCash payment for order at ${payment.stallName}. Please verify it.`,
+          type: 'order',
+          data: { order_id: payment.orderId, type: 'payment_submitted' },
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+        if (notifyError) console.error('Error notifying vendor of payment submission:', notifyError);
+      }
+
       //  Mark this vendor's payment as submitted (awaiting vendor verification).
       // Build the updated array once and reuse it below — checking
       // completion off the outer `gcashPayments` closure instead reads the
@@ -511,9 +534,15 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         }
         setTimeout(() => {
           setGcashModalVisible(false);
+          const successBody = 'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.';
+          // react-native-web does NOT implement Alert.alert — use window.confirm on web
+          if (Platform.OS === 'web') {
+            navigation.navigate(window.confirm(`All Payments Submitted!\n\n${successBody}\n\nOK = View Orders, Cancel = Continue Shopping`) ? 'Orders' : 'Home');
+            return;
+          }
           Alert.alert(
             'All Payments Submitted!',
-            'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.',
+            successBody,
             [
               { text: 'View Orders', onPress: () => navigation.navigate('Orders') },
               { text: 'Continue Shopping', onPress: () => navigation.navigate('Home') }
@@ -583,9 +612,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const groupByStall = () => {
+  const groupByStall = (sourceCart = cart) => {
     const grouped = {};
-    cart.forEach(item => {
+    sourceCart.forEach(item => {
       const stallId = item.stall_id;
       if (!grouped[stallId]) {
         grouped[stallId] = {
@@ -652,6 +681,58 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     setPickupTime(newTime);
   };
 
+  // Re-checks every cart line against the live `products` row right before
+  // an order is created. The cart itself only ever reflects whatever
+  // price/quantity was set at add-to-cart time — previously trusted as-is
+  // all the way into the order, with nothing to catch a vendor's price
+  // change, a since-unlisted product, or (with direct API access) an
+  // arbitrarily tampered cart price. Quantity is also clamped here since
+  // groupByStall's `item.quantity || 1` only ever caught a literal 0, not
+  // a negative number.
+  const verifyCartAgainstServer = async () => {
+    const productIds = [...new Set(cart.map(item => item.product_id || item.id))];
+    if (productIds.length === 0) return { verifiedCart: [], blockedNames: [], pricesChanged: false };
+
+    const { data: freshProducts, error } = await supabase
+      .from('products')
+      .select('id, price, is_available, name')
+      .in('id', productIds);
+
+    if (error) {
+      throw new Error('Could not verify your items. Please check your connection and try again.');
+    }
+
+    const freshMap = new Map((freshProducts || []).map(p => [p.id, p]));
+    const blockedNames = [];
+    const verifiedCart = [];
+    const changedPrices = new Map();
+
+    for (const item of cart) {
+      const pid = item.product_id || item.id;
+      const fresh = freshMap.get(pid);
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+      if (!fresh || !fresh.is_available) {
+        blockedNames.push(item.name);
+        continue;
+      }
+      if (Number(fresh.price) !== Number(item.price)) {
+        changedPrices.set(pid, Number(fresh.price));
+      }
+      verifiedCart.push({ ...item, price: Number(fresh.price), quantity });
+    }
+
+    // Correct the actual cart (not just this local copy) so if this blocks
+    // checkout, the customer reviewing their cart afterward sees the same
+    // updated numbers this check just used — not the stale ones that
+    // triggered the block.
+    if (changedPrices.size > 0) {
+      await syncPrices(changedPrices);
+    }
+
+    return { verifiedCart, blockedNames, pricesChanged: changedPrices.size > 0 };
+  };
+
   //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
     if (cart.length === 0) {
@@ -670,7 +751,27 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
     setLoading(true);
     try {
-      const groupedOrders = groupByStall();
+      const { verifiedCart, blockedNames, pricesChanged } = await verifyCartAgainstServer();
+
+      if (blockedNames.length > 0) {
+        setLoading(false);
+        Alert.alert(
+          'Some items are no longer available',
+          `${blockedNames.join(', ')} ${blockedNames.length === 1 ? 'is' : 'are'} no longer available. Please remove ${blockedNames.length === 1 ? 'it' : 'them'} from your cart and try again.`
+        );
+        return;
+      }
+
+      if (pricesChanged) {
+        setLoading(false);
+        Alert.alert(
+          'Prices have changed',
+          'One or more items in your cart changed price since you added them. Please review your cart — the updated total is now shown there.'
+        );
+        return;
+      }
+
+      const groupedOrders = groupByStall(verifiedCart);
       const payments = [];
 
       for (const [stallId, data] of Object.entries(groupedOrders)) {
@@ -729,13 +830,14 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         // show the customer stale payment details with no way to know.
         const { data: freshStall } = await supabase
           .from('stalls')
-          .select('gcash_qr_url, gcash_number')
+          .select('gcash_qr_url, gcash_number, vendor_id')
           .eq('id', stallId)
           .maybeSingle();
 
         //  Each vendor gets their own payment object with individual timer
         payments.push({
           stallId: parseInt(stallId),
+          vendorId: freshStall?.vendor_id || null,
           stallName: data.stall.stall_name,
           stallNumber: data.stall.stall_number,
           gcashQrUrl: freshStall?.gcash_qr_url ?? data.stall.gcash_qr_url ?? null,

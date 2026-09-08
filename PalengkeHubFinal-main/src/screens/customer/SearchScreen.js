@@ -17,6 +17,7 @@ import {
   Animated,
   Modal,
   Image,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { startListening, stopListening, isVoiceInputSupported } from '../../services/voiceService';
 import { PriceTrendBadge } from '../../components/PriceTrendBadge';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { fetchAllStallRatings } from '../../services/stallRatingsService';
 import { useI18n } from '../../contexts/i18nContext';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../contexts/AuthContext';
@@ -59,21 +61,6 @@ const PRICE_RANGES = [
   { id: '300_500', label: '₱300 – ₱500', min: 300, max: 500 },
   { id: 'over_500', label: '₱500+', min: 500, max: null },
 ];
-
-// Generate a stable pseudo-random rating seeded by stall id
-const getStallRating = (stallId, realRating) => {
-  if (realRating && realRating > 0) return realRating;
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  const rating = 2.5 + (randomValue * 2.5);
-  return Math.round(rating * 10) / 10;
-};
-
-const getRandomRatingCount = (stallId) => {
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  return Math.floor(5 + (randomValue * 195));
-};
 
 const getStarDistribution = (rating) => {
   const fullStars = Math.floor(rating);
@@ -382,6 +369,15 @@ export default function SearchScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [priceTrends, setPriceTrends] = useState(new Map());
+  // Real per-stall ratings (see stallRatingsService.js) — not query-specific,
+  // fetched once on mount. getStallRating/getRatingCount below read from
+  // this instead of the seeded-random generator this screen used to have,
+  // which showed a different "rating" for the same stall than every other
+  // screen.
+  const [stallRatingsMap, setStallRatingsMap] = useState({});
+  useEffect(() => { fetchAllStallRatings().then(setStallRatingsMap); }, []);
+  const getStallRating = (stallId) => stallRatingsMap[stallId]?.average ?? 0;
+  const getRatingCount = (stallId) => stallRatingsMap[stallId]?.count ?? 0;
   const { t } = useI18n();
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -460,8 +456,8 @@ export default function SearchScreen({ navigation }) {
       setSuggestedStalls(
         (stallRows || []).map(stall => ({
           ...stall,
-          displayRating: getStallRating(stall.id, stall.average_rating),
-          ratingCount: getRandomRatingCount(stall.id),
+          displayRating: getStallRating(stall.id),
+          ratingCount: getRatingCount(stall.id),
         }))
       );
     } catch (error) {
@@ -827,8 +823,8 @@ export default function SearchScreen({ navigation }) {
         
         const stallsWithRatings = (data || []).map(stall => ({
           ...stall,
-          displayRating: getStallRating(stall.id, stall.average_rating),
-          ratingCount: getRandomRatingCount(stall.id)
+          displayRating: getStallRating(stall.id),
+          ratingCount: getRatingCount(stall.id)
         }));
         
         setStalls(stallsWithRatings);
@@ -880,6 +876,13 @@ export default function SearchScreen({ navigation }) {
 
   const addToCartFromComparison = (product, stall, qty) => {
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert('Login Required', 'Please login to add items to cart', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Login', onPress: () => navigation.navigate('Login') },
@@ -927,8 +930,8 @@ export default function SearchScreen({ navigation }) {
       });
     } else if (sortOption === 'rating') {
       groupEntries = groupEntries.sort((a, b) => {
-        const aRating = Math.max(...a[1].map((p) => getStallRating(p.stalls?.id, p.stalls?.average_rating)));
-        const bRating = Math.max(...b[1].map((p) => getStallRating(p.stalls?.id, p.stalls?.average_rating)));
+        const aRating = Math.max(...a[1].map((p) => getStallRating(p.stalls?.id)));
+        const bRating = Math.max(...b[1].map((p) => getStallRating(p.stalls?.id)));
         return bRating - aRating;
       });
     }
@@ -994,8 +997,8 @@ export default function SearchScreen({ navigation }) {
       ? sortedSameUnit.findIndex(i => i.data.id === product.id) + 1
       : 0;
 
-    const stallRating = getStallRating(stall.id, stall.average_rating);
-    const ratingCount = getRandomRatingCount(stall.id);
+    const stallRating = getStallRating(stall.id);
+    const ratingCount = getRatingCount(stall.id);
 
     return (
       <TouchableOpacity
@@ -1078,8 +1081,8 @@ export default function SearchScreen({ navigation }) {
   };
 
   const renderStallCard = ({ item }) => {
-    const displayRating = item.displayRating || getStallRating(item.id, item.average_rating);
-    const ratingCount = item.ratingCount || getRandomRatingCount(item.id);
+    const displayRating = item.displayRating ?? getStallRating(item.id);
+    const ratingCount = item.ratingCount ?? getRatingCount(item.id);
     
     return (
       <TouchableOpacity

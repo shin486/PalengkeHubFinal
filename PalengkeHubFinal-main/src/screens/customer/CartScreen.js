@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -145,6 +146,13 @@ export default function CartScreen({ navigation, route }) {
   const updateItemQuantity = (item, change) => {
     const newQuantity = (item.quantity || 1) + change;
     if (newQuantity <= 0) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Remove ${item.name} from cart?`)) {
+          removeItem(item.product_id);
+        }
+        return;
+      }
       Alert.alert(
         'Remove Item',
         `Remove ${item.name} from cart?`,

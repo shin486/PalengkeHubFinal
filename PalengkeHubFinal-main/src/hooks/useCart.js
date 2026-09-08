@@ -295,6 +295,25 @@ export const useCart = () => {
       .eq('user_id', user.id);
   }, [cart, user]);
 
+  // Corrects stale prices in place — used by checkout's server-side price
+  // re-verification, so the cart the customer reviews after a "prices
+  // changed" block actually shows the corrected numbers instead of the
+  // same stale ones that triggered the block.
+  const syncPrices = useCallback(async (freshPricesByProductId) => {
+    if (!user) return;
+
+    const updatedCart = cart.map(item => {
+      const fresh = freshPricesByProductId.get(item.product_id);
+      return fresh !== undefined ? { ...item, price: fresh } : item;
+    });
+    updateSharedCart(updatedCart);
+
+    await supabase
+      .from('carts')
+      .update({ items: updatedCart, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+  }, [cart, user]);
+
   const clearCart = useCallback(async () => {
     console.log(' Clearing cart');
     
@@ -344,6 +363,7 @@ export const useCart = () => {
     updateQuantity,
     removeItem,
     removeItems,
+    syncPrices,
     clearCart,
     refreshCart,
   };

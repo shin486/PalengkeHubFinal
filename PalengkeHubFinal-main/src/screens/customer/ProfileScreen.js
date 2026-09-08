@@ -224,6 +224,19 @@ export default function ProfileScreen({ navigation }) {
       uploadAvatar();
       return;
     }
+    // react-native-web does NOT implement Alert.alert (no dialog, no button
+    // ever fires) — a >2-option menu has no window.confirm equivalent, so
+    // this chains sequential confirms as a web stand-in for the action sheet.
+    if (Platform.OS === 'web') {
+      if (window.confirm('View Photo? (OK = View, Cancel = more options)')) {
+        setPhotoViewerVisible(true);
+      } else if (window.confirm('Change Photo? (OK = Change, Cancel = more options)')) {
+        uploadAvatar();
+      } else if (window.confirm('Remove Photo? (OK = Remove, Cancel = close menu)')) {
+        removeProfilePhoto();
+      }
+      return;
+    }
     Alert.alert('Profile Photo', null, [
       { text: 'View Photo', onPress: () => setPhotoViewerVisible(true) },
       { text: 'Change Photo', onPress: uploadAvatar },
@@ -312,38 +325,44 @@ export default function ProfileScreen({ navigation }) {
 
   //  NEW: Remove Profile Photo Function
   const removeProfilePhoto = async () => {
+    const doRemove = async () => {
+      setRemovingPhoto(true);
+      try {
+        // Update profile in Supabase - set avatar_url to null
+        const { error } = await supabase
+          .from('profiles')
+          .update({ avatar_url: null })
+          .eq('id', user.id);
+
+        if (error) throw error;
+
+        // Refresh user profile
+        await checkUser();
+        setAvatarError(false);
+        Alert.alert('Success', 'Profile photo removed successfully');
+
+      } catch (error) {
+        console.error('Remove photo error:', error);
+        Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
+      } finally {
+        setRemovingPhoto(false);
+      }
+    };
+
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to remove your profile photo?')) {
+        await doRemove();
+      }
+      return;
+    }
+
     Alert.alert(
       'Remove Profile Photo',
       'Are you sure you want to remove your profile photo?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setRemovingPhoto(true);
-            try {
-              // Update profile in Supabase - set avatar_url to null
-              const { error } = await supabase
-                .from('profiles')
-                .update({ avatar_url: null })
-                .eq('id', user.id);
-              
-              if (error) throw error;
-              
-              // Refresh user profile
-              await checkUser();
-              setAvatarError(false);
-              Alert.alert('Success', 'Profile photo removed successfully');
-              
-            } catch (error) {
-              console.error('Remove photo error:', error);
-              Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
-            } finally {
-              setRemovingPhoto(false);
-            }
-          }
-        }
+        { text: 'Remove', style: 'destructive', onPress: doRemove },
       ]
     );
   };

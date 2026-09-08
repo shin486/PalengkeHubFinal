@@ -12,6 +12,7 @@ import {
   TextInput,
   Image,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
@@ -561,7 +562,31 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
             {order.status === 'ready' && (
               <TouchableOpacity
                 style={[styles.fullActionBtn, styles.completeBtn]}
-                onPress={() => handleUpdateStatus('completed')}
+                onPress={() => {
+                  // Same confirm gate as the Orders list's quick-action
+                  // button (ModernOrderCard.js) — this screen previously
+                  // let "Complete Order" through with no payment check at
+                  // all, regardless of payment_status.
+                  if (!['verified', 'paid'].includes(order.payment_status)) {
+                    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+                    if (Platform.OS === 'web') {
+                      if (window.confirm("This order's payment hasn't been verified yet. Complete it anyway?")) {
+                        handleUpdateStatus('completed');
+                      }
+                      return;
+                    }
+                    Alert.alert(
+                      'Payment not verified',
+                      "This order's payment hasn't been verified yet. Complete it anyway?",
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Complete Anyway', onPress: () => handleUpdateStatus('completed') },
+                      ]
+                    );
+                    return;
+                  }
+                  handleUpdateStatus('completed');
+                }}
                 disabled={updating}
               >
                 <Text style={styles.fullActionText}>Complete Order</Text>

@@ -76,23 +76,6 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   }
 };
 
-//  Generate consistent random rating based on stall ID
-const getStallRating = (stallId, realRating) => {
-  if (realRating && realRating > 0) return realRating;
-  
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  const rating = 2.5 + (randomValue * 2.5);
-  return Math.round(rating * 10) / 10;
-};
-
-//  Generate random review count
-const getRandomRatingCount = (stallId) => {
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  return Math.floor(5 + (randomValue * 195));
-};
-
 // Presyo Check roster row — same visual language as the SearchScreen compare row (phase 5).
 const RosterRow = ({ item, rank, isCheapest, isCurrentUserStall }) => {
   const COLORS = useColors();
@@ -353,6 +336,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   }, [product?.image_url, imageError, imageLoaded]);
 
   const [stall, setStall] = useState(null);
+  const [stallRatingStats, setStallRatingStats] = useState({ average: 0, count: 0 });
   const [promotion, setPromotion] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedUnit, setSelectedUnit] = useState(null);
@@ -470,6 +454,25 @@ export default function ProductDetailsScreen({ route, navigation }) {
       setStall(productData.stalls);
       setImageError(false);
 
+      // 1a-2. Real rating for this stall (see stallRatingsService.js) — not
+      // the seeded-random generator this screen used to compute inline,
+      // which showed a different "rating" here than on the stall's own page.
+      if (productData.stalls?.id) {
+        const { data: ratingRows } = await supabase
+          .from('ratings')
+          .select('rating')
+          .eq('stall_id', productData.stalls.id);
+        if (ratingRows && ratingRows.length > 0) {
+          const sum = ratingRows.reduce((acc, r) => acc + (parseFloat(r.rating) || 0), 0);
+          setStallRatingStats({
+            average: Math.round((sum / ratingRows.length) * 10) / 10,
+            count: ratingRows.length,
+          });
+        } else {
+          setStallRatingStats({ average: 0, count: 0 });
+        }
+      }
+
       // 1b. Fetch price history trend (Bumaba/Tumaas badge)
       fetchPriceTrends([productId]).then((trends) => {
         if (trends.has(productId)) setPriceTrend(trends.get(productId));
@@ -561,13 +564,21 @@ export default function ProductDetailsScreen({ route, navigation }) {
   const handleAddToCart = () => {
     hapticMedium();
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+          if (setIsGuest) setIsGuest(false);
+          else navigation.popToTop();
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to add items to cart',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
+          {
+            text: 'Login',
             onPress: () => {
               if (setIsGuest) setIsGuest(false);
               else navigation.popToTop();
@@ -737,13 +748,21 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleBuyNow = () => {
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to complete purchase')) {
+          if (setIsGuest) setIsGuest(false);
+          else navigation.popToTop();
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to complete purchase',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
+          {
+            text: 'Login',
             onPress: () => {
               if (setIsGuest) setIsGuest(false);
               else navigation.popToTop();
@@ -777,13 +796,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
   const handleReportProduct = () => {
     if (!user) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to report an issue') && setIsGuest) {
+          setIsGuest(false);
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to report an issue',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Login', 
+          {
+            text: 'Login',
             onPress: () => {
               if (setIsGuest) setIsGuest(false);
             }
@@ -816,7 +842,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             stall_number,
             section,
             vendor_id,
-            profiles:vendor_id (full_name, email)
+            profiles:vendor_id (full_name)
           )
         `)
         .eq('name', productData.name)
@@ -825,20 +851,33 @@ export default function ProductDetailsScreen({ route, navigation }) {
       if (marketError) throw marketError;
       setMarketProducts(marketData || []);
 
-      // Fetch price history for this product
+      // Fetch price history for this product. Columns are changed_at/
+      // new_price (matching priceHistoryService.js's fetchPriceTrends,
+      // the only other reader of this table) — this used to query
+      // created_at/price, which don't exist on the real table, so every
+      // request 400'd and silently fell back to synthetic (fabricated)
+      // history below. Normalized to {price, created_at} here so the
+      // chart itself doesn't need to know which source it got.
       const { data: historyData, error: historyError } = await supabase
         .from('price_history')
         .select('*')
         .eq('product_id', productData.id)
-        .order('created_at', { ascending: false })
+        .order('changed_at', { ascending: false })
         .limit(30);
 
-      if (historyError) {
-        // price_history table may not exist; generate synthetic history from product data
+      if (historyError || !historyData || historyData.length === 0) {
+        // price_history table may not exist, or this product has no
+        // recorded price changes yet; generate synthetic history from
+        // product data as a placeholder.
         const synthetic = generateSyntheticHistory(productData);
         setPriceHistory(synthetic);
       } else {
-        setPriceHistory(historyData || []);
+        setPriceHistory(historyData.map(row => ({
+          id: row.id,
+          product_id: row.product_id,
+          price: row.new_price,
+          created_at: row.changed_at,
+        })));
       }
     } catch (error) {
       console.error('Error fetching market data:', error);
@@ -940,8 +979,8 @@ export default function ProductDetailsScreen({ route, navigation }) {
     marketAnalytics.sorted[0]?.id === product?.id;
 
   //  Get display rating (randomized if no real rating)
-  const displayRating = stall ? getStallRating(stall.id, stall.average_rating) : 0;
-  const ratingCount = stall ? getRandomRatingCount(stall.id) : 0;
+  const displayRating = stallRatingStats.average;
+  const ratingCount = stallRatingStats.count;
 
   // What this customer actually pays right now — the listed/promo price,
   // unless they have a vendor-accepted haggle on this exact unit, which

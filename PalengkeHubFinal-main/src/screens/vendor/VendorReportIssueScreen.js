@@ -63,109 +63,31 @@ export default function VendorReportIssueScreen({ navigation, route }) {
     { id: 'other', label: 'Other', icon: 'create', color: '#6B7280' },
   ];
 
-  // Fetch customers who have ordered from this vendor
+  // Fetch customers who have ordered from this vendor. Goes through the
+  // get_my_stall_customers RPC (SECURITY DEFINER, scoped to the calling
+  // vendor's own stall via a real join against orders) rather than
+  // querying profiles directly — the base table only allows a user to
+  // read their own row now (see fix-profiles-select-lockdown.sql), so a
+  // vendor listing many other customers' name+email has to go through a
+  // function scoped to their real customer base, not a bare ID lookup.
   const fetchCustomers = async () => {
     if (!user?.id) return;
 
     setLoadingCustomers(true);
     try {
-      // Get stall first (vendor's stall)
-      const { data: stall, error: stallError } = await supabase
-        .from('stalls')
-        .select('id')
-        .eq('vendor_id', user.id)
-        .single();
+      const { data, error } = await supabase.rpc('get_my_stall_customers');
 
-      if (stallError) {
-        console.error('Stall error:', stallError);
+      if (error) {
+        console.error('get_my_stall_customers error:', error);
         setLoadingCustomers(false);
         return;
       }
 
-      if (!stall) {
-        console.log('No stall found for vendor');
-        setLoadingCustomers(false);
-        return;
-      }
-
-      // Get unique customers from orders using consumer_id
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          consumer_id,
-          profiles:consumer_id (
-            id,
-            full_name,
-            email
-          )
-        `)
-        .eq('stall_id', stall.id)
-        .not('consumer_id', 'is', null)
-        .order('created_at', { ascending: false });
-
-      if (ordersError) {
-        console.error('Orders error:', ordersError);
-        setLoadingCustomers(false);
-        return;
-      }
-
-      // Deduplicate customers
-      const uniqueCustomers = [];
-      const seenIds = new Set();
-
-      orders?.forEach(order => {
-        // The profiles data might be nested or directly available
-        let customer = order.profiles;
-
-        // If profiles is not available, try to get from order directly
-        if (!customer && order.consumer_id) {
-          customer = {
-            id: order.consumer_id,
-            full_name: null,
-            email: null,
-          };
-        }
-
-        if (customer && customer.id && !seenIds.has(customer.id)) {
-          seenIds.add(customer.id);
-          uniqueCustomers.push({
-            id: customer.id,
-            name: customer.full_name || `Customer ${customer.id.slice(-6)}`,
-            email: customer.email || 'No email',
-          });
-        }
-      });
-
-      // If no customers found via orders, try a different approach
-      if (uniqueCustomers.length === 0) {
-        // Try to get all consumers who have orders with this vendor
-        const { data: consumerOrders, error: consumerError } = await supabase
-          .from('orders')
-          .select('consumer_id')
-          .eq('stall_id', stall.id)
-          .not('consumer_id', 'is', null);
-
-        if (!consumerError && consumerOrders) {
-          const uniqueConsumerIds = [...new Set(consumerOrders.map(o => o.consumer_id))];
-
-          if (uniqueConsumerIds.length > 0) {
-            const { data: consumerProfiles } = await supabase
-              .from('profiles')
-              .select('id, full_name, email')
-              .in('id', uniqueConsumerIds);
-
-            if (consumerProfiles) {
-              consumerProfiles.forEach(profile => {
-                uniqueCustomers.push({
-                  id: profile.id,
-                  name: profile.full_name || `Customer ${profile.id.slice(-6)}`,
-                  email: profile.email || 'No email',
-                });
-              });
-            }
-          }
-        }
-      }
+      const uniqueCustomers = (data || []).map((customer) => ({
+        id: customer.id,
+        name: customer.full_name || `Customer ${customer.id.slice(-6)}`,
+        email: customer.email || 'No email',
+      }));
 
       setCustomers(uniqueCustomers);
     } catch (error) {

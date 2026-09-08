@@ -81,6 +81,7 @@ export default function VendorOrdersScreen({ navigation }) {
   const {
     orders,
     loading,
+    error: ordersError,
     orderStats,
     updateOrderStatus,
     refreshOrders,
@@ -349,6 +350,17 @@ export default function VendorOrdersScreen({ navigation }) {
       {/* Orders List */}
       {loading ? (
         <VendorSkeletonList count={4} />
+      ) : ordersError ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
+          </View>
+          <Text style={styles.emptyTitle}>Failed to load orders</Text>
+          <Text style={styles.emptyText}>{ordersError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refreshOrders}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       ) : currentOrders.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
@@ -534,6 +546,18 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 14,
     color: COLORS.text.light,
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+  },
+  retryButtonText: {
+    color: COLORS.text.inverse,
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // ── Modal ──

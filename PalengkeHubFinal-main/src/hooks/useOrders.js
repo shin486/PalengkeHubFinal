@@ -32,7 +32,8 @@ export const useOrders = () => {
             description,
             location_notes,
             gcash_qr_url,
-            gcash_number
+            gcash_number,
+            vendor_id
           )
         `)
         .eq('consumer_id', user.id)

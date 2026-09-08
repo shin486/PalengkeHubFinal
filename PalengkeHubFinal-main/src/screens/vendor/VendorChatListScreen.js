@@ -69,7 +69,6 @@ export default function VendorChatListScreen({ navigation }) {
           customer:customer_id (
             id,
             full_name,
-            email,
             avatar_url
           )
         `)
@@ -87,9 +86,10 @@ export default function VendorChatListScreen({ navigation }) {
 
       const processedChats = conversations.map((conv) => {
         const customerData = conv.customer;
-        const customerName = customerData?.full_name ||
-          customerData?.email?.split('@')[0] ||
-          'Customer';
+        // No email fallback here on purpose — a vendor seeing a bare
+        // "Customer" for a nameless account beats leaking any part of
+        // that customer's login email into the vendor's chat list.
+        const customerName = customerData?.full_name || 'Customer';
         
         return {
           id: conv.id,

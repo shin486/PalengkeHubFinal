@@ -192,6 +192,17 @@ export const ProductCard = ({
           {hasPromotion && discountText ? (
             <Badge tone="tomato" style={styles.discountBadge}>{discountText}</Badge>
           ) : null}
+
+          {/* This thumbnail is too small for a real gallery — vendors can
+              save up to 3 photos (image_urls), but this card only ever
+              showed the cover photo with no sign more existed. Mirrors the
+              vendor-side ModernProductCard.js photoCountBadge. */}
+          {Array.isArray(product?.image_urls) && product.image_urls.length > 1 ? (
+            <View style={styles.photoCountBadge}>
+              <Ionicons name="images-outline" size={9} color="#FFFFFF" />
+              <Text style={styles.photoCountText}>{product.image_urls.length}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.body}>
@@ -336,6 +347,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  photoCountText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   body: {
     padding: 10,

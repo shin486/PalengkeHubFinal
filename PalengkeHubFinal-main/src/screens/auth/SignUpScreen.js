@@ -553,10 +553,13 @@ export const SignUpScreen = () => {
     const normalized = email.trim().toLowerCase();
     const timer = setTimeout(async () => {
       try {
-        const { count, error } = await supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('email', normalized);
+        // RPC, not a direct profiles query — this runs pre-auth (no
+        // session exists yet while the user is still typing on this
+        // screen), and profiles itself now only allows reading your own
+        // row (see fix-profiles-select-lockdown.sql). This function
+        // returns a bare count, never row data, for exactly this case.
+        const { data: count, error } = await supabase
+          .rpc('check_email_account_count', { p_email: normalized });
         if (!error) {
           setEmailAccountCount(count || 0);
         }
@@ -580,13 +583,12 @@ export const SignUpScreen = () => {
     const name = fullName.trim();
     const timer = setTimeout(async () => {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('email', normalizedEmail)
-          .ilike('full_name', name);
+        // RPC, not a direct profiles query — same pre-auth reasoning as
+        // the account-count check above. Returns a bare boolean.
+        const { data: isDuplicate, error } = await supabase
+          .rpc('check_email_duplicate_name', { p_email: normalizedEmail, p_name: name });
         if (!error) {
-          setDuplicateName((data || []).length > 0);
+          setDuplicateName(!!isDuplicate);
         }
       } catch (err) {
         console.warn('Could not check duplicate name:', err);
@@ -1254,6 +1256,7 @@ export const SignUpScreen = () => {
                 placeholderTextColor={COLORS.text.tertiary}
                 value={fullName}
                 onChangeText={setFullName}
+                maxLength={100}
               />
             </View>
             {duplicateName && (

@@ -1550,16 +1550,16 @@ function VendorLocations() {
 /* ==================== PRODUCT CATEGORIES ==================== */
 function ProductCategories() {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [stalls, setStalls] = useState([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stallFilter, setStallFilter] = useState('');
 
   const load = useCallback(async () => {
-    const [p, c, s, ph] = await Promise.all([
+    // There's no product_categories table in this schema — categories are
+    // just the free-text `products.category` values, deduped below.
+    const [p, s, ph] = await Promise.all([
       supabase.from('products').select('*, stall:stall_id(stall_name, stall_number)').order('name'),
-      supabase.from('product_categories').select('*').order('name'),
       supabase.from('stalls').select('id, stall_name, stall_number').order('stall_number'),
       supabase.from('price_history').select('*').order('changed_at', { ascending: false }),
     ]);
@@ -1570,7 +1570,6 @@ function ProductCategories() {
       ...prod,
       price_history: histByProduct[prod.id] ? [histByProduct[prod.id]] : [],
     })));
-    setCategories(c.data || []);
     setStalls(s.data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1586,8 +1585,7 @@ function ProductCategories() {
 
   // Case/whitespace-insensitive dedupe so "Meat" and "meat" collapse to one
   const catOptions = [...new Set(
-    [...categories.map(c => c.name), ...products.map(p => p.category).filter(Boolean)]
-      .map(c => c.trim())
+    products.map(p => p.category).filter(Boolean).map(c => c.trim())
   )].sort((a, b) => a.localeCompare(b));
 
   const uniqueCatOptions = Object.values(

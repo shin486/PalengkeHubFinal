@@ -92,7 +92,7 @@ export default function OrdersScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, isGuest } = useAuth();
-  const { orders, loading, newOrderAlert, refreshOrders } = useOrders();
+  const { orders, loading, error: ordersError, newOrderAlert, refreshOrders } = useOrders();
   const { addToCart } = useCart();
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState('active');
@@ -104,6 +104,25 @@ export default function OrdersScreen({ navigation }) {
   const [selectedRating, setSelectedRating] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
+  // Orders this customer has already rated — the "Rate Vendor" button had
+  // no way to know this before, so it stayed active forever and nothing
+  // stopped the same order being rated over and over.
+  const [ratedOrderIds, setRatedOrderIds] = useState(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('ratings')
+        .select('order_id')
+        .eq('consumer_id', user.id);
+      if (!cancelled && data) {
+        setRatedOrderIds(new Set(data.map(r => r.order_id).filter(Boolean)));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, orders]);
 
   // Report an Issue (customer complaint about a stall/order)
   const [reportIssueModalVisible, setReportIssueModalVisible] = useState(false);
@@ -535,7 +554,25 @@ export default function OrdersScreen({ navigation }) {
         .eq('id', payNowOrder.id);
       
       if (error) throw error;
-      
+
+      // Vendor otherwise only learns of a submitted GCash payment via
+      // realtime/polling on the orders list — no notifications row was ever
+      // written for this, unlike the vendor->customer direction (see
+      // useVendorOrders.js's status-change notifications).
+      const payNowVendorId = payNowOrder.stall?.vendor_id;
+      if (payNowVendorId) {
+        const { error: notifyError } = await supabase.from('notifications').insert({
+          user_id: payNowVendorId,
+          title: 'Payment Submitted',
+          message: `A customer submitted a GCash payment for order at ${payNowOrder.stall?.stall_name || 'your stall'}. Please verify it.`,
+          type: 'order',
+          data: { order_id: payNowOrder.id, type: 'payment_submitted' },
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+        if (notifyError) console.error('Error notifying vendor of payment submission:', notifyError);
+      }
+
       // Stop timer
       if (payNowTimerRef.current) clearInterval(payNowTimerRef.current);
       
@@ -581,14 +618,21 @@ export default function OrdersScreen({ navigation }) {
         await addToCart(productData, stall?.id, stall, item.quantity);
       }
 
-      Alert.alert(
-        'Order Again',
-        `${items.length} item(s) have been added to your cart.`,
-        [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
-        ]
-      );
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm(`${items.length} item(s) have been added to your cart.\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+          navigation.navigate('Cart');
+        }
+      } else {
+        Alert.alert(
+          'Order Again',
+          `${items.length} item(s) have been added to your cart.`,
+          [
+            { text: 'Continue Shopping', style: 'cancel' },
+            { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error adding items to cart:', error);
       Alert.alert('Error', 'Failed to add items to cart. Please try again.');
@@ -597,6 +641,10 @@ export default function OrdersScreen({ navigation }) {
 
   // RATE VENDOR
   const handleRateVendor = (order) => {
+    if (ratedOrderIds.has(order.id)) {
+      Alert.alert('Already Rated', 'You already rated this order.');
+      return;
+    }
     setSelectedOrder(order);
     setSelectedRating(0);
     setRatingComment('');
@@ -659,8 +707,24 @@ export default function OrdersScreen({ navigation }) {
 
     setSubmittingRating(true);
     try {
+      // Fresh re-check right before inserting — ratedOrderIds only reflects
+      // whatever was fetched on load/focus, so this catches a double-tap or
+      // a second tab/device that rated the same order in between.
+      const { data: existing } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('order_id', selectedOrder.id)
+        .eq('consumer_id', user.id)
+        .maybeSingle();
+      if (existing) {
+        Alert.alert('Already Rated', 'You already rated this order.');
+        setRatedOrderIds(prev => new Set(prev).add(selectedOrder.id));
+        setRatingModalVisible(false);
+        return;
+      }
+
       const stall = selectedOrder.stall;
-      
+
       const { error } = await supabase
         .from('ratings')
         .insert({
@@ -673,12 +737,13 @@ export default function OrdersScreen({ navigation }) {
 
       if (error) throw error;
 
+      setRatedOrderIds(prev => new Set(prev).add(selectedOrder.id));
       Alert.alert('Thank You!', 'Your rating has been submitted successfully.');
       setRatingModalVisible(false);
       setSelectedOrder(null);
       setSelectedRating(0);
       setRatingComment('');
-      
+
     } catch (error) {
       console.error('Error submitting rating:', error);
       Alert.alert('Error', 'Failed to submit rating. Please try again.');
@@ -689,31 +754,37 @@ export default function OrdersScreen({ navigation }) {
 
   // DELETE SINGLE ORDER FROM HISTORY
   const deleteOrderFromHistory = async (orderId) => {
+    const doDelete = async () => {
+      try {
+        const { error } = await supabase
+          .from('orders')
+          .delete()
+          .eq('id', orderId)
+          .eq('consumer_id', user.id);
+
+        if (error) throw error;
+        await refreshOrders();
+        Alert.alert('Removed', 'Order has been removed from your history');
+      } catch (error) {
+        console.error('Delete error:', error);
+        Alert.alert('Error', 'Could not remove order');
+      }
+    };
+
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm('Do you want to permanently remove this order from your history?')) {
+        await doDelete();
+      }
+      return;
+    }
+
     Alert.alert(
       'Remove Order',
       'Do you want to permanently remove this order from your history?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('orders')
-                .delete()
-                .eq('id', orderId)
-                .eq('consumer_id', user.id);
-
-              if (error) throw error;
-              await refreshOrders();
-              Alert.alert('Removed', 'Order has been removed from your history');
-            } catch (error) {
-              console.error('Delete error:', error);
-              Alert.alert('Error', 'Could not remove order');
-            }
-          }
-        }
+        { text: 'Remove', style: 'destructive', onPress: doDelete },
       ]
     );
   };
@@ -722,32 +793,39 @@ export default function OrdersScreen({ navigation }) {
   const clearAllHistory = async () => {
     const completedOrders = orders.filter(o => ['completed', 'cancelled'].includes(o.status));
     if (completedOrders.length === 0) return;
+
+    const doClear = async () => {
+      try {
+        const idsToDelete = completedOrders.map(o => o.id);
+        const { error } = await supabase
+          .from('orders')
+          .delete()
+          .in('id', idsToDelete)
+          .eq('consumer_id', user.id);
+
+        if (error) throw error;
+        await refreshOrders();
+        Alert.alert('Cleared', 'All history orders have been removed');
+      } catch (error) {
+        console.error('Clear all error:', error);
+        Alert.alert('Error', 'Could not clear history');
+      }
+    };
+
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to remove ALL completed/cancelled orders? This cannot be undone.')) {
+        await doClear();
+      }
+      return;
+    }
+
     Alert.alert(
       'Clear All History',
       'Are you sure you want to remove ALL completed/cancelled orders? This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const idsToDelete = completedOrders.map(o => o.id);
-              const { error } = await supabase
-                .from('orders')
-                .delete()
-                .in('id', idsToDelete)
-                .eq('consumer_id', user.id);
-
-              if (error) throw error;
-              await refreshOrders();
-              Alert.alert('Cleared', 'All history orders have been removed');
-            } catch (error) {
-              console.error('Clear all error:', error);
-              Alert.alert('Error', 'Could not clear history');
-            }
-          }
-        }
+        { text: 'Clear All', style: 'destructive', onPress: doClear },
       ]
     );
   };
@@ -1035,7 +1113,7 @@ export default function OrdersScreen({ navigation }) {
                 onPress={() => deleteOrderFromHistory(order.id)}
                 style={styles.cardDeleteIcon}
               >
-                
+                <Ionicons name="trash-outline" size={16} color={COLORS.error} />
               </TouchableOpacity>
             )}
           </View>
@@ -1209,17 +1287,23 @@ export default function OrdersScreen({ navigation }) {
               </LinearGradient>
             </TouchableOpacity>
             
-            <TouchableOpacity
-              style={styles.rateButton}
-              onPress={() => handleRateVendor(order)}
-            >
-              <LinearGradient
-                colors={['#F59E0B', '#D97706']}
-                style={styles.actionButtonGradient}
+            {ratedOrderIds.has(order.id) ? (
+              <View style={[styles.rateButton, styles.ratedBadge]}>
+                <Text style={styles.ratedBadgeText}> Rated</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.rateButton}
+                onPress={() => handleRateVendor(order)}
               >
-                <Text style={styles.actionButtonText}> Rate Vendor</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#F59E0B', '#D97706']}
+                  style={styles.actionButtonGradient}
+                >
+                  <Text style={styles.actionButtonText}> Rate Vendor</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
 
             {canReportIssue(order) && (
               <TouchableOpacity
@@ -1348,6 +1432,22 @@ export default function OrdersScreen({ navigation }) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (ordersError && orders.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={{ color: COLORS.text.secondary || '#6B7280', fontSize: 15, marginBottom: 16 }}>
+          Failed to load your orders
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+          onPress={refreshOrders}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -1908,8 +2008,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   statusBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, shadowColor: COLORS.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 3, elevation: 2 },
   statusText: { fontSize: 10, fontWeight: '700', color: 'white', letterSpacing: 0.5 },
   cardDeleteIcon: { marginLeft: 6, padding: 6 },
-  cardDeleteIconText: { fontSize: 18, fontWeight: '700', color: COLORS.error },
-  
+
   // PAY NOW STYLES
   payNowContainer: {
     backgroundColor: COLORS.warningLight,
@@ -1979,6 +2078,14 @@ const createStyles = (COLORS) => StyleSheet.create({
   rateButton: { flex: 1, minWidth: '45%', borderRadius: 10, overflow: 'hidden' },
   actionButtonGradient: { paddingVertical: 12, alignItems: 'center' },
   actionButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
+  ratedBadge: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  ratedBadgeText: { color: COLORS.text.tertiary, fontSize: 13, fontWeight: '600' },
 
   mapButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 12 },
   mapButton: { flex: 1, borderRadius: 10, overflow: 'hidden' },

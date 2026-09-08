@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../lib/supabase';
+import { fetchAllStallRatings } from '../../services/stallRatingsService';
 
 export default function StallsDirectoryScreen({ navigation, isGuest }) {
   const COLORS = useColors();
@@ -20,9 +21,14 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('All');
   const [loading, setLoading] = useState(true);
+  // Real per-stall ratings — stalls.average_rating (used below before this
+  // fix) is never written to by anything in the app, so every card's
+  // rating silently never showed at all.
+  const [stallRatingsMap, setStallRatingsMap] = useState({});
 
   useEffect(() => {
     fetchStalls();
+    fetchAllStallRatings().then(setStallRatingsMap);
   }, []);
 
   const fetchStalls = async () => {
@@ -64,10 +70,10 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
       >
         <View style={styles.stallHeader}>
           <Text style={styles.stallNumber}>#{item.stall_number}</Text>
-          {item.average_rating > 0 && (
+          {stallRatingsMap[item.id]?.average > 0 && (
             <View style={styles.ratingContainer}>
               <Ionicons name="star" size={18} />
-              <Text style={styles.ratingValue}>{item.average_rating.toFixed(1)}</Text>
+              <Text style={styles.ratingValue}>{stallRatingsMap[item.id].average.toFixed(1)}</Text>
             </View>
           )}
         </View>

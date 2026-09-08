@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,6 +85,35 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
   const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
   const canProposeChange = order.status === 'pending';
   const paymentNeedsVerification = order.payment_status === 'awaiting_verification';
+  // Nothing in the pending->confirmed->preparing->ready->completed ladder
+  // ever checked payment_status — a vendor could tap through to
+  // "Complete Order" with payment never requested or verified. Only the
+  // final step is gated (a confirm, not a hard block — some vendors take
+  // payment outside the tracked GCash-receipt flow) since the earlier
+  // steps are prep work that legitimately can happen before payment.
+  const isPaymentUnverified = !['verified', 'paid'].includes(order.payment_status);
+
+  const handleUpdatePress = () => {
+    if (nextStep.status === 'completed' && isPaymentUnverified) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm("This order's payment hasn't been verified yet. Complete it anyway?")) {
+          onUpdateStatus(order.id, nextStep.status);
+        }
+        return;
+      }
+      Alert.alert(
+        'Payment not verified',
+        "This order's payment hasn't been verified yet. Complete it anyway?",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Complete Anyway', onPress: () => onUpdateStatus(order.id, nextStep.status) },
+        ]
+      );
+      return;
+    }
+    onUpdateStatus(order.id, nextStep.status);
+  };
 
   const handleRejectConfirm = async () => {
     if (!selectedReasonId) return;
@@ -250,7 +280,7 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
             {canUpdate && (
               <TouchableOpacity
                 style={[styles.actionBtn, styles.updateBtn]}
-                onPress={() => onUpdateStatus(order.id, nextStep.status)}
+                onPress={handleUpdatePress}
               >
                 <Ionicons name="checkmark-done" size={14} color={vendorColors.text.white} />
                 <Text style={styles.actionBtnText}>{nextStep.label}</Text>

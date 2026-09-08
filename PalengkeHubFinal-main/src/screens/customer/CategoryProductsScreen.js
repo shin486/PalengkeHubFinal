@@ -31,6 +31,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { CATEGORY_CHIPS_BY_NAME, CATEGORY_TONES } from '../../constants/categoryChips';
 import { WovenBackground } from '../../components/WovenBackground';
+import { fetchAllStallRatings } from '../../services/stallRatingsService';
 
 const { width } = Dimensions.get('window');
 // D-08: 2 columns at 375px, widening on larger (web) viewports rather than
@@ -54,13 +55,6 @@ const getDiscountedPrice = (originalPrice, promotion) => {
   } else {
     return Math.max(0, originalPrice - promotion.discount_value);
   }
-};
-
-const getStallRating = (stallId) => {
-  const seed = String(stallId).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const randomValue = ((seed * 9301 + 49297) % 233280) / 233280;
-  const rating = 3.0 + (randomValue * 2.0);
-  return Math.round(rating * 10) / 10;
 };
 
 // ============================================================
@@ -123,10 +117,9 @@ const StallGroupProductThumb = ({ item, styles }) => {
 // ============================================================
 // STALL GROUP CARD (for grouped view)
 // ============================================================
-const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewStall }) => {
+const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewStall, rating }) => {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
-  const rating = getStallRating(stall.id);
   
   return (
     <View style={styles.stallGroupCard}>
@@ -268,7 +261,14 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const [showSortModal, setShowSortModal] = useState(false);
   const [productCount, setProductCount] = useState(0);
   const [stallCount, setStallCount] = useState(0);
-  
+  // Real per-stall ratings (see stallRatingsService.js), not the seeded-
+  // random generator this screen used to compute inline — same stall
+  // showed a different "rating" here than on its own stall page.
+  const [stallRatingsMap, setStallRatingsMap] = useState({});
+  useEffect(() => { fetchAllStallRatings().then(setStallRatingsMap); }, []);
+  const getStallRating = (stallId) => stallRatingsMap[stallId]?.average ?? 0;
+  const getRatingCount = (stallId) => stallRatingsMap[stallId]?.count ?? 0;
+
   const { user, isGuest } = useAuth();
   const { addToCart } = useCart();
 
@@ -365,15 +365,21 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
   const handleAddToCart = async (product, stall) => {
     if (!user && !isGuest) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert(
         'Login Required',
         'Please login to add items to cart',
         [
           { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Login',
-            onPress: () => {}
-          }
+          // This previously had no onPress at all — tapping "Login" natively
+          // just dismissed the alert with no navigation.
+          { text: 'Login', onPress: () => navigation.navigate('Login') }
         ]
       );
       return;
@@ -387,6 +393,13 @@ export default function CategoryProductsScreen({ route, navigation }) {
       // that leads to an empty cart.
       const result = await addToCart(product, stall.id, stall, 1);
       if (result?.requiresAuth) return;
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm(`${product.name} added to your cart\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+          navigation.navigate('Cart');
+        }
+        return;
+      }
       Alert.alert(
         'Added to Cart',
         `${product.name} added to your cart`,
@@ -476,6 +489,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
     <StallGroupCard
       stall={item.stall}
       products={item.products}
+      rating={getStallRating(item.stall.id)}
       onProductPress={(product) => navigation.navigate('ProductDetails', { productId: product.id })}
       onAddToCart={(product, stall) => handleAddToCart(product, stall)}
       onViewStall={() => navigation.navigate('StallDetails', { stallId: item.stall.id })}

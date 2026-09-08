@@ -25,6 +25,7 @@ export default function NotificationScreen({ navigation }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -35,6 +36,7 @@ export default function NotificationScreen({ navigation }) {
   const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = user?.id ? await notificationService.getNotifications(user.id) : [];
 
       // Announcements targeted at customers.
@@ -84,8 +86,9 @@ export default function NotificationScreen({ navigation }) {
         const count = await notificationService.getUnreadCount(user.id);
         setUnreadCount(count);
       }
-    } catch (error) {
-      console.error('Error loading notifications:', error);
+    } catch (err) {
+      console.error('Error loading notifications:', err);
+      setError('Failed to load notifications');
     } finally {
       setLoading(false);
     }
@@ -211,19 +214,26 @@ export default function NotificationScreen({ navigation }) {
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
       return;
     }
+
+    const doDelete = async () => {
+      await notificationService.deleteNotification(notification.id);
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    };
+
+    // react-native-web does NOT implement Alert.alert — use window.confirm on web
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this notification?')) {
+        await doDelete();
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete Notification',
       'Are you sure you want to delete this notification?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await notificationService.deleteNotification(notification.id);
-            setNotifications(prev => prev.filter(n => n.id !== notification.id));
-          },
-        },
+        { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]
     );
   };
@@ -355,6 +365,16 @@ export default function NotificationScreen({ navigation }) {
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : error && notifications.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={{ color: COLORS.text.tertiary, fontSize: 15, marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity
+            style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+            onPress={loadNotifications}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.emptyContainer}>

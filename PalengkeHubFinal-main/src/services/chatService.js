@@ -99,7 +99,6 @@ export const chatService = {
         customer:customer_id (
           id,
           full_name,
-          email,
           avatar_url
         )
       `)
@@ -336,7 +335,7 @@ export const chatService = {
       .from('conversations')
       .select(`
         *,
-        customer:customer_id (id, full_name, email),
+        customer:customer_id (id, full_name),
         stall:stall_id (id, stall_number, stall_name, section, vendor_id)
       `)
       .order('updated_at', { ascending: false });

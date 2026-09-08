@@ -33,6 +33,7 @@ import { SkeletonList } from '../../components/SkeletonCard';
 import { useLastViewed } from '../../hooks/useLastViewed';
 import { hapticLight, hapticMedium } from '../../theme/motion';
 import { fetchPriceTrends } from '../../services/priceHistoryService';
+import { fetchAllStallRatings } from '../../services/stallRatingsService';
 import { getPriceSuggestion, computeVerdict } from '../../services/priceSuggestion';
 import { SPACING, RADIUS, LAYOUT, TYPE, TEXT_STYLES, SHADOWS } from '../../theme/tokens';
 import { ProductCard } from '../../components/ProductCard';
@@ -194,13 +195,12 @@ const StarRating = ({ rating, size = 12 }) => {
 // ============================================================
 // STALL CARD COMPONENT
 // ============================================================
-const StallCard = ({ stall, onPress, isClosed = false, isFavorite = false, onToggleFavorite }) => {
+const StallCard = ({ stall, onPress, isClosed = false, isFavorite = false, onToggleFavorite, rating = 0, ratingCount = 0 }) => {
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
-  const displayRating = stall.average_rating || 3.5 + (stall.id % 3) * 0.5;
-  const ratingCount = 20 + (stall.id % 80);
+  const displayRating = rating;
   // Market-hours open/closed, same local time gate as the header —
   // stall-level "temporarily closed" (isClosed) always wins over it.
   const openNow = !isClosed && isMarketOpenNow();
@@ -284,8 +284,8 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
-  const displayRating = stall.average_rating || 3.5 + (stall.id % 3) * 0.5;
-  const ratingCount = stall.total_ratings || (20 + (stall.id % 80));
+  const displayRating = stall.average_rating || 0;
+  const ratingCount = stall.total_ratings || 0;
   const isClosed = stall.is_temporarily_closed;
   const openNow = !isClosed && isMarketOpenNow();
 
@@ -664,31 +664,15 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   // Top-rated stalls from real customer ratings (publicly readable table)
   const fetchTopRatedStalls = async () => {
     try {
-      const { data: ratings } = await supabase
-        .from('ratings')
-        .select('stall_id, rating')
-        .limit(1000);
-      if (!ratings || ratings.length === 0) return;
-
-      const stats = new Map();
-      for (const r of ratings) {
-        if (!r.stall_id) continue;
-        const s = stats.get(r.stall_id) || { count: 0, sum: 0 };
-        s.count += 1;
-        s.sum += parseFloat(r.rating) || 0;
-        stats.set(r.stall_id, s);
-      }
+      const allRatings = await fetchAllStallRatings();
+      if (Object.keys(allRatings).length === 0) return;
 
       // Every stall's real rating, not just the top 5 — Today's Deals cards
       // need this for whichever stall happens to be running a promo.
-      const allRatings = {};
-      for (const [stallId, s] of stats.entries()) {
-        allRatings[stallId] = { average: Math.round((s.sum / s.count) * 10) / 10, count: s.count };
-      }
       setStallRatings(allRatings);
 
-      const topIds = [...stats.entries()]
-        .sort((a, b) => (b[1].count - a[1].count) || ((b[1].sum / b[1].count) - (a[1].sum / a[1].count)))
+      const topIds = Object.entries(allRatings)
+        .sort((a, b) => (b[1].count - a[1].count) || (b[1].average - a[1].average))
         .slice(0, 5)
         .map(([id]) => id);
       if (topIds.length === 0) return;
@@ -702,8 +686,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
       const list = stallsData.map(s => ({
         ...s,
-        average_rating: Math.round((stats.get(s.id).sum / stats.get(s.id).count) * 10) / 10,
-        total_ratings: stats.get(s.id).count,
+        average_rating: allRatings[s.id].average,
+        total_ratings: allRatings[s.id].count,
       }));
       setTopRatedStalls(list);
     } catch (e) {
@@ -1131,6 +1115,14 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
   const handleAddToCart = async (product, stall) => {
     if (!user && !isGuest) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm(`${t('auth.login_required')}\n\n${t('auth.login_to_add_cart')}`)) {
+          if (setIsGuest) setIsGuest(false);
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -1162,6 +1154,14 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
   const handleOrderAgain = async (item) => {
     if (!user && !isGuest) {
+      // react-native-web does NOT implement Alert.alert — use window.confirm on web
+      if (Platform.OS === 'web') {
+        if (window.confirm(`${t('auth.login_required')}\n\n${t('auth.login_to_add_cart')}`)) {
+          if (setIsGuest) setIsGuest(false);
+          navigation.navigate('Login');
+        }
+        return;
+      }
       Alert.alert(t('auth.login_required'), t('auth.login_to_add_cart'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -1719,6 +1719,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               <StallCard
                 key={stall.id}
                 stall={stall}
+                rating={stallRatings[stall.id]?.average}
+                ratingCount={stallRatings[stall.id]?.count}
                 isClosed={stall.is_temporarily_closed}
                 isFavorite={isStallFavorite(stall.id)}
                 onToggleFavorite={toggleStallFavorite}

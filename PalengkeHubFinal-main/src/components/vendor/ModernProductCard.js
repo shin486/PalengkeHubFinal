@@ -35,6 +35,16 @@ const ProductCardInner = ({ product, onToggleAvailability, onEdit, onDelete, onP
             <Ionicons name="image-outline" size={32} color={vendorColors.text.tertiary} />
           </View>
         )}
+        {/* This thumbnail is too small for a real gallery — AddProductModal
+            saves up to 3 photos (image_urls), but this card only ever
+            showed the cover photo with no sign more existed. Tap Edit to
+            see/manage the rest. */}
+        {Array.isArray(product.image_urls) && product.image_urls.length > 1 && (
+          <View style={styles.photoCountBadge}>
+            <Ionicons name="images-outline" size={9} color={vendorColors.text.white} />
+            <Text style={styles.photoCountText}>{product.image_urls.length}</Text>
+          </View>
+        )}
         <View style={[
           styles.availabilityBadge,
           { backgroundColor: product.is_available ? vendorColors.successLight : vendorColors.dangerLight }
@@ -136,6 +146,23 @@ const createStyles = (vendorColors) => StyleSheet.create({
   availabilityText: {
     fontSize: 9,
     fontWeight: '700',
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: vendorBorderRadius.sm,
+  },
+  photoCountText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: vendorColors.text.white,
   },
   info: {
     flex: 1,
