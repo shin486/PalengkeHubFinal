@@ -55,6 +55,8 @@ export default function VendorProfileScreen({ navigation }) {
   const [showLocationCapture, setShowLocationCapture] = useState(false);
   const [stallLocation, setStallLocation] = useState(null); // current stall_locations row, or null if never captured
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
 
   // Editable fields
   const [stallName, setStallName] = useState('');
@@ -84,6 +86,54 @@ export default function VendorProfileScreen({ navigation }) {
   useEffect(() => {
     (async () => setHasPin(await hasSavedPin()))();
   }, []);
+
+  // Tapping the avatar with no photo yet has nothing to view/remove — go
+  // straight to the picker. With a photo, offer the full menu. Mirrors the
+  // customer ProfileScreen's handleAvatarPress.
+  const handleAvatarPress = () => {
+    if (!profile?.avatar_url) {
+      uploadAvatar();
+      return;
+    }
+    Alert.alert('Profile Photo', null, [
+      { text: 'View Photo', onPress: () => setPhotoViewerVisible(true) },
+      { text: 'Change Photo', onPress: uploadAvatar },
+      { text: 'Remove Photo', style: 'destructive', onPress: removeProfilePhoto },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const removeProfilePhoto = async () => {
+    Alert.alert(
+      'Remove Profile Photo',
+      'Are you sure you want to remove your profile photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingPhoto(true);
+            try {
+              const { error } = await supabase
+                .from('profiles')
+                .update({ avatar_url: null })
+                .eq('id', user.id);
+              if (error) throw error;
+              await checkUser();
+              hapticSuccess();
+              Alert.alert('Success', 'Profile photo removed successfully');
+            } catch (error) {
+              console.error('Remove photo error:', error);
+              Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
+            } finally {
+              setRemovingPhoto(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ── Change Profile Photo ──
   // Mirrors the customer ProfileScreen flow: pick → Supabase Storage upload →
@@ -545,7 +595,7 @@ export default function VendorProfileScreen({ navigation }) {
         <View style={styles.profileHeader}>
           <TouchableOpacity
             style={styles.avatarContainer}
-            onPress={uploadAvatar}
+            onPress={handleAvatarPress}
             disabled={uploadingAvatar}
             activeOpacity={0.8}
           >
@@ -568,7 +618,9 @@ export default function VendorProfileScreen({ navigation }) {
               </View>
             )}
           </TouchableOpacity>
-          <Text style={styles.changePhotoHint}>Tap photo to change</Text>
+          <Text style={styles.changePhotoHint}>
+            {profile?.avatar_url ? 'Tap photo for options' : 'Tap photo to add one'}
+          </Text>
           <Text style={styles.name}>{profile?.full_name || 'Vendor'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.roleBadge}>
@@ -876,6 +928,30 @@ export default function VendorProfileScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Full-screen photo viewer — same pattern as ChatDetailScreen's
+          image modal, reused here for "View Photo". */}
+      <Modal
+        visible={photoViewerVisible}
+        transparent={true}
+        onRequestClose={() => setPhotoViewerVisible(false)}
+      >
+        <View style={styles.photoViewerContainer}>
+          <TouchableOpacity
+            style={styles.photoViewerCloseButton}
+            onPress={() => setPhotoViewerVisible(false)}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {profile?.avatar_url && (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              style={styles.photoViewerImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -921,6 +997,28 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: SPACING.md,
+  },
+  photoViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerImage: {
+    width: '100%',
+    height: '80%',
   },
   avatar: {
     width: 100,

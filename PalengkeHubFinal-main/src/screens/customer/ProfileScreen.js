@@ -46,6 +46,7 @@ export default function ProfileScreen({ navigation }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
+  const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [ordersCount, setOrdersCount] = useState(0);
   const [ratingsCount, setRatingsCount] = useState(0);
@@ -214,6 +215,21 @@ export default function ProfileScreen({ navigation }) {
     } catch (err) {
       console.warn('Error fetching user stats:', err);
     }
+  };
+
+  // Tapping the avatar with no photo yet has nothing to view/remove — go
+  // straight to the picker. With a photo, offer the full menu.
+  const handleAvatarPress = () => {
+    if (!hasProfilePhoto) {
+      uploadAvatar();
+      return;
+    }
+    Alert.alert('Profile Photo', null, [
+      { text: 'View Photo', onPress: () => setPhotoViewerVisible(true) },
+      { text: 'Change Photo', onPress: uploadAvatar },
+      { text: 'Remove Photo', style: 'destructive', onPress: removeProfilePhoto },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const uploadAvatar = async () => {
@@ -538,7 +554,7 @@ export default function ProfileScreen({ navigation }) {
       >
         {/* User Avatar Section with Upload */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={uploadAvatar} disabled={uploadingAvatar} style={styles.avatarContainer}>
+          <TouchableOpacity onPress={handleAvatarPress} disabled={uploadingAvatar} style={styles.avatarContainer}>
             {uploadingAvatar ? (
               <View style={styles.avatarGradient}>
                 <ActivityIndicator size="large" color="white" />
@@ -572,21 +588,10 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </View>
 
-          {/*  REMOVED: The duplicate "Change Profile Photo" text button */}
-          {/*  ADDED: "Remove Photo" button - only shows when user has a profile photo */}
-          {hasProfilePhoto && (
-            <TouchableOpacity 
-              style={styles.removePhotoBtn}
-              onPress={removeProfilePhoto}
-              disabled={removingPhoto}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={16} color={COLORS.primary} />
-              <Text style={styles.removePhotoBtnText}>
-                {removingPhoto ? 'Removing...' : 'Remove Photo'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* View/Change/Remove now live in the menu handleAvatarPress opens
+              on tap — folded in from this screen's old standalone button so
+              there's one entry point instead of two ways to do the same
+              thing. */}
         </View>
 
         {/* Stats Section */}
@@ -929,6 +934,30 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Full-screen photo viewer — same pattern as ChatDetailScreen's
+          image modal, reused here for "View Photo". */}
+      <Modal
+        visible={photoViewerVisible}
+        transparent={true}
+        onRequestClose={() => setPhotoViewerVisible(false)}
+      >
+        <View style={styles.photoViewerContainer}>
+          <TouchableOpacity
+            style={styles.photoViewerCloseButton}
+            onPress={() => setPhotoViewerVisible(false)}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {profile?.avatar_url && (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              style={styles.photoViewerImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -970,22 +999,27 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 16,
   },
   //  NEW STYLES: Remove Photo Button
-  removePhotoBtn: {
-    flexDirection: 'row',
+  photoViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: COLORS.accentSoft,
-    borderWidth: 1,
-    borderColor: COLORS.accentLight,
   },
-  removePhotoBtnText: {
-    fontSize: 13,
-    color: COLORS.primary,
-    fontWeight: '600',
+  photoViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerImage: {
+    width: '100%',
+    height: '80%',
   },
   guestName: {
     fontSize: 24,
