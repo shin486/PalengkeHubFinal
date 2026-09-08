@@ -1399,9 +1399,10 @@ html{scroll-behavior:smooth}
     }
   });
 
-  /* Admin shortcut - Ctrl+1 redirects to admin subdomain */
+  /* Admin shortcut - Ctrl+Q redirects to admin subdomain
+     (was Ctrl+1, which browsers already bind to "go to first tab") */
   document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey && e.key === '1') {
+    if (e.ctrlKey && e.key === 'q') {
       e.preventDefault();
       window.location.href = 'https://admin.palengkehub.site';
     }
