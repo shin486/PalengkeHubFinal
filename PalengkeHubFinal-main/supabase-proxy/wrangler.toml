@@ -19,7 +19,14 @@ EMAILJS_PUBLIC_KEY = "kGh0qAHDD8McuJl23"
 #   EMAILJS_PRIVATE_KEY=your_key
 # For production: run `npx wrangler secret put IPROG_API_TOKEN` (and SEMAPHORE_API_KEY, PAYMONGO_SECRET_KEY, RESEND_API_KEY, EMAILJS_PRIVATE_KEY, etc.)
 
-# No KV or D1 bindings needed — config is hardcoded for single-project use.
+# OTP_CODES: server-side storage for sign-up phone/email verification codes.
+# Codes are written here on send and checked here on verify — the worker no
+# longer hands the code back to the client. See /verify-code below.
+[[kv_namespaces]]
+binding = "OTP_CODES"
+id = "1d303b4958e349269d7c4b3508e43b45"
+preview_id = "7e3a881612b14d15a117ecc36a460fa8"
+
 # If you need analytics, uncomment below and create the dataset in the dashboard:
 # [[analytics_engine_datasets]]
 # binding = "ANALYTICS"

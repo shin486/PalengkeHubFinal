@@ -29,6 +29,12 @@ interface ResendEmailPayload {
   from?: string;
 }
 
+interface VerifyCodePayload {
+  channel?: string; // 'sms' | 'email'
+  identifier?: string; // phone number or email, same value passed to the send call
+  code?: string;
+}
+
 // --- CORS ---
 function isOriginAllowed(origin: string): boolean {
   if (ALLOWED_ORIGINS === '*') return true;
@@ -150,6 +156,14 @@ function isSmartTntSunNumber(phone: string): boolean {
   return false;
 }
 
+// Normalized keys so a send and its matching verify always agree, regardless
+// of minor formatting differences (+63 vs 63, spaces/dashes, email casing).
+function otpKeyFor(channel: 'sms' | 'email', identifier: string): string {
+  return channel === 'sms'
+    ? `sms:${identifier.replace(/[+\s-]/g, '')}`
+    : `email:${identifier.trim().toLowerCase()}`;
+}
+
 async function handleIprogSendAuthenticatorSms(request: Request, env: any): Promise<Response> {
   const apiToken = env.IPROG_API_TOKEN || '';
   const semaphoreApiKey = env.SEMAPHORE_API_KEY || '';
@@ -165,6 +179,14 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const shortMessage = `PalengkeHub OTP: ${code}. Valid for 5 minutes. Do not share this code.`;
+
+    // Store the code server-side (5-minute validity, capped verify attempts).
+    // The responses below never echo it back to the client — see /verify-code.
+    await env.OTP_CODES.put(otpKeyFor('sms', phone_number), JSON.stringify({
+      code,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      attempts: 0,
+    }), { expirationTtl: 600 });
 
     // Resolve the Semaphore sender name: prefer the env-configured registered name,
     // fall back to the request's sender_name, then the brand default.
@@ -206,7 +228,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
           return new Response(JSON.stringify({
             provider: 'semaphore',
             ...data,
-            verification_code: code,
             expires_in_minutes: 5,
           }), {
             status: 200,
@@ -218,7 +239,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         return new Response(JSON.stringify({
           error: 'SMS delivery failed via Semaphore',
           details: data,
-          verification_code: code,
           expires_in_minutes: 5,
         }), {
           status: 502,
@@ -228,7 +248,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         console.error('Semaphore error for Smart/TNT number:', error);
         return new Response(JSON.stringify({
           error: 'SMS delivery failed: Semaphore error',
-          verification_code: code,
           expires_in_minutes: 5,
         }), {
           status: 502,
@@ -260,7 +279,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
           return new Response(JSON.stringify({
             provider: 'iprogsms',
             ...data,
-            verification_code: code,
             expires_in_minutes: 5,
           }), {
             status: 200,
@@ -299,7 +317,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
           return new Response(JSON.stringify({
             provider: 'semaphore',
             ...data,
-            verification_code: code,
             expires_in_minutes: 5,
           }), {
             status: 200,
@@ -311,7 +328,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         return new Response(JSON.stringify({
           error: 'SMS delivery failed via both providers',
           details: data,
-          verification_code: code,
           expires_in_minutes: 5,
         }), {
           status: 502,
@@ -321,7 +337,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
         console.error('Semaphore error:', error);
         return new Response(JSON.stringify({
           error: 'SMS delivery failed: Semaphore error',
-          verification_code: code,
           expires_in_minutes: 5,
         }), {
           status: 502,
@@ -333,7 +348,6 @@ async function handleIprogSendAuthenticatorSms(request: Request, env: any): Prom
     // No provider configured
     return new Response(JSON.stringify({
       error: 'No SMS provider configured (need IPROG_API_TOKEN or SEMAPHORE_API_KEY)',
-      verification_code: code,
       expires_in_minutes: 5,
     }), {
       status: 500,
@@ -366,6 +380,14 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const displayName = sender_name || 'PalengkeHub';
     const expiresInMinutes = 5;
+
+    // Store the code server-side (5-minute validity, capped verify attempts).
+    // The responses below never echo it back to the client — see /verify-code.
+    await env.OTP_CODES.put(otpKeyFor('email', email), JSON.stringify({
+      code,
+      expiresAt: Date.now() + expiresInMinutes * 60 * 1000,
+      attempts: 0,
+    }), { expirationTtl: 600 });
 
     const html = `
       <!DOCTYPE html>
@@ -443,7 +465,6 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
     const successBody = (provider: string, data: Record<string, unknown>) => JSON.stringify({
       provider,
       ...data,
-      verification_code: code,
       expires_in_minutes: expiresInMinutes,
     });
 
@@ -525,7 +546,6 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
         return new Response(JSON.stringify({
           error: 'Email delivery failed via both providers',
           details: text,
-          verification_code: code,
           expires_in_minutes: expiresInMinutes,
         }), {
           status: 502,
@@ -535,7 +555,6 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
         console.error('EmailJS fallback error:', error);
         return new Response(JSON.stringify({
           error: 'Email delivery failed: EmailJS error',
-          verification_code: code,
           expires_in_minutes: expiresInMinutes,
         }), {
           status: 502,
@@ -547,7 +566,6 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
     // No provider configured
     return new Response(JSON.stringify({
       error: 'No email provider configured (need RESEND_API_KEY or EmailJS credentials)',
-      verification_code: code,
       expires_in_minutes: expiresInMinutes,
     }), {
       status: 500,
@@ -556,6 +574,90 @@ async function handleResendAuthenticatorEmail(request: Request, env: any): Promi
   } catch (error) {
     console.error('Resend/EmailJS authenticator email error:', error);
     return Response.json({ error: 'Failed to send authenticator email' }, { status: 502 });
+  }
+}
+
+// Verifies a sign-up SMS/email code entered by the user against the value
+// stored server-side by the matching send call. Codes are one-time-use
+// (deleted the moment they're verified), expire 5 minutes after being sent,
+// and lock out after 5 wrong guesses — none of that was true before, when
+// the client just compared the code to itself.
+async function handleVerifyCode(request: Request, env: any): Promise<Response> {
+  const responseHeaders = new Headers();
+  addCorsHeaders(responseHeaders, request);
+  responseHeaders.set('Content-Type', 'application/json');
+
+  try {
+    const body = await request.json() as VerifyCodePayload;
+    const { channel, identifier, code } = body;
+
+    if (!channel || !identifier || !code) {
+      return new Response(JSON.stringify({ success: false, error: 'missing_fields' }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    if (channel !== 'sms' && channel !== 'email') {
+      return new Response(JSON.stringify({ success: false, error: 'invalid_channel' }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    const otpKey = otpKeyFor(channel, identifier);
+    const raw = await env.OTP_CODES.get(otpKey);
+
+    if (!raw) {
+      return new Response(JSON.stringify({ success: false, error: 'expired_or_not_found' }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    const record = JSON.parse(raw) as { code: string; expiresAt: number; attempts: number };
+
+    if (Date.now() > record.expiresAt) {
+      await env.OTP_CODES.delete(otpKey);
+      return new Response(JSON.stringify({ success: false, error: 'expired_or_not_found' }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    if (record.attempts >= 5) {
+      await env.OTP_CODES.delete(otpKey);
+      return new Response(JSON.stringify({ success: false, error: 'too_many_attempts' }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    if (String(code).trim() !== record.code) {
+      record.attempts += 1;
+      await env.OTP_CODES.put(otpKey, JSON.stringify(record), { expirationTtl: 600 });
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'incorrect_code',
+        attemptsRemaining: Math.max(0, 5 - record.attempts),
+      }), {
+        status: 400,
+        headers: responseHeaders,
+      });
+    }
+
+    // Correct — one-time use, so it can't be replayed.
+    await env.OTP_CODES.delete(otpKey);
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    console.error('Verify code error:', error);
+    return new Response(JSON.stringify({ success: false, error: 'verify_failed' }), {
+      status: 502,
+      headers: responseHeaders,
+    });
   }
 }
 
@@ -640,6 +742,10 @@ export default {
 
     if (url.pathname === '/resend/send-authenticator-email' && request.method === 'POST') {
       return handleResendAuthenticatorEmail(request, env);
+    }
+
+    if (url.pathname === '/verify-code' && request.method === 'POST') {
+      return handleVerifyCode(request, env);
     }
 
     // HTTP proxy only (no WebSocket)
