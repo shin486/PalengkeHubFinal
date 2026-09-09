@@ -180,8 +180,12 @@ export const SignUpScreen = () => {
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpMode, setOtpMode] = useState('sms'); // 'sms' | 'email'
   const [otpCode, setOtpCode] = useState('');
-  const [expectedVerificationCode, setExpectedVerificationCode] = useState('');
-  const [expectedEmailVerificationCode, setExpectedEmailVerificationCode] = useState('');
+  // Normalized phone/email the code was sent to — the code itself is never
+  // held client-side anymore; verification is a server round-trip (see
+  // verifyAuthenticatorCode) against what handleSendSmsVerification /
+  // handleSendEmailVerification stored server-side.
+  const [otpIdentifier, setOtpIdentifier] = useState('');
+  const otpVerifyingRef = useRef(false);
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [emailAccountCount, setEmailAccountCount] = useState(0); // existing accounts for this email
   const [duplicateName, setDuplicateName] = useState(false); // same name already used for this email
@@ -197,7 +201,7 @@ export const SignUpScreen = () => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   
-  const { signUp, login, sendAuthenticatorSms, sendEmailVerificationCode, setIsGuest } = useAuth();
+  const { signUp, login, sendAuthenticatorSms, sendEmailVerificationCode, verifyAuthenticatorCode, setIsGuest } = useAuth();
   const navigation = useNavigation();
 
   // Creates the actual account. Only called AFTER the OTP code is verified
@@ -238,12 +242,12 @@ export const SignUpScreen = () => {
     setOtpMode('sms');
     try {
       const result = await sendAuthenticatorSms(phone);
-      setExpectedVerificationCode(result.verification_code || '');
+      setOtpIdentifier(result.identifier || phone);
       setOtpModalVisible(true);
       if (result.deliveryWarning) {
-        // The code is real and usable even though delivery may have
-        // failed — surface it as a heads-up, not a hard error, so the
-        // user still knows to double-check their phone/spam folder.
+        // A code was generated and stored server-side either way — surface
+        // the delivery hiccup as a heads-up, not a hard error, so the user
+        // still knows to double-check their phone/spam folder.
         setSmsSendError(result.deliveryWarning);
       }
       // On web, Alert.alert is blocking (window.alert) and can prevent the
@@ -279,11 +283,11 @@ export const SignUpScreen = () => {
     setOtpMode('email');
     try {
       const result = await sendEmailVerificationCode(email);
-      setExpectedEmailVerificationCode(result.verification_code || '');
+      setOtpIdentifier(result.identifier || email.trim());
       setOtpModalVisible(true);
       if (result.deliveryWarning) {
-        // The code is real and usable even though delivery may have
-        // failed — surface it as a heads-up, not a hard error.
+        // A code was generated and stored server-side either way — surface
+        // the delivery hiccup as a heads-up, not a hard error.
         setEmailSendError(result.deliveryWarning);
       }
       if (Platform.OS !== 'web') {
@@ -312,16 +316,44 @@ export const SignUpScreen = () => {
       return;
     }
 
-    if (enteredCode !== expectedEmailVerificationCode) {
+    // Guards against the auto-verify timeout and a manual button tap firing
+    // two concurrent verify calls now that this is a real network round trip.
+    if (otpVerifyingRef.current) return;
+    otpVerifyingRef.current = true;
+    setEmailSending(true);
+    let verifyResult;
+    try {
+      verifyResult = await verifyAuthenticatorCode({
+        channel: 'email',
+        identifier: otpIdentifier || email.trim(),
+        code: enteredCode,
+      });
+    } catch (error) {
+      otpVerifyingRef.current = false;
+      setEmailSending(false);
       shake();
-      setEmailSendError('Incorrect code. Please check the code sent to your email and try again.');
+      setEmailSendError(error.message || 'Could not verify the code. Please try again.');
+      return;
+    }
+    otpVerifyingRef.current = false;
+    setEmailSending(false);
+
+    if (!verifyResult.success) {
+      shake();
+      if (verifyResult.error === 'too_many_attempts') {
+        setEmailSendError('Too many incorrect attempts. Please request a new code.');
+      } else if (verifyResult.error === 'expired_or_not_found') {
+        setEmailSendError('This code has expired. Please request a new one.');
+      } else {
+        setEmailSendError('Incorrect code. Please check the code sent to your email and try again.');
+      }
       return;
     }
 
     setOtpModalVisible(false);
     setEmailSendError('');
     setOtpCode('');
-    setExpectedEmailVerificationCode('');
+    setOtpIdentifier('');
     setOtpDigits(['', '', '', '', '', '']);
 
     // The email is now verified — only now does the account actually get
@@ -423,16 +455,44 @@ export const SignUpScreen = () => {
       return;
     }
 
-    if (enteredCode !== expectedVerificationCode) {
+    // Guards against the auto-verify timeout and a manual button tap firing
+    // two concurrent verify calls now that this is a real network round trip.
+    if (otpVerifyingRef.current) return;
+    otpVerifyingRef.current = true;
+    setSmsSending(true);
+    let verifyResult;
+    try {
+      verifyResult = await verifyAuthenticatorCode({
+        channel: 'sms',
+        identifier: otpIdentifier || phone,
+        code: enteredCode,
+      });
+    } catch (error) {
+      otpVerifyingRef.current = false;
+      setSmsSending(false);
       shake();
-      setSmsSendError('Incorrect code. Please check the code sent to your phone and try again.');
+      setSmsSendError(error.message || 'Could not verify the code. Please try again.');
+      return;
+    }
+    otpVerifyingRef.current = false;
+    setSmsSending(false);
+
+    if (!verifyResult.success) {
+      shake();
+      if (verifyResult.error === 'too_many_attempts') {
+        setSmsSendError('Too many incorrect attempts. Please request a new code.');
+      } else if (verifyResult.error === 'expired_or_not_found') {
+        setSmsSendError('This code has expired. Please request a new one.');
+      } else {
+        setSmsSendError('Incorrect code. Please check the code sent to your phone and try again.');
+      }
       return;
     }
 
     setOtpModalVisible(false);
     setSmsSendError('');
     setOtpCode('');
-    setExpectedVerificationCode('');
+    setOtpIdentifier('');
     setOtpDigits(['', '', '', '', '', '']);
 
     // The phone is now verified — only now does the account actually get
@@ -855,8 +915,7 @@ export const SignUpScreen = () => {
   const handleOtpModalClose = () => {
     setOtpModalVisible(false);
     setOtpCode('');
-    setExpectedVerificationCode('');
-    setExpectedEmailVerificationCode('');
+    setOtpIdentifier('');
     setOtpDigits(['', '', '', '', '', '']);
     setSmsSendError('');
     setEmailSendError('');

@@ -24,16 +24,40 @@ import { useAuth, SIGNED_URL_TTL_SECONDS } from '../../contexts/AuthContext';
 import { useColors } from '../../contexts/ThemeContext';
 import { CATEGORY_OPTIONS } from '../../constants/productCategories';
 
-// Available unit options with labels
+// Weight/count-based units — for products that can be portioned to an
+// exact amount (meat, poultry, rice, etc. can be cut/weighed to order).
 const UNIT_OPTIONS = [
-  { id: 'kg', label: 'Per Kilo (kg)', icon: 'scale-outline', defaultPrice: 0 },
-  { id: '500g', label: 'Per 500g', icon: 'cube-outline', defaultPrice: 0 },
-  { id: '250g', label: 'Per 250g', icon: 'cube-outline', defaultPrice: 0 },
-  { id: 'piece', label: 'Per Piece', icon: 'apps-outline', defaultPrice: 0 },
-  { id: 'bundle', label: 'Per Bundle', icon: 'leaf-outline', defaultPrice: 0 },
-  { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: 'egg-outline', defaultPrice: 0 },
-  { id: 'pack', label: 'Per Pack', icon: 'cube-outline', defaultPrice: 0 },
+  { id: 'kg', label: 'Per Kilo (kg)', icon: 'scale-outline' },
+  { id: '500g', label: 'Per 500g', icon: 'cube-outline' },
+  { id: '250g', label: 'Per 250g', icon: 'cube-outline' },
+  { id: 'piece', label: 'Per Piece', icon: 'apps-outline' },
+  { id: 'bundle', label: 'Per Bundle', icon: 'leaf-outline' },
+  { id: 'dozen', label: 'Per Dozen (12 pcs)', icon: 'egg-outline' },
+  { id: 'pack', label: 'Per Pack', icon: 'cube-outline' },
 ];
+const DEFAULT_UNITS = ['kg', '500g', '250g'];
+const BASE_UNIT = 'kg';
+// Roughly matches ProductDetailsScreen.js's UNIT_CONFIG multipliers — used
+// only to show an "Auto (~₱X)" hint next to units the vendor hasn't priced
+// yet; the real price customers pay always comes from price_options first.
+const AUTO_HINT_MULTIPLIER = { '500g': 0.50, '250g': 0.25, piece: 0.25, bundle: 0.35, dozen: 2.40, pack: 0.80 };
+
+// Size-based options — for produce that comes as discrete whole pieces and
+// can't be cut to an exact weight the way meat can (a mango can't be
+// portioned down to "250g of mango"), so it's sold by size grade instead.
+// Only offered for the Fruits/Vegetables categories. iconSize scales up
+// small->large so the chip row visually hints at the size difference even
+// though it's the same glyph.
+const SIZE_UNIT_OPTIONS = [
+  { id: 'small', label: 'Small', icon: 'ellipse', iconSize: 10 },
+  { id: 'medium', label: 'Medium', icon: 'ellipse', iconSize: 14 },
+  { id: 'large', label: 'Large', icon: 'ellipse', iconSize: 18 },
+];
+const DEFAULT_SIZE_UNITS = ['small', 'medium', 'large'];
+const BASE_SIZE_UNIT = 'medium';
+
+const PRODUCE_CATEGORIES = ['fruits', 'vegetables'];
+const isProduceCategory = (categoryId) => PRODUCE_CATEGORIES.includes(categoryId);
 
 export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) {
   const { user } = useAuth();
@@ -85,16 +109,22 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
   // Selected units to offer
   const [selectedUnits, setSelectedUnits] = useState(['kg', '500g', '250g']);
 
+  const isProduce = isProduceCategory(formData.category);
+  const activeUnitOptions = isProduce ? SIZE_UNIT_OPTIONS : UNIT_OPTIONS;
+  const baseUnit = isProduce ? BASE_SIZE_UNIT : BASE_UNIT;
+
   useEffect(() => {
     if (editingProduct) {
       console.log(' MODAL - Editing product:', editingProduct.name);
       console.log(' MODAL - Image URL:', editingProduct.image_url);
 
+      const editingIsProduce = isProduceCategory(editingProduct.category);
+
       setFormData({
         name: editingProduct.name || '',
         description: editingProduct.description || '',
         price: editingProduct.price?.toString() || '',
-        unit: editingProduct.unit || 'kg',
+        unit: editingProduct.unit || (editingIsProduce ? BASE_SIZE_UNIT : BASE_UNIT),
         category: editingProduct.category || '',
         image_url: editingProduct.image_url || '',
       });
@@ -113,20 +143,20 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       if (editingProduct.unit_options && Array.isArray(editingProduct.unit_options)) {
         setSelectedUnits(editingProduct.unit_options);
       } else {
-        setSelectedUnits(['kg', '500g', '250g']);
+        setSelectedUnits(editingIsProduce ? DEFAULT_SIZE_UNITS : DEFAULT_UNITS);
       }
     } else {
       setFormData({
         name: '',
         description: '',
         price: '',
-        unit: 'kg',
+        unit: BASE_UNIT,
         category: '',
         image_url: '',
       });
       setImages([]);
       setUnitPrices({});
-      setSelectedUnits(['kg', '500g', '250g']);
+      setSelectedUnits(DEFAULT_UNITS);
     }
   }, [editingProduct]);
 
@@ -220,7 +250,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     const price = parseFloat(value) || 0;
     setUnitPrices(prev => ({ ...prev, [unitId]: price }));
 
-    if (unitId === 'kg') {
+    if (unitId === baseUnit) {
       setFormData({ ...formData, price: value });
     }
   };
@@ -233,6 +263,22 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
       setUnitPrices(newPrices);
     } else {
       setSelectedUnits([...selectedUnits, unitId]);
+    }
+  };
+
+  // Switching between a "sized" category (Fruits/Vegetables) and a
+  // "weighed" one changes which units even make sense — kg/500g/piece
+  // mean nothing for a size-graded mango, and small/medium/large mean
+  // nothing for pork. Reset to that group's own defaults when crossing
+  // that line; otherwise just record the category pick as normal.
+  const handleCategorySelect = (categoryId) => {
+    const nextIsProduce = isProduceCategory(categoryId);
+    if (nextIsProduce !== isProduce) {
+      setSelectedUnits(nextIsProduce ? DEFAULT_SIZE_UNITS : DEFAULT_UNITS);
+      setUnitPrices({});
+      setFormData({ ...formData, category: categoryId, unit: nextIsProduce ? BASE_SIZE_UNIT : BASE_UNIT, price: '' });
+    } else {
+      setFormData({ ...formData, category: categoryId });
     }
   };
 
@@ -279,7 +325,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
     selectedUnits.forEach(unit => {
       if (unitPrices[unit] && unitPrices[unit] > 0) {
         priceOptions[unit] = unitPrices[unit];
-      } else if (unit === 'kg') {
+      } else if (unit === baseUnit) {
         priceOptions[unit] = parsedPrice;
       }
     });
@@ -389,7 +435,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                     styles.categoryChip,
                     formData.category === cat.id && styles.categoryChipActive,
                   ]}
-                  onPress={() => setFormData({ ...formData, category: cat.id })}
+                  onPress={() => handleCategorySelect(cat.id)}
                 >
                   <Ionicons name={cat.icon} size={16} color={formData.category === cat.id ? COLORS.text.inverse : COLORS.text.tertiary} />
                   <Text
@@ -404,11 +450,15 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               ))}
             </View>
 
-            {/* Unit Options Selection */}
-            <Text style={styles.label}>Available Units for Sale</Text>
-            <Text style={styles.subLabel}>Select which units customers can buy</Text>
+            {/* Unit/Size Options Selection */}
+            <Text style={styles.label}>{isProduce ? 'Available Sizes for Sale' : 'Available Units for Sale'}</Text>
+            <Text style={styles.subLabel}>
+              {isProduce
+                ? "Fruits and vegetables can't be cut to an exact weight like meat can — pick which size grades you're selling"
+                : 'Select which units customers can buy'}
+            </Text>
             <View style={styles.unitSelectorContainer}>
-              {UNIT_OPTIONS.map((unit) => (
+              {activeUnitOptions.map((unit) => (
                 <TouchableOpacity
                   key={unit.id}
                   style={[
@@ -417,7 +467,7 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
                   ]}
                   onPress={() => toggleUnit(unit.id)}
                 >
-                  <Ionicons name={unit.icon} size={16} color={selectedUnits.includes(unit.id) ? COLORS.text.inverse : COLORS.text.tertiary} />
+                  <Ionicons name={unit.icon} size={unit.iconSize || 16} color={selectedUnits.includes(unit.id) ? COLORS.text.inverse : COLORS.text.tertiary} />
                   <Text style={[
                     styles.unitChipText,
                     selectedUnits.includes(unit.id) && styles.unitChipTextActive
@@ -428,32 +478,35 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               ))}
             </View>
 
-            {/* Unit Prices Section */}
-            <Text style={styles.label}>Unit Prices</Text>
-            <Text style={styles.subLabel}>Set price for each unit</Text>
+            {/* Unit/Size Prices Section */}
+            <Text style={styles.label}>{isProduce ? 'Size Prices' : 'Unit Prices'}</Text>
+            <Text style={styles.subLabel}>{isProduce ? 'Set a price for each size' : 'Set price for each unit'}</Text>
 
-            {selectedUnits.includes('kg') && (
-              <View style={styles.unitPriceRow}>
-                <View style={styles.unitPriceLabel}>
-                  <Ionicons name="scale-outline" size={18} color={COLORS.text.tertiary} />
-                  <Text style={styles.unitPriceText}>Per Kilo (kg) *</Text>
+            {selectedUnits.includes(baseUnit) && (() => {
+              const baseOption = activeUnitOptions.find(u => u.id === baseUnit);
+              return (
+                <View style={styles.unitPriceRow}>
+                  <View style={styles.unitPriceLabel}>
+                    <Ionicons name={baseOption?.icon} size={18} color={COLORS.text.tertiary} />
+                    <Text style={styles.unitPriceText}>{baseOption?.label} *</Text>
+                  </View>
+                  <View style={styles.unitPriceInputContainer}>
+                    <Text style={styles.currencySymbol}>₱</Text>
+                    <TextInput
+                      style={styles.unitPriceInput}
+                      placeholder="0.00"
+                      placeholderTextColor={COLORS.text.quaternary}
+                      keyboardType="decimal-pad"
+                      value={formData.price}
+                      onChangeText={(text) => setFormData({ ...formData, price: text })}
+                    />
+                  </View>
                 </View>
-                <View style={styles.unitPriceInputContainer}>
-                  <Text style={styles.currencySymbol}>₱</Text>
-                  <TextInput
-                    style={styles.unitPriceInput}
-                    placeholder="0.00"
-                    placeholderTextColor={COLORS.text.quaternary}
-                    keyboardType="decimal-pad"
-                    value={formData.price}
-                    onChangeText={(text) => setFormData({ ...formData, price: text })}
-                  />
-                </View>
-              </View>
-            )}
+              );
+            })()}
 
             {/* Market price suggestion */}
-            {selectedUnits.includes('kg') && priceSuggestion && (
+            {selectedUnits.includes(baseUnit) && priceSuggestion && (
               <View
                 style={[
                   styles.priceHint,
@@ -479,47 +532,38 @@ export function AddProductModal({ visible, onClose, onSubmit, editingProduct }) 
               </View>
             )}
 
-            {selectedUnits.includes('500g') && (
-              <View style={styles.unitPriceRow}>
-                <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={18} color={COLORS.text.tertiary} />
-                  <Text style={styles.unitPriceText}>Per 500g</Text>
-                </View>
-                <View style={styles.unitPriceInputContainer}>
-                  <Text style={styles.currencySymbol}>₱</Text>
-                  <TextInput
-                    style={styles.unitPriceInput}
-                    placeholder={`Auto (${parseFloat(formData.price) * 0.5 || 0})`}
-                    placeholderTextColor={COLORS.text.quaternary}
-                    keyboardType="decimal-pad"
-                    value={unitPrices['500g'] ? unitPrices['500g'].toString() : ''}
-                    onChangeText={(text) => handleUnitPriceChange('500g', text)}
-                  />
-                </View>
-              </View>
-            )}
-
-            {selectedUnits.includes('250g') && (
-              <View style={styles.unitPriceRow}>
-                <View style={styles.unitPriceLabel}>
-                  <Ionicons name="cube-outline" size={18} color={COLORS.text.tertiary} />
-                  <Text style={styles.unitPriceText}>Per 250g</Text>
-                </View>
-                <View style={styles.unitPriceInputContainer}>
-                  <Text style={styles.currencySymbol}>₱</Text>
-                  <TextInput
-                    style={styles.unitPriceInput}
-                    placeholder={`Auto (${parseFloat(formData.price) * 0.25 || 0})`}
-                    placeholderTextColor={COLORS.text.quaternary}
-                    keyboardType="decimal-pad"
-                    value={unitPrices['250g'] ? unitPrices['250g'].toString() : ''}
-                    onChangeText={(text) => handleUnitPriceChange('250g', text)}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Add other units similarly... */}
+            {/* Every other selected unit/size gets its own price row. Weight
+                units get an "Auto" hint derived from the base price (matches
+                ProductDetailsScreen.js's fallback multiplier if left blank);
+                sizes have no sensible auto-derivation from "medium" alone, so
+                the vendor must set each one explicitly. */}
+            {activeUnitOptions
+              .filter(unit => unit.id !== baseUnit && selectedUnits.includes(unit.id))
+              .map(unit => {
+                const autoMultiplier = AUTO_HINT_MULTIPLIER[unit.id];
+                const placeholder = autoMultiplier
+                  ? `Auto (${(parseFloat(formData.price) * autoMultiplier) || 0})`
+                  : '0.00';
+                return (
+                  <View key={unit.id} style={styles.unitPriceRow}>
+                    <View style={styles.unitPriceLabel}>
+                      <Ionicons name={unit.icon} size={unit.iconSize || 18} color={COLORS.text.tertiary} />
+                      <Text style={styles.unitPriceText}>{unit.label}</Text>
+                    </View>
+                    <View style={styles.unitPriceInputContainer}>
+                      <Text style={styles.currencySymbol}>₱</Text>
+                      <TextInput
+                        style={styles.unitPriceInput}
+                        placeholder={placeholder}
+                        placeholderTextColor={COLORS.text.quaternary}
+                        keyboardType="decimal-pad"
+                        value={unitPrices[unit.id] ? unitPrices[unit.id].toString() : ''}
+                        onChangeText={(text) => handleUnitPriceChange(unit.id, text)}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
           </ScrollView>
 
           <View style={styles.buttonContainer}>

@@ -64,6 +64,16 @@ const UNIT_CONFIG = {
   'bundle':{ label: 'Per Bundle',     icon: 'leaf-outline', suffix: 'bundle',multiplier: 0.35 },
   'dozen': { label: 'Per Dozen (12pcs)', icon: 'egg-outline', suffix: 'dozen', multiplier: 2.40 },
   'pack':  { label: 'Per Pack',       icon: 'cube-outline', suffix: 'pack',  multiplier: 0.80 },
+  // Size grades for produce that can't be cut to an exact weight (a mango
+  // can't be portioned down to "250g of mango" the way pork can) — see
+  // AddProductModal.js's SIZE_UNIT_OPTIONS, offered only for Fruits/
+  // Vegetables. Multipliers here are only a fallback for a size the
+  // vendor hasn't priced yet (product.price represents "medium"); a
+  // properly-priced listing always uses its own price_options value
+  // instead, same as every other unit.
+  'small':  { label: 'Small',  icon: 'ellipse-outline', suffix: 'small',  multiplier: 0.70 },
+  'medium': { label: 'Medium', icon: 'ellipse-outline', suffix: 'medium', multiplier: 1.00 },
+  'large':  { label: 'Large',  icon: 'ellipse-outline', suffix: 'large',  multiplier: 1.40 },
 };
 
 // Helper: apply promotion discount

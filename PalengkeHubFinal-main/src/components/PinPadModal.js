@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { verifyPin, getStoredCredentials } from '../services/pinService';
+import { verifyPin, getStoredCredentials, recordFailedPinAttempt, resetPinAttempts } from '../services/pinService';
 import { useColors } from '../contexts/ThemeContext';
 
 // Big-button 4-digit PIN pad shown on the login screen when the user has
@@ -39,6 +39,19 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
     ]).start();
   };
 
+  // Wrong PIN attempts persist across app restarts (see pinService) — after
+  // MAX_PIN_ATTEMPTS in a row, the stored PIN+credentials are wiped and this
+  // modal has nothing left to unlock, so it closes and sends the user to the
+  // real password field. Without this, a phone left unlocked (or lost) had
+  // no limit on how many 4-digit guesses could be thrown at it.
+  const lockOutAndClose = () => {
+    setEntry('');
+    setError('Naka-lock ang PIN dahil sa sunod-sunod na maling subok. Gumamit ng password.');
+    shake();
+    setBusy(false);
+    setTimeout(onClose, 1800);
+  };
+
   const attemptUnlock = async (pin) => {
     setBusy(true);
 
@@ -56,12 +69,15 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
           password: creds.password,
         });
         if (!error) {
+          await resetPinAttempts();
           setError('');
           setBusy(false);
           onSuccess();
           return;
         }
         console.warn('PIN unlock sign-in failed:', error.message);
+        const { lockedOut } = await recordFailedPinAttempt();
+        if (lockedOut) return lockOutAndClose();
         setEntry('');
         setError('Hindi makapasok. Gumamit ng password.');
         shake();
@@ -69,6 +85,8 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
         return;
       } catch (e) {
         console.warn('PIN unlock error:', e);
+        const { lockedOut } = await recordFailedPinAttempt();
+        if (lockedOut) return lockOutAndClose();
         setEntry('');
         setError('Hindi makapasok. Gumamit ng password.');
         shake();
@@ -84,6 +102,7 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
+          await resetPinAttempts();
           setError('');
           setBusy(false);
           onSuccess();
@@ -94,6 +113,8 @@ export const PinPadModal = ({ visible, onClose, onSuccess }) => {
       }
     }
 
+    const { lockedOut } = await recordFailedPinAttempt();
+    if (lockedOut) return lockOutAndClose();
     setEntry('');
     setError('Maling PIN. Subukan muli.');
     shake();

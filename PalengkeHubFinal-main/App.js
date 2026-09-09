@@ -72,6 +72,7 @@ import CustomerReportsScreen from './src/screens/customer/CustomerReportsScreen'
 import VendorReportIssueScreen from './src/screens/vendor/VendorReportIssueScreen';
 import VendorReportsListScreen from './src/screens/vendor/VendorReportsListScreen';
 import VendorOffersScreen from './src/screens/vendor/VendorOffersScreen';
+import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 
 // Import the redesigned HomeScreen
 import HomeScreen from './src/screens/customer/HomeScreen';
@@ -625,6 +626,7 @@ function RootNavigator() {
         <Stack.Screen name="VendorReportIssue" component={VendorReportIssueScreen} />
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
         <Stack.Screen name="VendorOffers" component={VendorOffersScreen} />
+        <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
         {/* VendorNotifications lives on this root navigator (not nested inside
             "App" like its customer-side twin above), so VendorApplicationStatus
             needs its own registration here too — navigating to a screen name

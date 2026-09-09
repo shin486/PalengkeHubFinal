@@ -304,7 +304,16 @@ export default function CategoryProductsScreen({ route, navigation }) {
             gcash_number
           )
         `)
-        .eq('category', categoryName)
+        // Case-insensitive: HomeScreen's category tiles pass the display
+        // name (categoryChips.js: "Fruits", "Meat"...) but AddProductModal
+        // has saved the lowercase CATEGORY_OPTIONS id (e.g. "fruits") on
+        // every product added since that file introduced it — an exact
+        // .eq() here made every such product invisible when browsing by
+        // category (it could still turn up via Search/stall pages, which
+        // don't filter by category at all). ilike with no % wildcards is
+        // just a case-insensitive equality check, so older rows saved with
+        // the capitalized form keep matching too.
+        .ilike('category', categoryName)
         .eq('is_available', true)
         .order('name');
 

@@ -200,21 +200,22 @@ export const AuthProvider = ({ children }) => {
     });
 
     const data = await response.json();
-    console.log(' iProg response status:', response.status, '| has code:', !!data?.verification_code);
+    console.log(' iProg response status:', response.status);
 
-    // The proxy can return a non-2xx status (e.g. carrier/provider hiccup)
-    // while still generating and returning a usable verification_code in
-    // the same body — checking response.ok first threw that code away, so
-    // the OTP modal would open with no code that could ever pass, leaving
-    // signup permanently stuck with no recovery path. Use the code if it's
-    // there regardless of status; only fail hard if there's truly none.
-    if (!data?.verification_code) {
+    // The code is generated and checked server-side now (see
+    // verifyAuthenticatorCode) — the proxy never hands it back. A 400 here
+    // means the request itself was malformed (no code was ever generated);
+    // anything else means a code exists server-side even if this specific
+    // status is non-2xx (e.g. a carrier/provider hiccup), so we still open
+    // the OTP screen with a warning rather than dead-ending signup — the
+    // real verify call is the actual source of truth either way.
+    if (response.status === 400) {
       throw new Error(data?.error || 'Failed to send authenticator SMS.');
     }
 
     return {
-      verification_code: data.verification_code,
-      expires_in_minutes: data.expires_in_minutes,
+      identifier: normalizedPhone,
+      expires_in_minutes: data?.expires_in_minutes,
       deliveryWarning: !response.ok ? (data?.error || 'The SMS may not have been delivered.') : null,
     };
   }, [authProxyUrl]);
@@ -238,20 +239,47 @@ export const AuthProvider = ({ children }) => {
     });
 
     const data = await response.json();
-    console.log(' Resend response status:', response.status, '| has code:', !!data?.verification_code);
+    console.log(' Resend response status:', response.status);
 
-    // Same fix as sendAuthenticatorSms above — the proxy can return a
-    // non-2xx status (email provider down/rejected the address) while
-    // still generating a usable verification_code. Discarding it here
-    // made every delivery hiccup a dead end with no way to ever verify.
-    if (!data?.verification_code) {
+    // Same shape as sendAuthenticatorSms above — the code is generated and
+    // checked server-side now (see verifyAuthenticatorCode), never handed
+    // back here. A 400 means the request was malformed (no code was ever
+    // generated); anything else still opens the OTP screen, with a warning
+    // if the status wasn't 2xx.
+    if (response.status === 400) {
       throw new Error(data?.error || 'Failed to send verification email.');
     }
 
     return {
-      verification_code: data.verification_code,
-      expires_in_minutes: data.expires_in_minutes,
+      identifier: email.trim(),
+      expires_in_minutes: data?.expires_in_minutes,
       deliveryWarning: !response.ok ? (data?.error || 'The email may not have been delivered.') : null,
+    };
+  }, [authProxyUrl]);
+
+  const verifyAuthenticatorCode = useCallback(async ({ channel, identifier, code }) => {
+    if (!authProxyUrl) {
+      throw new Error('Auth proxy URL is not configured.');
+    }
+    if (!channel || !identifier || !code) {
+      throw new Error('Missing verification details.');
+    }
+
+    const response = await fetch(`${authProxyUrl}/verify-code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ channel, identifier, code }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    console.log(' verifyAuthenticatorCode response status:', response.status, '| success:', !!data?.success);
+
+    return {
+      success: !!data?.success,
+      error: data?.error || null,
+      attemptsRemaining: data?.attemptsRemaining,
     };
   }, [authProxyUrl]);
 
@@ -480,8 +508,34 @@ export const AuthProvider = ({ children }) => {
 
       if (credentials.email) {
         const directEmail = normalizeEmail(credentials.email);
+
+        // Only probe the alias slots that actually exist. Accounts are
+        // always assigned the next sequential +phN slot on signup (see
+        // generateAuthEmail above), so a count of N means slots 1..N are
+        // populated and nothing above N is — trying signInWithPassword
+        // against all 5 possible slots on every single login attempt (the
+        // previous behavior, unconditionally) sends up to 5x the real auth
+        // requests per attempt. That's enough to burn through Supabase's
+        // own auth rate limit from nothing more than one or two people
+        // mistyping their password, locking out everyone behind the same
+        // IP. This cheap RPC (a plain count, not an auth attempt, so it
+        // isn't subject to that rate limit) tells us how many slots are
+        // worth trying before we start spending real auth attempts.
+        let accountCount = 1;
+        try {
+          const { data: countData, error: countError } = await supabase
+            .rpc('check_email_account_count', { p_email: directEmail });
+          if (!countError && typeof countData === 'number' && countData > 0) {
+            accountCount = Math.min(countData, MAX_ACCOUNTS_PER_EMAIL);
+          }
+        } catch (e) {
+          // RPC unreachable — fall back to the old behavior (probe every
+          // slot) rather than risk under-trying and missing a real account.
+          accountCount = MAX_ACCOUNTS_PER_EMAIL;
+        }
+
         const candidates = [directEmail];
-        for (let i = 2; i <= MAX_ACCOUNTS_PER_EMAIL; i++) {
+        for (let i = 2; i <= accountCount; i++) {
           candidates.push(generateAuthEmail(directEmail, i));
         }
 
@@ -888,6 +942,7 @@ export const AuthProvider = ({ children }) => {
     signInWithOAuthProvider,
     sendAuthenticatorSms,
     sendEmailVerificationCode,
+    verifyAuthenticatorCode,
     logout,
     checkUser,
     resetToLogin,
@@ -903,6 +958,7 @@ export const AuthProvider = ({ children }) => {
     signInWithOAuthProvider,
     sendAuthenticatorSms,
     sendEmailVerificationCode,
+    verifyAuthenticatorCode,
     logout,
     checkUser,
     resetToLogin,
