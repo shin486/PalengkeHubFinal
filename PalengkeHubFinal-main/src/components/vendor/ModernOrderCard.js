@@ -79,12 +79,20 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
   const [customMessage, setCustomMessage] = useState('');
   const [rejecting, setRejecting] = useState(false);
 
-  const nextStep = getNextStatus(order.status);
-  const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled';
-  const canReject = order.status === 'pending';
-  const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
-  const canProposeChange = order.status === 'pending';
+  // A submitted-but-unverified payment makes Approve/Reject the only
+  // sensible actions — handleApprovePayment jumps status straight to
+  // 'preparing' (not 'confirmed'), so the separate order-level Reject and
+  // "Confirm Order" buttons weren't just redundant, they raced the same
+  // order against two different, sometimes-conflicting action paths at
+  // once (previously showed View + both payment buttons + order Reject +
+  // Confirm Order together — five buttons, two of them both labeled
+  // "Reject" for two different things).
   const paymentNeedsVerification = order.payment_status === 'awaiting_verification';
+  const nextStep = getNextStatus(order.status);
+  const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled' && !paymentNeedsVerification;
+  const canReject = order.status === 'pending' && !paymentNeedsVerification;
+  const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
+  const canProposeChange = order.status === 'pending' && !paymentNeedsVerification;
   // Nothing in the pending->confirmed->preparing->ready->completed ladder
   // ever checked payment_status — a vendor could tap through to
   // "Complete Order" with payment never requested or verified. Only the

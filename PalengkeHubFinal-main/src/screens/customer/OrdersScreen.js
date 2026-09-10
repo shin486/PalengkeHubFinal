@@ -95,6 +95,16 @@ export default function OrdersScreen({ navigation }) {
   const { orders, loading, error: ordersError, newOrderAlert, refreshOrders } = useOrders();
   const { addToCart } = useCart();
   const { t } = useI18n();
+
+  // react-native-web does NOT implement Alert.alert — it silently no-ops.
+  const notify = (title, message) => {
+    if (Platform.OS === 'web') {
+      window.alert(message ? `${title}\n\n${message}` : title);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState('active');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStall, setSelectedStall] = useState(null);
@@ -453,43 +463,62 @@ export default function OrdersScreen({ navigation }) {
         oldestAllowedTime: oldestAllowed,
       });
 
+      // Soft checks (reference/amount/time) get a manual-verification escape
+      // hatch instead of a dead end, matching CheckoutContent.js — the vendor
+      // verifies every submission against their own GCash records regardless
+      // (payment_status only ever becomes 'awaiting_verification' below,
+      // never auto-'paid'), so a mismatch here doesn't need to be a hard
+      // block. This used to `return` on any mismatch, unlike the other
+      // checkout entry point — same anti-fraud check, two different outcomes
+      // depending on whether the customer paid from checkout or from here
+      // (re-paying an existing order). A customer who genuinely sent the
+      // wrong amount, or whose receipt just OCR'd wrong, was stuck with no
+      // way forward.
+      let softIssue = null;
       if (!validation.refMatched) {
         const found = validation.clueReferences.length
           ? validation.clueReferences.join(', ')
           : validation.digitCandidates.length
             ? validation.digitCandidates.join(', ')
             : 'no number sequence found';
-        setPayNowScanError(`We scanned your receipt and could not find the reference number you typed.\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`);
-        Alert.alert(
-          'Reference Number Not Found on Receipt',
-          `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}\n\nPlease fix your reference number or upload a clearer photo of the correct receipt.`
-        );
-        return;
-      }
-      if (!validation.amountMatched) {
-        const amountReason = validation.amounts.length === 0
-          ? `We could not find the total amount on your receipt. Please upload a clearer photo that shows the amount sent (should be ₱${(payNowOrder?.total_amount || 0).toFixed(2)}).`
+        const body = `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`;
+        setPayNowScanError(`Reference number not found on receipt. You typed: ${referenceDigits}. Found: ${found}`);
+        softIssue = { title: 'Reference Number Not Found on Receipt', body };
+      } else if (!validation.amountMatched) {
+        const body = validation.amounts.length === 0
+          ? `We could not find the total amount on your receipt (should be ₱${(payNowOrder?.total_amount || 0).toFixed(2)}).`
           : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match your order total (₱${(payNowOrder?.total_amount || 0).toFixed(2)}).`;
-        setPayNowScanError(amountReason);
-        Alert.alert(
-          'Receipt Amount Problem',
-          `${amountReason}\n\nPlease upload the receipt for THIS payment.`
-        );
-        return;
+        setPayNowScanError(body);
+        softIssue = { title: 'Receipt Amount Problem', body };
+      } else if (!validation.timeOk) {
+        const body = validation.timeProblem === 'future'
+          ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
+          : 'The date/time on this receipt is older than your order. Please upload the receipt for THIS payment.';
+        setPayNowScanError(body);
+        softIssue = {
+          title: validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
+          body,
+        };
       }
-      if (!validation.timeOk) {
-        setPayNowScanError(
-          validation.timeProblem === 'future'
-            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-            : 'The date/time on this receipt is older than your order. Please upload the receipt for THIS payment.'
-        );
-        Alert.alert(
-          validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
-          validation.timeProblem === 'future'
-            ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-            : 'The date/time on this receipt is older than your order. Please upload the receipt for THIS payment.'
-        );
-        return;
+
+      if (softIssue) {
+        const confirmBody = `${softIssue.body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`;
+        // react-native-web does NOT implement Alert.alert — its button
+        // callbacks never fire on web, so the Promise below would hang
+        // forever. window.confirm() is synchronous, so no Promise needed.
+        const proceed = Platform.OS === 'web'
+          ? window.confirm(`${softIssue.title}\n\n${confirmBody}`)
+          : await new Promise((resolve) => {
+            Alert.alert(
+              softIssue.title,
+              confirmBody,
+              [
+                { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Submit Anyway', onPress: () => resolve(true) },
+              ]
+            );
+          });
+        if (!proceed) return;
       }
 
  setPayNowScanStatus(' Checking for duplicates…');
@@ -661,15 +690,15 @@ export default function OrdersScreen({ navigation }) {
     return hoursSince <= 24;
   };
 
-  const handleReportIssue = (order) => {
+  const handleReportIssue = (order, prefillMessage = '') => {
     setReportIssueOrder(order);
-    setReportIssueMessage('');
+    setReportIssueMessage(prefillMessage);
     setReportIssueModalVisible(true);
   };
 
   const submitReportIssue = async () => {
     if (!reportIssueMessage.trim()) {
-      Alert.alert('Error', 'Please describe the issue');
+      notify('Error', 'Please describe the issue');
       return;
     }
 
@@ -687,13 +716,13 @@ export default function OrdersScreen({ navigation }) {
 
       if (error) throw error;
 
-      Alert.alert('Report Submitted', 'Thanks for letting us know — our team will look into this.');
+      notify('Report Submitted', 'Thanks for letting us know — our team will look into this.');
       setReportIssueModalVisible(false);
       setReportIssueOrder(null);
       setReportIssueMessage('');
     } catch (error) {
       console.error('Error submitting report:', error);
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
+      notify('Error', 'Failed to submit report. Please try again.');
     } finally {
       setSubmittingReportIssue(false);
     }
@@ -1088,8 +1117,16 @@ export default function OrdersScreen({ navigation }) {
     
     // Check if order is awaiting payment (unpaid, or payment previously rejected)
     const isAwaitingPayment = ['awaiting_payment', 'rejected'].includes(order.payment_status) && ['pending', 'confirmed'].includes(order.status);
-    const isAwaitingVerification = order.payment_status === 'awaiting_verification';
+    const isAwaitingVerification = order.payment_status === 'awaiting_verification' && !isCancelled;
     const isPaymentRejected = order.payment_status === 'rejected';
+    // handleRejectOrder (vendor side) never touches payment_status, so a
+    // cancelled order whose payment_status is still awaiting_verification
+    // or verified means the customer had already paid before the vendor
+    // cancelled — unless the vendor flagged the customer's own payment as
+    // insufficient, which exempts it (see add-orders-payment-insufficient-column.sql).
+    const wasCancelledAfterPayment = isCancelled
+      && ['awaiting_verification', 'verified'].includes(order.payment_status)
+      && !order.payment_insufficient;
     
     // Check for pending proposal
     const hasPendingProposal = order.proposed_changes && order.proposed_changes.status === 'pending';
@@ -1147,6 +1184,30 @@ export default function OrdersScreen({ navigation }) {
                 ? `${order.payment_rejection_reason} Please pay again below.`
                 : 'Your payment was rejected. Please pay again below.'}
             </Text>
+          </View>
+        )}
+
+        {/* CANCELLED AFTER PAYMENT BANNER — dispute-eligible */}
+        {wasCancelledAfterPayment && (
+          <View style={styles.payNowContainer}>
+            <View style={styles.payNowHeader}>
+              <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+              <Text style={styles.payNowHeaderText}>Cancelled After Payment</Text>
+            </View>
+            <Text style={styles.payNowHint}>
+              {order.cancel_reason
+                ? `This order was cancelled after you already paid. Reason: ${order.cancel_reason}`
+                : 'This order was cancelled after you already paid.'} If you haven't been refunded, you can file a dispute below.
+            </Text>
+            <TouchableOpacity
+              style={styles.disputeButton}
+              onPress={() => handleReportIssue(
+                order,
+                `This order was cancelled after I already paid (Order #${order.order_number?.slice(-8) || order.id}). I'm requesting a refund.`
+              )}
+            >
+              <Text style={styles.disputeButtonText}>File a Dispute</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -2050,6 +2111,18 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontSize: 11,
     color: COLORS.warning,
     textAlign: 'center',
+  },
+  disputeButton: {
+    marginTop: 10,
+    backgroundColor: COLORS.error,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  disputeButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   stallInfo: { backgroundColor: COLORS.background, padding: 12, borderRadius: 12, marginBottom: 12 },

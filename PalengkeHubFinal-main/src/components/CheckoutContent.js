@@ -150,10 +150,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         return updated;
       });
       
-      Alert.alert(
+      notify(
         'Payment Time Expired',
-        `Your 10-minute payment window for ${payment.stallName} has expired. This vendor's order has been cancelled.`,
-        [{ text: 'OK' }]
+        `Your 10-minute payment window for ${payment.stallName} has expired. This vendor's order has been cancelled.`
       );
       
     } catch (error) {
@@ -193,7 +192,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       // Web fallback: browser camera picker.
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
+        notify('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -240,7 +239,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+        notify('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -258,7 +257,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       }
     } catch (error) {
       console.error('Error picking receipt:', error);
-      Alert.alert('Error', 'Failed to select receipt image.');
+      notify('Error', 'Failed to select receipt image.');
     }
   };
 
@@ -313,7 +312,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       return await imageToCompressedDataUri(uri);
     } catch (error) {
       console.error('Error uploading receipt:', error);
-      Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
+      notify('Upload Error', 'Failed to upload receipt. Please try again.');
       return null;
     } finally {
       setGcashReceiptUploading(false);
@@ -328,11 +327,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     const referenceDigits = normalizeReference(payment.referenceNumber);
 
     if (!isValidGcashReference(referenceDigits)) {
-      Alert.alert('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
+      notify('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
       return;
     }
     if (!payment.receiptUri) {
-      Alert.alert('Missing Receipt', 'Please take a photo of your GCash receipt.');
+      notify('Missing Receipt', 'Please take a photo of your GCash receipt.');
       return;
     }
     if (payment.isProcessing) return;
@@ -444,7 +443,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         .maybeSingle();
       if (duplicateRef) {
         setGcashScanError('This GCash reference number was already used on another order. Every payment must have a unique reference number.');
-        Alert.alert(
+        notify(
           'Reference Already Used',
           'This GCash reference number was already used on another order. Every payment must have a unique reference number.'
         );
@@ -463,7 +462,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
             .maybeSingle();
           if (duplicateImage) {
             setGcashScanError('This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.');
-            Alert.alert(
+            notify(
               'Duplicate Receipt Detected',
               'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'
             );
@@ -556,10 +555,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           setCurrentVendorIndex(nextIndex);
           // Start timer for next vendor
           startTimerForVendor(nextIndex);
-          Alert.alert(
+          notify(
             'Payment Submitted!',
-            `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`,
-            [{ text: 'Continue' }]
+            `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`
           );
         }
       }
@@ -567,7 +565,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     } catch (error) {
       console.error('Error submitting payment:', error);
       setGcashScanError('Failed to submit payment. Please try again.');
-      Alert.alert('Error', 'Failed to submit payment. Please try again.');
+      notify('Error', 'Failed to submit payment. Please try again.');
     } finally {
       setGcashPayments(prev => {
         const updated = [...prev];
@@ -645,40 +643,105 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     return grouped;
   };
 
-  const onDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      const newDate = new Date(selectedDate);
-      newDate.setHours(pickupTime.getHours());
-      newDate.setMinutes(pickupTime.getMinutes());
-      // The previously-picked time-of-day can land outside market hours
-      // or in the past once carried onto a different (e.g. today's) date
-      // — nudge it back into a valid slot instead of accepting it as-is.
-      setPickupTime(clampPickupTime(newDate));
+  // react-native-web doesn't implement Alert.alert's dialog reliably (see
+  // the same workaround already used for the receipt-scan escape hatch
+  // below) — a plain window.alert() is what actually shows on web.
+  const notify = (title, message) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
     }
   };
 
-  const onTimeChange = (event, selectedTime) => {
-    setShowTimePicker(false);
-    if (!selectedTime) return;
+  // Shared by both the native DateTimePicker handlers and the web <input>
+  // handlers below — takes a plain Date/selection, not a native picker
+  // event, so both platforms funnel through the exact same validation.
+  const applyPickupDate = (selectedDate) => {
+    if (!selectedDate) return;
+    const newDate = new Date(selectedDate);
+    newDate.setHours(pickupTime.getHours());
+    newDate.setMinutes(pickupTime.getMinutes());
+    // The previously-picked time-of-day can land outside market hours
+    // or in the past once carried onto a different (e.g. today's) date
+    // — nudge it back into a valid slot instead of accepting it as-is.
+    setPickupTime(clampPickupTime(newDate));
+  };
 
+  const applyPickupTime = (selectedTime) => {
+    if (!selectedTime) return;
     const newTime = new Date(pickupTime);
     newTime.setHours(selectedTime.getHours());
     newTime.setMinutes(selectedTime.getMinutes());
     newTime.setSeconds(0, 0);
 
     if (newTime.getHours() < MARKET_OPEN_HOUR || newTime.getHours() >= MARKET_CLOSE_HOUR) {
-      Alert.alert('Outside Market Hours', 'Pickup time must be between 5:00 AM and 7:00 PM.');
+      notify('Outside Market Hours', 'Pickup time must be between 5:00 AM and 7:00 PM.');
       return;
     }
 
+    // Same 15-minute prep buffer clampPickupTime enforces for the date
+    // picker (applyPickupDate, and the initial default below) — this used
+    // to only check `newTime < now` (i.e. not literally in the past),
+    // which let a same-day pickup be set for a minute or two from now.
+    // Vendors need real prep time regardless of which picker the
+    // customer used to land on that slot.
     const now = new Date();
-    if (newTime.toDateString() === now.toDateString() && newTime < now) {
-      Alert.alert('Invalid Time', 'Please choose a pickup time later than now.');
+    const earliest = new Date(now.getTime() + 15 * 60 * 1000);
+    if (newTime.toDateString() === now.toDateString() && newTime < earliest) {
+      notify('Invalid Time', 'Pickup time must be at least 15 minutes from now.');
       return;
     }
 
     setPickupTime(newTime);
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    applyPickupDate(selectedDate);
+  };
+
+  const onTimeChange = (event, selectedTime) => {
+    setShowTimePicker(false);
+    applyPickupTime(selectedTime);
+  };
+
+  // @react-native-community/datetimepicker ships no web implementation at
+  // all (no .web.js — it's native iOS/Android only), so on web the "Pickup
+  // Time" button opened nothing: tapping it just flipped showTimePicker to
+  // true with no visible picker to show for it. Native <input type="date"/
+  // "time"> triggers the browser's own picker and needs no extra library —
+  // same validation, real UI on web instead of a dead button.
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const toDateInputValue = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const toTimeInputValue = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+  const handleWebDateInput = (e) => {
+    const val = e.target.value;
+    if (!val) return;
+    const [y, m, d] = val.split('-').map(Number);
+    applyPickupDate(new Date(y, m - 1, d));
+  };
+
+  const handleWebTimeInput = (e) => {
+    const val = e.target.value;
+    if (!val) return;
+    const [h, min] = val.split(':').map(Number);
+    const t = new Date(pickupTime);
+    t.setHours(h, min, 0, 0);
+    applyPickupTime(t);
+  };
+
+  const webPickerInputStyle = {
+    flex: 1,
+    border: 'none',
+    background: 'transparent',
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.dark,
+    fontFamily: 'inherit',
+    outline: 'none',
+    cursor: 'pointer',
   };
 
   // Re-checks every cart line against the live `products` row right before
@@ -716,10 +779,33 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         blockedNames.push(item.name);
         continue;
       }
-      if (Number(fresh.price) !== Number(item.price)) {
-        changedPrices.set(pid, Number(fresh.price));
+
+      // Compare against original_price (the raw base price snapshotted at
+      // add-to-cart time), not item.price directly. item.price is the
+      // actual CHARGED price, which legitimately differs from the base
+      // price for a non-default unit (price_options/UNIT_CONFIG
+      // multipliers), an active promotion, or an accepted haggle offer —
+      // all normal, all previously mistaken for "the price changed",
+      // which meant this check flagged and blocked nearly every real
+      // checkout that wasn't a plain per-kg, no-discount item.
+      const baseAtAddTime = Number(item.original_price ?? item.price);
+      const freshBase = Number(fresh.price);
+
+      if (freshBase !== baseAtAddTime) {
+        // The vendor's base listing price actually moved since this was
+        // added — scale the charged price by the same ratio instead of
+        // replacing it outright, so whatever unit/promo discount was
+        // baked into item.price is preserved rather than silently
+        // dropped. (An accepted haggle price is fixed and re-verified
+        // independently server-side regardless of this scaling.)
+        const ratio = baseAtAddTime > 0 ? freshBase / baseAtAddTime : 1;
+        const scaledPrice = Number((item.price * ratio).toFixed(2));
+        changedPrices.set(pid, scaledPrice);
+        verifiedCart.push({ ...item, price: scaledPrice, quantity });
+        continue;
       }
-      verifiedCart.push({ ...item, price: Number(fresh.price), quantity });
+
+      verifiedCart.push({ ...item, price: Number(item.price), quantity });
     }
 
     // Correct the actual cart (not just this local copy) so if this blocks
@@ -736,7 +822,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
     if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Add items to your cart first');
+      notify('Empty Cart', 'Add items to your cart first');
       return;
     }
 
@@ -745,7 +831,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     // chosen can slip into the past (or past closing) by the time the
     // order actually submits, e.g. sitting on this screen near closing.
     if (pickupTime.getHours() < MARKET_OPEN_HOUR || pickupTime.getHours() >= MARKET_CLOSE_HOUR || pickupTime < new Date()) {
-      Alert.alert('Invalid Pickup Time', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.');
+      notify('Invalid Pickup Time', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.');
       return;
     }
 
@@ -755,7 +841,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       if (blockedNames.length > 0) {
         setLoading(false);
-        Alert.alert(
+        notify(
           'Some items are no longer available',
           `${blockedNames.join(', ')} ${blockedNames.length === 1 ? 'is' : 'are'} no longer available. Please remove ${blockedNames.length === 1 ? 'it' : 'them'} from your cart and try again.`
         );
@@ -764,7 +850,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       if (pricesChanged) {
         setLoading(false);
-        Alert.alert(
+        notify(
           'Prices have changed',
           'One or more items in your cart changed price since you added them. Please review your cart — the updated total is now shown there.'
         );
@@ -872,7 +958,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
+      // Surfaces the real reason (e.g. the price-trigger's own rejection
+      // message) instead of a generic dead-end — this exact spot was the
+      // only thing standing between "order failed" and actually knowing
+      // why, since react-native-web has no console the customer can see.
+      notify('Error', error?.message || 'Failed to place order. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -930,34 +1020,58 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       {/* Pickup Time */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Pickup Time</Text>
-        <View style={styles.pickupRow}>
-          <TouchableOpacity 
-            style={styles.pickupButton} 
-            onPress={() => setShowDatePicker(true)} 
-            activeOpacity={0.7}
-          >
-            <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.pickupText}>{formatDate(pickupTime)}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.pickupButton} 
-            onPress={() => setShowTimePicker(true)} 
-            activeOpacity={0.7}
-          >
-            <Ionicons name="time-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.pickupText}>{formatTime(pickupTime)}</Text>
-          </TouchableOpacity>
-        </View>
+        {Platform.OS === 'web' ? (
+          <View style={styles.pickupRow}>
+            <View style={styles.pickupButton}>
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <input
+                type="date"
+                value={toDateInputValue(pickupTime)}
+                min={toDateInputValue(new Date())}
+                onChange={handleWebDateInput}
+                style={webPickerInputStyle}
+              />
+            </View>
+            <View style={styles.pickupButton}>
+              <Ionicons name="time-outline" size={20} color={COLORS.primary} />
+              <input
+                type="time"
+                value={toTimeInputValue(pickupTime)}
+                onChange={handleWebTimeInput}
+                style={webPickerInputStyle}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.pickupRow}>
+            <TouchableOpacity
+              style={styles.pickupButton}
+              onPress={() => setShowDatePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.pickupText}>{formatDate(pickupTime)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.pickupButton}
+              onPress={() => setShowTimePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="time-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.pickupText}>{formatTime(pickupTime)}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <View style={styles.pickupNote}>
           <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} />
           <Text style={styles.pickupNoteText}>Please arrive within 15 minutes of your selected time</Text>
         </View>
       </View>
 
-      {showDatePicker && (
+      {Platform.OS !== 'web' && showDatePicker && (
         <DateTimePicker value={pickupTime} mode="date" display="default" minimumDate={new Date()} onChange={onDateChange} />
       )}
-      {showTimePicker && (
+      {Platform.OS !== 'web' && showTimePicker && (
         <DateTimePicker value={pickupTime} mode="time" display="default" onChange={onTimeChange} />
       )}
 

@@ -527,6 +527,15 @@ export const AuthProvider = ({ children }) => {
             .rpc('check_email_account_count', { p_email: directEmail });
           if (!countError && typeof countData === 'number' && countData > 0) {
             accountCount = Math.min(countData, MAX_ACCOUNTS_PER_EMAIL);
+          } else if (countError) {
+            // A failed RPC call resolves with {data:null, error} here — it
+            // does NOT throw — so this branch, not the catch below, is what
+            // actually handles "RPC unreachable" in practice. Without it,
+            // accountCount silently stayed at the default of 1 on any RPC
+            // failure (missing function, RLS, network), under-trying for
+            // any real multi-account email instead of falling back to
+            // probing every slot the way the comment below always claimed.
+            accountCount = MAX_ACCOUNTS_PER_EMAIL;
           }
         } catch (e) {
           // RPC unreachable — fall back to the old behavior (probe every
@@ -589,28 +598,38 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (matched.length === 1) {
-          // This loop tries every candidate@n alias for this email even
-          // after the real one already succeeded, to find out whether more
-          // than one account shares this email+password. Supabase's client
-          // treats each signInWithPassword call as authoritative — a later
-          // *failed* attempt (against a candidate alias that doesn't exist,
-          // the common case for a single-account user) clears the session
-          // the successful one just set. So by the time this line runs, the
-          // browser usually has NO valid session at all, even though the
-          // correct login happened seconds ago in this same loop. checkUser()
-          // then finds nobody signed in, the app's redirect effect never
-          // fires, and the user lands right back on the Login screen —
-          // "sign in just refreshes". Re-authenticating as the one account
-          // that actually matched guarantees the live session is real.
-          const { error: reauthError } = await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
-          if (reauthError) {
-            // Previously unchecked — the caller was told login succeeded
-            // even when no session actually exists (e.g. rate-limited
-            // after the earlier per-candidate attempts, or a transient
-            // network blip), leaving the user stuck on whatever screen
-            // trusted that false "success".
-            console.error(' Re-authentication failed for single matched account:', reauthError.message);
-            return { success: false, error: reauthError.message || 'Login failed. Please try again.' };
+          // The loop above tries every candidate@n alias for this email
+          // even after the real one already succeeds, to find out whether
+          // more than one account shares this email+password. Supabase's
+          // client treats each signInWithPassword call as authoritative —
+          // a LATER *failed* attempt (against a candidate alias that
+          // doesn't exist) clears the session an EARLIER successful one
+          // just set. That only happens when more than one candidate was
+          // actually tried, though — accountCount above now bounds the
+          // candidate list to real slots, so the common case (one account
+          // on this email) makes exactly one signInWithPassword call, and
+          // there's no later attempt left to clear anything.
+          //
+          // Re-authenticating unconditionally here used to be the fix, but
+          // now that the common case is down to one call, that extra call
+          // reintroduces the exact same risk for the most common login of
+          // all: if THIS redundant call has any transient hiccup (rate
+          // limit, network blip), it clears the perfectly good session the
+          // single try above just established, and login gets reported as
+          // failed despite having actually succeeded — "sign in just
+          // refreshes back to Login". Only worth the extra round-trip when
+          // more than one candidate was genuinely tried.
+          if (uniqueCandidates.length > 1) {
+            const { error: reauthError } = await supabase.auth.signInWithPassword({ email: matched[0].authEmail, password });
+            if (reauthError) {
+              // Previously unchecked — the caller was told login succeeded
+              // even when no session actually exists (e.g. rate-limited
+              // after the earlier per-candidate attempts, or a transient
+              // network blip), leaving the user stuck on whatever screen
+              // trusted that false "success".
+              console.error(' Re-authentication failed for single matched account:', reauthError.message);
+              return { success: false, error: reauthError.message || 'Login failed. Please try again.' };
+            }
           }
           console.log(' Login successful (single account):', matched[0].authEmail);
           await checkUser();

@@ -126,6 +126,32 @@ export function getDirectionsUrl(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 
+// Every active stall with a currently pinned location, flattened for the
+// customer-facing "see all stalls on one map" screen (MarketMapScreen).
+// No verified_by_admin filter — fetchCurrentStallLocation (the per-stall
+// detail view) doesn't gate on that either; admin review is accuracy
+// triage, not a visibility gate. is_active mirrors StallsDirectoryScreen's
+// own stalls query so a deactivated stall doesn't show up here either.
+export const fetchAllStallsWithLocations = async () => {
+  const { data, error } = await supabase
+    .from('stall_locations')
+    .select('lat, lng, stall:stall_id (id, stall_name, stall_number, section, description, image_url, is_active)')
+    .eq('is_current', true);
+  if (error) throw error;
+  return (data || [])
+    .filter((row) => row.stall && row.stall.is_active === true)
+    .map((row) => ({
+      id: row.stall.id,
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      stall_name: row.stall.stall_name,
+      stall_number: row.stall.stall_number,
+      section: row.stall.section,
+      description: row.stall.description,
+      image_url: row.stall.image_url,
+    }));
+};
+
 // ============================================================
 // CRUD — vendor capture, admin review queue
 // ============================================================

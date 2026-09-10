@@ -1130,9 +1130,15 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Price block: price, unit, verdict chip */}
+        {/* Price block: price, unit, verdict chip.
+            effectiveUnitPrice (not currentPrice) — currentPrice never
+            accounts for an accepted haggle offer, so a customer with one
+            was seeing the ORIGINAL listed price here while the correct
+            negotiated number only appeared in the haggle banner further
+            down the page. Same number the sticky bottom bar's total
+            already correctly uses (see effectiveUnitPrice above). */}
         <View style={styles.priceRow}>
-          <Text style={styles.productPrice}>₱{currentPrice.toFixed(2)}</Text>
+          <Text style={styles.productPrice}>₱{effectiveUnitPrice.toFixed(2)}</Text>
           <Text style={styles.productUnit}>/ {unitSuffix}</Text>
           {isThisProductCheapest && <VerdictChip verdict="PINAKAMURA" solid style={styles.priceVerdict} />}
         </View>
@@ -1193,6 +1199,119 @@ export default function ProductDetailsScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       ) : null}
+
+      {/* Detalye: unit, quantity, secondary actions, description */}
+      {availableUnits.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Select Unit</Text>
+          <View style={styles.unitsContainer}>
+            {availableUnits.map((unit) => {
+              const originalPrice = getUnitOriginalPrice(unit);
+              const discounted = getUnitPrice(unit);
+              const hasDiscount = promotion && discounted < originalPrice;
+              return (
+                <TouchableOpacity
+                  key={unit}
+                  style={[
+                    styles.unitChip,
+                    selectedUnit === unit && styles.unitChipActive
+                  ]}
+                  onPress={() => handleUnitChange(unit)}
+                >
+                  <Text style={[
+                    styles.unitChipText,
+                    selectedUnit === unit && styles.unitChipTextActive
+                  ]}>
+                    {getUnitDisplayText(unit)}
+                  </Text>
+                  <View style={styles.unitPriceContainer}>
+                    {hasDiscount && (
+                      <Text style={styles.unitOriginalPrice}>₱{originalPrice.toFixed(2)}</Text>
+                    )}
+                    <Text style={[
+                      styles.unitChipPrice,
+                      selectedUnit === unit && styles.unitChipPriceActive,
+                      hasDiscount && styles.unitDiscountedPrice
+                    ]}>
+                      ₱{discounted.toFixed(2)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quantity</Text>
+        <View style={styles.quantityContainer}>
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={() => setQuantity(Math.max(1, quantity - 1))}
+          >
+            <Text style={styles.quantityButtonText}>-</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.quantityText}>{quantity}</Text>
+
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={() => setQuantity(quantity + 1)}
+          >
+            <Text style={styles.quantityButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Haggle status — visible only to this customer (the vendor sees
+            the same negotiation on their own Offers tab); nobody else. */}
+        {hasAcceptedHaggle && (
+          <View style={styles.haggleBanner}>
+            <Ionicons name="pricetag" size={16} color={COLORS.success} />
+            <Text style={styles.haggleBannerText}>
+              Your haggled price: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
+            </Text>
+          </View>
+        )}
+        {isCustomerTurn && (
+          <View style={styles.haggleBanner}>
+            <Ionicons name="time-outline" size={16} color={COLORS.text.tertiary} />
+            <Text style={styles.haggleBannerText}>
+              Offer sent: ₱{activeHaggle.current_price.toFixed(2)} / {getUnitDisplayText(selectedUnit)} — waiting for the vendor
+            </Text>
+            <TouchableOpacity onPress={withdrawOffer} disabled={withdrawingHaggle} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.haggleWithdrawText}>{withdrawingHaggle ? '...' : 'Withdraw'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {isVendorTurn && (
+          <View style={[styles.haggleBanner, { backgroundColor: COLORS.warningLight || COLORS.inputBg }]}>
+            <Ionicons name="swap-horizontal" size={16} color={COLORS.warning || COLORS.text.primary} />
+            <Text style={styles.haggleBannerText}>
+              Vendor countered: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
+            </Text>
+          </View>
+        )}
+
+        {!hasAcceptedHaggle && (
+          <View style={styles.secondaryActionsRow}>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.text.primary} />}
+              onPress={() => {
+                hapticLight();
+                setOfferPrice(isVendorTurn ? activeHaggle.current_price.toFixed(2) : (currentPrice * 0.9).toFixed(2));
+                setOfferVisible(true);
+              }}
+              disabled={!product?.is_available || isCustomerTurn}
+              style={{ flex: 1 }}
+            >
+              {isVendorTurn ? 'Counter Offer' : isCustomerTurn ? 'Offer Pending' : 'Make an Offer'}
+            </Button>
+          </View>
+        )}
+      </View>
 
       {/* ── Presyo Check ── */}
       <View style={styles.presyoSection}>
@@ -1404,119 +1523,6 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </Text>
             <Button variant="outline" size="sm" onPress={() => navigation.goBack()} style={{ marginTop: SPACING.md }}>
               Tingnan ang ibang produkto
-            </Button>
-          </View>
-        )}
-      </View>
-
-      {/* Detalye: unit, quantity, secondary actions, description */}
-      {availableUnits.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Unit</Text>
-          <View style={styles.unitsContainer}>
-            {availableUnits.map((unit) => {
-              const originalPrice = getUnitOriginalPrice(unit);
-              const discounted = getUnitPrice(unit);
-              const hasDiscount = promotion && discounted < originalPrice;
-              return (
-                <TouchableOpacity
-                  key={unit}
-                  style={[
-                    styles.unitChip,
-                    selectedUnit === unit && styles.unitChipActive
-                  ]}
-                  onPress={() => handleUnitChange(unit)}
-                >
-                  <Text style={[
-                    styles.unitChipText,
-                    selectedUnit === unit && styles.unitChipTextActive
-                  ]}>
-                    {getUnitDisplayText(unit)}
-                  </Text>
-                  <View style={styles.unitPriceContainer}>
-                    {hasDiscount && (
-                      <Text style={styles.unitOriginalPrice}>₱{originalPrice.toFixed(2)}</Text>
-                    )}
-                    <Text style={[
-                      styles.unitChipPrice,
-                      selectedUnit === unit && styles.unitChipPriceActive,
-                      hasDiscount && styles.unitDiscountedPrice
-                    ]}>
-                      ₱{discounted.toFixed(2)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quantity</Text>
-        <View style={styles.quantityContainer}>
-          <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => setQuantity(Math.max(1, quantity - 1))}
-          >
-            <Text style={styles.quantityButtonText}>-</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.quantityText}>{quantity}</Text>
-
-          <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => setQuantity(quantity + 1)}
-          >
-            <Text style={styles.quantityButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Haggle status — visible only to this customer (the vendor sees
-            the same negotiation on their own Offers tab); nobody else. */}
-        {hasAcceptedHaggle && (
-          <View style={styles.haggleBanner}>
-            <Ionicons name="pricetag" size={16} color={COLORS.success} />
-            <Text style={styles.haggleBannerText}>
-              Your haggled price: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
-            </Text>
-          </View>
-        )}
-        {isCustomerTurn && (
-          <View style={styles.haggleBanner}>
-            <Ionicons name="time-outline" size={16} color={COLORS.text.tertiary} />
-            <Text style={styles.haggleBannerText}>
-              Offer sent: ₱{activeHaggle.current_price.toFixed(2)} / {getUnitDisplayText(selectedUnit)} — waiting for the vendor
-            </Text>
-            <TouchableOpacity onPress={withdrawOffer} disabled={withdrawingHaggle} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.haggleWithdrawText}>{withdrawingHaggle ? '...' : 'Withdraw'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {isVendorTurn && (
-          <View style={[styles.haggleBanner, { backgroundColor: COLORS.warningLight || COLORS.inputBg }]}>
-            <Ionicons name="swap-horizontal" size={16} color={COLORS.warning || COLORS.text.primary} />
-            <Text style={styles.haggleBannerText}>
-              Vendor countered: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
-            </Text>
-          </View>
-        )}
-
-        {!hasAcceptedHaggle && (
-          <View style={styles.secondaryActionsRow}>
-            <Button
-              variant="outline"
-              size="sm"
-              icon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.text.primary} />}
-              onPress={() => {
-                hapticLight();
-                setOfferPrice(isVendorTurn ? activeHaggle.current_price.toFixed(2) : (currentPrice * 0.9).toFixed(2));
-                setOfferVisible(true);
-              }}
-              disabled={!product?.is_available || isCustomerTurn}
-              style={{ flex: 1 }}
-            >
-              {isVendorTurn ? 'Counter Offer' : isCustomerTurn ? 'Offer Pending' : 'Make an Offer'}
             </Button>
           </View>
         )}
