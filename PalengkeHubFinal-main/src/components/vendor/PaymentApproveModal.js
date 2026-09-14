@@ -15,9 +15,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVendorColors, vendorSpacing, vendorBorderRadius, vendorShadows } from '../../theme/vendorTheme';
+import { useI18n } from '../../contexts/i18nContext';
 
 const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm }) => {
   const vendorColors = useVendorColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const [checkedReceipt, setCheckedReceipt] = useState(false);
   const [checkedGcash, setCheckedGcash] = useState(false);
@@ -39,19 +41,19 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.content}>
-          <Text style={styles.title}>Verify Payment Before Approving</Text>
+          <Text style={styles.title}>{t('vendor_orders.verify_payment_modal_title', 'Verify Payment Before Approving')}</Text>
           <Text style={styles.subtitle}>
-            Order #{order.order_number?.slice(-8) || (order.id ? String(order.id).slice(-8) : '')} • ₱{order.total_amount}
+            {t('vendor_orders.order_prefix', 'Order #')}{order.order_number?.slice(-8) || (order.id ? String(order.id).slice(-8) : '')} • ₱{order.total_amount}
           </Text>
 
           <View style={styles.infoBox}>
-            <Text style={styles.infoLabel}>Customer reference #</Text>
+            <Text style={styles.infoLabel}>{t('vendor_orders.customer_reference_label', 'Customer reference #')}</Text>
             <Text style={styles.infoValue}>{order.payment_reference || '—'}</Text>
             {hasScan && (
               <Text style={[styles.scanText, { color: scanMatched ? vendorColors.success : vendorColors.warning }]}>
                 {scanMatched
-                  ? 'Receipt scan matched this reference number'
-                  : 'Receipt scan could not confirm a match — verify manually'}
+                  ? t('vendor_orders.scan_matched_text', 'Receipt scan matched this reference number')
+                  : t('vendor_orders.scan_unmatched_text', 'Receipt scan could not confirm a match — verify manually')}
               </Text>
             )}
           </View>
@@ -76,7 +78,7 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
               size={22}
               color={checkedReceipt ? vendorColors.success : vendorColors.text.tertiary}
             />
-            <Text style={styles.checkText}>I reviewed the uploaded receipt and the details look correct.</Text>
+            <Text style={styles.checkText}>{t('vendor_orders.review_receipt_check', 'I reviewed the uploaded receipt and the details look correct.')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -90,14 +92,16 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
               color={checkedGcash ? vendorColors.success : vendorColors.text.tertiary}
             />
             <Text style={styles.checkText}>
-              I checked my own GCash app and received ₱{order.total_amount} with reference{' '}
-              {order.payment_reference || '—'}.
+              {t('vendor_orders.check_gcash_check', {
+                amount: order.total_amount,
+                reference: order.payment_reference || '—',
+              })}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.buttons}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.7}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('vendor_orders.cancel', 'Cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.confirmBtn, !canConfirm && styles.confirmDisabled]}
@@ -108,7 +112,7 @@ const PaymentApproveModal = ({ visible, order, processing, onClose, onConfirm })
               {processing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.confirmText}>Approve Payment</Text>
+                <Text style={styles.confirmText}>{t('vendor_orders.approve_payment', 'Approve Payment')}</Text>
               )}
             </TouchableOpacity>
           </View>

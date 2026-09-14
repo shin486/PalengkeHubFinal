@@ -22,6 +22,7 @@ import StallLocationCapture from '../../components/vendor/StallLocationCapture';
 import { fetchCurrentStallLocation } from '../../services/stallLocationService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 
@@ -41,6 +42,7 @@ import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 // which is what actually caused the blink. Hoisting it here lets memo()
 // do its job: the same consumer prop now really does skip re-rendering.
 const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
+  const { t } = useI18n();
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -56,9 +58,9 @@ const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
     const diff = now - date;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
+    if (days === 0) return t('vendor_dashboard.today', 'Today');
+    if (days === 1) return t('vendor_dashboard.yesterday', 'Yesterday');
+    if (days < 7) return t('vendor_dashboard.days_ago', '%{count} days ago', { count: days });
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -91,8 +93,8 @@ const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
         </View>
         <View style={styles.sukiInfo}>
           <Text style={styles.sukiName} numberOfLines={1}>{consumer.full_name}</Text>
-          <Text style={styles.sukiOrders}>{consumer.orderCount} orders</Text>
-          <Text style={styles.sukiLastOrder}>Last order • {formatDate(consumer.lastOrderDate)}</Text>
+          <Text style={styles.sukiOrders}>{t('vendor_dashboard.orders_count', '%{count} orders', { count: consumer.orderCount })}</Text>
+          <Text style={styles.sukiLastOrder}>{t('vendor_dashboard.last_order', 'Last order • %{date}', { date: formatDate(consumer.lastOrderDate) })}</Text>
         </View>
       </View>
       <TouchableOpacity
@@ -101,7 +103,7 @@ const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
         activeOpacity={0.7}
       >
         <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
-        <Text style={styles.sukiChatText}>Chat</Text>
+        <Text style={styles.sukiChatText}>{t('vendor_dashboard.chat', 'Chat')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -110,6 +112,7 @@ const SukiBuyerCard = memo(({ consumer, styles, COLORS, onChatPress }) => {
 export default function VendorDashboardScreen({ navigation }) {
   const { user, profile } = useAuth();
   const { colors: COLORS, isDark } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -372,12 +375,12 @@ export default function VendorDashboardScreen({ navigation }) {
   const togglePause = async () => {
     if (!stall) return;
     Alert.alert(
-      isPaused ? 'Open Store' : 'Close Store',
-      isPaused ? 'Your store will be open for new orders.' : 'Customers will not be able to place new orders.',
+      isPaused ? t('vendor_dashboard.open_store', 'Open Store') : t('vendor_dashboard.close_store', 'Close Store'),
+      isPaused ? t('vendor_dashboard.open_store_confirm', 'Your store will be open for new orders.') : t('vendor_dashboard.close_store_confirm', 'Customers will not be able to place new orders.'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {
-          text: isPaused ? 'Open' : 'Close',
+          text: isPaused ? t('vendor_dashboard.open_btn', 'Open') : t('vendor_dashboard.close_btn', 'Close'),
           style: isPaused ? 'default' : 'destructive',
           onPress: async () => {
             try {
@@ -389,7 +392,7 @@ export default function VendorDashboardScreen({ navigation }) {
               setIsPaused(!isPaused);
             } catch (error) {
               console.error('Error toggling pause:', error);
-              Alert.alert('Error', 'Failed to update store status');
+              Alert.alert(t('common.error', 'Error'), t('vendor_dashboard.failed_update_status', 'Failed to update store status'));
             }
           }
         }
@@ -474,15 +477,15 @@ export default function VendorDashboardScreen({ navigation }) {
       <View style={styles.container}>
         <WovenBackground isDark={isDark} />
         <Header
-          title="Dashboard"
-          subtitle="Loading..."
+          title={t('vendor_dashboard.title', 'Dashboard')}
+          subtitle={t('common.loading', 'Loading...')}
           showNotifications
           notificationCount={unreadNotifCount}
           onNotificationPress={() => navigation.navigate('VendorNotifications')}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading dashboard...</Text>
+          <Text style={styles.loadingText}>{t('vendor_dashboard.loading_dashboard', 'Loading dashboard...')}</Text>
         </View>
       </View>
     );
@@ -493,8 +496,8 @@ export default function VendorDashboardScreen({ navigation }) {
       <View style={styles.container}>
         <WovenBackground isDark={isDark} />
         <Header
-          title="Dashboard"
-          subtitle="No stall assigned"
+          title={t('vendor_dashboard.title', 'Dashboard')}
+          subtitle={t('vendor_dashboard.no_stall_assigned', 'No stall assigned')}
           showNotifications
           notificationCount={unreadNotifCount}
           onNotificationPress={() => navigation.navigate('VendorNotifications')}
@@ -503,8 +506,8 @@ export default function VendorDashboardScreen({ navigation }) {
           <View style={styles.emptyIconContainer}>
             <Ionicons name="storefront-outline" size={56} color={COLORS.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No Stall Assigned</Text>
-          <Text style={styles.emptyText}>Contact the administrator to get your stall registered</Text>
+          <Text style={styles.emptyTitle}>{t('vendor_dashboard.no_stall_assigned', 'No Stall Assigned')}</Text>
+          <Text style={styles.emptyText}>{t('vendor_dashboard.contact_admin_stall', 'Contact the administrator to get your stall registered')}</Text>
         </View>
       </View>
     );
@@ -514,8 +517,8 @@ export default function VendorDashboardScreen({ navigation }) {
     <View style={styles.container}>
       <WovenBackground isDark={isDark} />
       <Header
-        title="Dashboard"
-        subtitle={stall.stall_name || 'Manage your stall'}
+        title={t('vendor_dashboard.title', 'Dashboard')}
+        subtitle={stall.stall_name || t('vendor_dashboard.manage_stall', 'Manage your stall')}
         showNotifications
         notificationCount={unreadNotifCount}
         onNotificationPress={() => navigation.navigate('VendorNotifications')}
@@ -540,14 +543,17 @@ export default function VendorDashboardScreen({ navigation }) {
                 <View style={styles.storeStatusContainer}>
                   <View style={[styles.statusDot, isPaused ? styles.statusDotClosed : styles.statusDotOpen]} />
                   <Text style={styles.storeStatusLabel}>
-                    {isPaused ? 'Closed' : 'Open'}
+                    {isPaused ? t('vendor_dashboard.status_closed', 'Closed') : t('vendor_dashboard.status_open', 'Open')}
                   </Text>
                 </View>
                 <Text style={styles.storeName}>
-                  {stall.stall_name || 'Your Stall'}
+                  {stall.stall_name || t('vendor_dashboard.your_stall', 'Your Stall')}
                 </Text>
                 <Text style={styles.storeSubtitle}>
-                  Stall #{stall.stall_number} · {stall.section || 'No Section'}
+                  {t('vendor_dashboard.stall_number_section', 'Stall #%{number} · %{section}', {
+                    number: stall.stall_number,
+                    section: stall.section ? t('market_sections.' + stall.section, stall.section) : t('vendor_dashboard.no_section', 'No Section'),
+                  })}
                 </Text>
               </View>
               <TouchableOpacity 
@@ -561,7 +567,7 @@ export default function VendorDashboardScreen({ navigation }) {
                   color={COLORS.text.inverse}
                 />
                 <Text style={styles.storeToggleText}>
-                  {isPaused ? 'Open Store' : 'Close Store'}
+                  {isPaused ? t('vendor_dashboard.open_store', 'Open Store') : t('vendor_dashboard.close_store', 'Close Store')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -572,7 +578,7 @@ export default function VendorDashboardScreen({ navigation }) {
           <View style={styles.closedWarning}>
             <Ionicons name="alert-circle-outline" size={16} color={COLORS.primary} />
             <Text style={styles.closedWarningText}>
-              Store is closed. Customers cannot place orders.
+              {t('vendor_dashboard.store_closed_warning', 'Store is closed. Customers cannot place orders.')}
             </Text>
           </View>
         )}
@@ -585,9 +591,9 @@ export default function VendorDashboardScreen({ navigation }) {
           >
             <Ionicons name="navigate-outline" size={18} color={COLORS.primary} />
             <View style={styles.locationNudgeTextWrap}>
-              <Text style={styles.locationNudgeTitle}>Set your stall location</Text>
+              <Text style={styles.locationNudgeTitle}>{t('vendor_dashboard.set_location_title', 'Set your stall location')}</Text>
               <Text style={styles.locationNudgeSubtitle}>
-                Stand at your stall and tap here — takes about 10 seconds
+                {t('vendor_dashboard.set_location_subtitle', 'Stand at your stall and tap here — takes about 10 seconds')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
@@ -599,28 +605,28 @@ export default function VendorDashboardScreen({ navigation }) {
         ============================================================ */}
         <View style={styles.statsGrid}>
           <StatCard
-            title="Today's Revenue"
+            title={t('vendor_dashboard.revenue_today', "Today's Revenue")}
             value={stats.revenueToday}
             icon="cash-outline"
             iconBg={COLORS.primarySurface}
             isCurrency
           />
           <StatCard
-            title="Pending Orders"
+            title={t('vendor_dashboard.pending_orders', 'Pending Orders')}
             value={stats.pendingOrders}
             icon="time-outline"
             iconBg={COLORS.warningLight}
             onPress={() => navigation.navigate('VendorOrders')}
           />
           <StatCard
-            title="Awaiting Verify"
+            title={t('vendor_dashboard.awaiting_verify', 'Awaiting Verify')}
             value={stats.awaitingVerification}
             icon="card-outline"
             iconBg={COLORS.infoLight}
             onPress={() => navigation.navigate('VendorOrders')}
           />
           <StatCard
-            title="Completed Today"
+            title={t('vendor_dashboard.completed_today', 'Completed Today')}
             value={stats.completedToday}
             icon="checkmark-done-outline"
             iconBg={COLORS.successLight}
@@ -632,7 +638,7 @@ export default function VendorDashboardScreen({ navigation }) {
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Store Tools</Text>
+            <Text style={styles.sectionTitle}>{t('vendor_dashboard.store_tools', 'Store Tools')}</Text>
             <Ionicons name="construct-outline" size={18} color={COLORS.text.lighter} />
           </View>
           <View style={styles.quickActionsGrid}>
@@ -647,7 +653,7 @@ export default function VendorDashboardScreen({ navigation }) {
               <View style={[styles.quickActionIcon, { backgroundColor: COLORS.infoLight }]}>
                 <Ionicons name="bar-chart-outline" size={24} color={COLORS.info} />
               </View>
-              <Text style={styles.quickActionLabel}>Reports</Text>
+              <Text style={styles.quickActionLabel}>{t('vendor_dashboard.tool_reports', 'Reports')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickAction}
@@ -657,7 +663,7 @@ export default function VendorDashboardScreen({ navigation }) {
               <View style={[styles.quickActionIcon, { backgroundColor: COLORS.warningLight }]}>
                 <Ionicons name="pricetags-outline" size={24} color={COLORS.warning} />
               </View>
-              <Text style={styles.quickActionLabel}>Offers</Text>
+              <Text style={styles.quickActionLabel}>{t('vendor_dashboard.tool_offers', 'Offers')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -667,7 +673,7 @@ export default function VendorDashboardScreen({ navigation }) {
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Suki Buyers</Text>
+            <Text style={styles.sectionTitle}>{t('vendor_dashboard.suki_buyers', 'Suki Buyers')}</Text>
             <Ionicons name="heart-outline" size={18} color={COLORS.primary} />
           </View>
 
@@ -676,9 +682,9 @@ export default function VendorDashboardScreen({ navigation }) {
           ) : sukiBuyers.length === 0 ? (
             <View style={styles.emptySukiContainer}>
               <Ionicons name="people-outline" size={40} color={COLORS.text.lighter} />
-              <Text style={styles.emptySukiTitle}>No loyal customers yet</Text>
+              <Text style={styles.emptySukiTitle}>{t('vendor_dashboard.no_suki_title', 'No loyal customers yet')}</Text>
               <Text style={styles.emptySukiText}>
-                Customers who frequently order from you will appear here
+                {t('vendor_dashboard.no_suki_text', 'Customers who frequently order from you will appear here')}
               </Text>
             </View>
           ) : (
@@ -693,7 +699,7 @@ export default function VendorDashboardScreen({ navigation }) {
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <Text style={styles.sectionTitle}>{t('vendor_dashboard.recent_orders', 'Recent Orders')}</Text>
             {orderStats.pending?.length > 0 && (
               <View style={styles.pendingBadge}>
                 <Text style={styles.pendingBadgeText}>{orderStats.pending.length}</Text>
@@ -703,7 +709,7 @@ export default function VendorDashboardScreen({ navigation }) {
               onPress={() => navigation.navigate('VendorOrders')}
               activeOpacity={0.7}
             >
-              <Text style={styles.seeAllText}>See All →</Text>
+              <Text style={styles.seeAllText}>{t('vendor_dashboard.see_all', 'See All →')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -712,8 +718,8 @@ export default function VendorDashboardScreen({ navigation }) {
           ) : (orderStats.active || []).length === 0 ? (
             <View style={styles.emptyOrdersContainer}>
               <Ionicons name="inbox-outline" size={40} color={COLORS.text.lighter} />
-              <Text style={styles.emptyOrdersTitle}>No active orders</Text>
-              <Text style={styles.emptyOrdersText}>New orders will appear here in real-time</Text>
+              <Text style={styles.emptyOrdersTitle}>{t('vendor_dashboard.no_active_orders', 'No active orders')}</Text>
+              <Text style={styles.emptyOrdersText}>{t('vendor_dashboard.new_orders_realtime', 'New orders will appear here in real-time')}</Text>
             </View>
           ) : (
             (orderStats.active || []).slice(0, 3).map((order) => (
@@ -724,18 +730,20 @@ export default function VendorDashboardScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 <View style={styles.orderCardHeader}>
-                  <Text style={styles.orderNumber}>Order #{order.order_number?.slice(-8) || order.id?.slice(-8)}</Text>
+                  <Text style={styles.orderNumber}>{t('vendor_dashboard.order_num_prefix', 'Order #')}{order.order_number?.slice(-8) || order.id?.slice(-8)}</Text>
                   <View style={[
                     styles.orderStatusBadge,
                     order.status === 'completed' && styles.orderStatusCompleted,
                     order.status === 'cancelled' && styles.orderStatusCancelled,
                     order.status === 'pending' && styles.orderStatusPending,
                   ]}>
-                    <Text style={styles.orderStatusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
+                    <Text style={styles.orderStatusText}>
+                      {t('vendor_orders.tab_' + order.status, order.status?.toUpperCase() || 'PENDING')}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.orderItems} numberOfLines={1}>
-                  {order.items?.map(item => item.name).join(', ') || 'No items'}
+                  {order.items?.map(item => item.name).join(', ') || t('vendor_dashboard.no_items', 'No items')}
                 </Text>
                 <View style={styles.orderCardFooter}>
                   <Text style={styles.orderTotal}>₱{order.total_amount?.toFixed(2)}</Text>
@@ -754,7 +762,7 @@ export default function VendorDashboardScreen({ navigation }) {
         {bestSellers.length > 0 && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Best Sellers</Text>
+              <Text style={styles.sectionTitle}>{t('vendor_dashboard.best_sellers', 'Best Sellers')}</Text>
               <Ionicons name="flame-outline" size={18} color={COLORS.primary} />
             </View>
             {bestSellers.map((product, idx) => (
@@ -765,7 +773,7 @@ export default function VendorDashboardScreen({ navigation }) {
                 <View style={styles.productInfo}>
                   <Text style={styles.productName}>{product.name}</Text>
                   <Text style={styles.productMeta}>
-                    {product.quantity} sold · ₱{product.revenue.toFixed(2)}
+                    {t('vendor_dashboard.sold_meta', '%{count} sold · ₱%{amount}', { count: product.quantity, amount: product.revenue.toFixed(2) })}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={COLORS.text.lighter} />
@@ -779,7 +787,7 @@ export default function VendorDashboardScreen({ navigation }) {
         ============================================================ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Account</Text>
+            <Text style={styles.sectionTitle}>{t('vendor_dashboard.account', 'Account')}</Text>
           </View>
           <TouchableOpacity 
             style={styles.profileCard} 
@@ -797,7 +805,7 @@ export default function VendorDashboardScreen({ navigation }) {
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{profile?.full_name || 'Vendor'}</Text>
-              <Text style={styles.profileSub}>View and manage your profile</Text>
+              <Text style={styles.profileSub}>{t('vendor_dashboard.view_manage_profile', 'View and manage your profile')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={COLORS.text.lighter} />
           </TouchableOpacity>

@@ -145,17 +145,17 @@ export const COLORS = {
 
     text: {
       primary: '#F7EDE1',
-      secondary: '#DDC9B6',
-      tertiary: '#AE9884',
-      quaternary: '#8A7263',
+      secondary: '#E2D3C4',
+      tertiary: '#C8B6A6',
+      quaternary: '#B4A090',
       inverse: '#17100A',
       // Legacy naming aliases (kept for backward compatibility with older screens)
       dark: '#F7EDE1',
-      medium: '#DDC9B6',
-      light: '#AE9884',
-      lighter: '#8A7263',
-      white: '#17100A',
-      tertiaryer: '#AE9884',
+      medium: '#E2D3C4',
+      light: '#C8B6A6',
+      lighter: '#B4A090',
+      white: '#FFFFFF',
+      tertiaryer: '#C8B6A6',
     },
 
     border: '#3D2C22',

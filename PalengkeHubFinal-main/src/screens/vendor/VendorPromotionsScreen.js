@@ -1,5 +1,5 @@
 // src/screens/vendor/VendorPromotionsScreen.js
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Image,
   Switch,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,8 +21,9 @@ import { useVendorProducts } from '../../hooks/useVendorProducts';
 import { PromotionModal } from '../../components/vendor/PromotionModal';
 import { VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorEmptyState } from '../../components/vendor/VendorEmptyState';
+import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import {
-  vendorColors,
   vendorSpacing,
   vendorBorderRadius,
   vendorShadows,
@@ -41,6 +43,9 @@ const formatDate = (dateStr) => {
 
 export default function VendorPromotionsScreen({ navigation }) {
   const { user } = useAuth();
+  const { t } = useI18n();
+  const COLORS = useColors();
+  const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState(null);
@@ -111,7 +116,7 @@ export default function VendorPromotionsScreen({ navigation }) {
               <Image source={{ uri: item.product.image_url }} style={styles.productImage} />
             ) : (
               <View style={styles.productImagePlaceholder}>
-                <Ionicons name="image-outline" size={24} color={vendorColors.text.tertiary} />
+                <Ionicons name="image-outline" size={24} color={COLORS.text.tertiary} />
               </View>
             )}
             <View style={styles.productDetails}>
@@ -122,14 +127,14 @@ export default function VendorPromotionsScreen({ navigation }) {
           <Switch
             value={isActive}
             onValueChange={() => togglePromotion(item)}
-            trackColor={{ false: '#D1D5DB', true: vendorColors.success }}
+            trackColor={{ false: COLORS.border, true: COLORS.success }}
             thumbColor="#FFFFFF"
           />
         </View>
 
         <View style={styles.priceRow}>
           <Text style={styles.originalPrice}>₱{item.original_price?.toFixed(2)}</Text>
-          <Ionicons name="arrow-forward" size={14} color={vendorColors.text.tertiary} />
+          <Ionicons name="arrow-forward" size={14} color={COLORS.text.tertiary} />
           <Text style={styles.discountedPrice}>₱{item.discounted_price?.toFixed(2)}</Text>
           <View style={styles.discountBadge}>
             <Text style={styles.discountBadgeText}>{discountText}</Text>
@@ -137,7 +142,7 @@ export default function VendorPromotionsScreen({ navigation }) {
         </View>
 
         <View style={styles.dateRow}>
-          <Ionicons name="calendar-outline" size={14} color={vendorColors.text.tertiary} />
+          <Ionicons name="calendar-outline" size={14} color={COLORS.text.tertiary} />
           <Text style={styles.dateText}>
             {formatDate(item.start_date)} - {formatDate(item.end_date)}
           </Text>
@@ -146,16 +151,25 @@ export default function VendorPromotionsScreen({ navigation }) {
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={[styles.actionBtn, styles.editBtn]}
-            onPress={() => setEditingPromotion(item)}
+            onPress={() => { setEditingPromotion(item); setShowModal(true); }}
           >
-            <Ionicons name="create-outline" size={14} color={vendorColors.primary} />
-            <Text style={styles.editBtnText}>Edit</Text>
+            <Ionicons name="create-outline" size={14} color={COLORS.primary} />
+            <Text style={styles.editBtnText}>{t('common.edit')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, styles.deleteBtn]}
-            onPress={() => deletePromotion(item.id)}
+            onPress={() => {
+              Alert.alert(
+                t('vendor.delete_special_price_title'),
+                t('vendor.delete_special_price_confirm'),
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('common.delete'), style: 'destructive', onPress: () => deletePromotion(item.id) },
+                ]
+              );
+            }}
           >
-            <Ionicons name="trash-outline" size={14} color={vendorColors.danger} />
+            <Ionicons name="trash-outline" size={14} color={COLORS.error} />
           </TouchableOpacity>
         </View>
       </View>
@@ -164,7 +178,7 @@ export default function VendorPromotionsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Header title="Special Prices" subtitle={stall?.stall_name || 'Manage your promotions'} showBack onBackPress={() => navigation.goBack()} />
+      <Header title={t('vendor.special_prices')} subtitle={stall?.stall_name || t('vendor.special_prices_subtitle')} showBack onBackPress={() => navigation.goBack()} />
 
       {/* Add Promotion Button */}
       <View style={styles.addButtonContainer}>
@@ -173,8 +187,8 @@ export default function VendorPromotionsScreen({ navigation }) {
           onPress={() => { setEditingPromotion(null); setShowModal(true); }}
           activeOpacity={0.8}
         >
-          <Ionicons name="pricetag-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>New Special Price</Text>
+          <Ionicons name="pricetag-outline" size={20} color={COLORS.text.inverse} />
+          <Text style={styles.addButtonText}>{t('vendor.new_special_price')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -183,9 +197,9 @@ export default function VendorPromotionsScreen({ navigation }) {
       ) : promotions.length === 0 ? (
         <VendorEmptyState
           icon="pricetag-outline"
-          title="No special prices yet"
-          message="Create a special price to attract more customers with discounts"
-          actionLabel="Create Special Price"
+          title={t('vendor.no_special_prices')}
+          message={t('vendor.no_special_prices_msg')}
+          actionLabel={t('vendor.create_special_price')}
           onAction={() => { setEditingPromotion(null); setShowModal(true); }}
         />
       ) : (
@@ -194,7 +208,7 @@ export default function VendorPromotionsScreen({ navigation }) {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderPromotion}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[vendorColors.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -210,10 +224,10 @@ export default function VendorPromotionsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: vendorColors.background,
+    backgroundColor: COLORS.background,
   },
   addButtonContainer: {
     padding: vendorSpacing.lg,
@@ -224,17 +238,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: vendorColors.primary,
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
     borderRadius: vendorBorderRadius.md,
-    shadowColor: vendorColors.primary,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.text.inverse,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -243,12 +257,12 @@ const styles = StyleSheet.create({
     paddingBottom: vendorSpacing.xxxl,
   },
   promotionCard: {
-    backgroundColor: vendorColors.surface,
+    backgroundColor: COLORS.surface,
     borderRadius: vendorBorderRadius.lg,
     padding: vendorSpacing.lg,
     marginBottom: vendorSpacing.md,
     borderWidth: 1,
-    borderColor: vendorColors.border,
+    borderColor: COLORS.border,
     ...vendorShadows.md,
   },
   cardHeader: {
@@ -273,7 +287,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: vendorBorderRadius.md,
-    backgroundColor: vendorColors.surfaceAlt,
+    backgroundColor: COLORS.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: vendorSpacing.md,
@@ -284,11 +298,11 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 15,
     fontWeight: '600',
-    color: vendorColors.text.primary,
+    color: COLORS.text.primary,
   },
   productMeta: {
     fontSize: 12,
-    color: vendorColors.text.secondary,
+    color: COLORS.text.secondary,
     marginTop: 2,
   },
   priceRow: {
@@ -299,16 +313,16 @@ const styles = StyleSheet.create({
   },
   originalPrice: {
     fontSize: 14,
-    color: vendorColors.text.tertiary,
+    color: COLORS.text.tertiary,
     textDecorationLine: 'line-through',
   },
   discountedPrice: {
     fontSize: 18,
     fontWeight: '800',
-    color: vendorColors.primary,
+    color: COLORS.primary,
   },
   discountBadge: {
-    backgroundColor: vendorColors.successLight,
+    backgroundColor: COLORS.successLight,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: vendorBorderRadius.sm,
@@ -316,7 +330,7 @@ const styles = StyleSheet.create({
   discountBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: vendorColors.success,
+    color: COLORS.success,
   },
   dateRow: {
     flexDirection: 'row',
@@ -326,14 +340,14 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 12,
-    color: vendorColors.text.secondary,
+    color: COLORS.text.secondary,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: vendorColors.divider,
+    borderTopColor: COLORS.borderLight,
     paddingTop: vendorSpacing.md,
   },
   actionBtn: {
@@ -345,18 +359,18 @@ const styles = StyleSheet.create({
     borderRadius: vendorBorderRadius.sm,
   },
   editBtn: {
-    backgroundColor: vendorColors.surfaceAlt,
+    backgroundColor: COLORS.surfaceSecondary,
     borderWidth: 1,
-    borderColor: vendorColors.border,
+    borderColor: COLORS.border,
   },
   editBtnText: {
     fontSize: 11,
-    color: vendorColors.primary,
+    color: COLORS.primary,
     fontWeight: '600',
   },
   deleteBtn: {
-    backgroundColor: vendorColors.dangerLight,
+    backgroundColor: COLORS.errorLight,
     borderWidth: 1,
-    borderColor: vendorColors.danger,
+    borderColor: COLORS.error,
   },
 });

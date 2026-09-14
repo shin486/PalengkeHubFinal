@@ -1,4 +1,5 @@
 import { useColors, useTheme } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 // src/screens/customer/CategoryProductsScreen.js
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -240,6 +241,7 @@ const SkeletonLoader = () => {
 export default function CategoryProductsScreen({ route, navigation }) {
   const COLORS = useColors();
   const { isDark } = useTheme();
+  const { t, locale } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
 
   // See ChatDetailScreen.js for why this screen announces itself directly
@@ -273,6 +275,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const { addToCart } = useCart();
 
   const config = CATEGORY_CHIPS_BY_NAME[categoryName] || CATEGORY_CHIPS_BY_NAME['Other'];
+  const displayCategoryName = locale === 'fil' ? (config.tagalog || categoryName) : (config.english || categoryName);
   const tone = CATEGORY_TONES[config.tone] || CATEGORY_TONES.neutral;
   const [headerImageError, setHeaderImageError] = useState(false);
   const showHeaderImage = config.image && !headerImageError;
@@ -558,7 +561,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
             )}
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>{categoryName}</Text>
+            <Text style={styles.headerTitle}>{displayCategoryName}</Text>
             <Text style={styles.headerDescription}>{config.description}</Text>
           </View>
         </View>
@@ -566,12 +569,12 @@ export default function CategoryProductsScreen({ route, navigation }) {
         <View style={styles.headerStats}>
           <View style={styles.headerStat}>
             <Ionicons name="cube-outline" size={14} color={COLORS.text.light} />
-            <Text style={styles.headerStatText}>{productCount} Products</Text>
+            <Text style={styles.headerStatText}>{t('category_products.products_count', { count: productCount })}</Text>
           </View>
           <View style={styles.headerStatDivider} />
           <View style={styles.headerStat}>
             <Ionicons name="storefront-outline" size={14} color={COLORS.text.light} />
-            <Text style={styles.headerStatText}>{stallCount} Stalls</Text>
+            <Text style={styles.headerStatText}>{t('category_products.stalls_count', { count: stallCount })}</Text>
           </View>
         </View>
       </View>
@@ -592,7 +595,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
           >
             <Ionicons name="swap-vertical" size={16} color={COLORS.text.medium} />
             <Text style={styles.toolbarButtonText}>
-              Sort: {sortOptions.find(s => s.value === sortBy)?.label || 'Recommended'}
+              {t('category_products.sort_prefix', { sort: sortOptions.find(s => s.value === sortBy)?.label || t('category_products.sort_recommended', 'Recommended') })}
             </Text>
             <Ionicons name="chevron-down" size={14} color={COLORS.text.light} />
           </TouchableOpacity>
@@ -608,7 +611,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
               color={COLORS.primary} 
             />
             <Text style={styles.viewToggleText}>
-              {viewMode === 'list' ? 'Group by Stall' : 'List View'}
+              {viewMode === 'list' ? t('category_products.group_by_stall', 'Group by Stall') : t('category_products.list_view', 'List View')}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -624,7 +627,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
         contentContainerStyle={styles.stallChipRow}
       >
         <Chip isOn={selectedStall === 'all'} onPress={() => setSelectedStall('all')}>
-          Lahat
+          {t('category_products.all_stalls_filter', 'All')}
         </Chip>
         {stalls.map((stall) => (
           <Chip
@@ -643,12 +646,14 @@ export default function CategoryProductsScreen({ route, navigation }) {
       {sortedProducts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name={config.icon} size={72} color={COLORS.text.quaternary} style={styles.emptyEmoji} />
-          <Text style={styles.emptyTitle}>Wala pang {categoryName} ngayon</Text>
+          <Text style={styles.emptyTitle}>
+            {t('category_products.no_products_title', { category: displayCategoryName })}
+          </Text>
           <Text style={styles.emptyText}>
-            Tingnan ang ibang kategorya o bumalik mamaya.
+            {t('category_products.no_products_text', 'Check other categories or check back later.')}
           </Text>
           <Button variant="primary" onPress={handleBackPress}>
-            Tingnan ang lahat ng stall
+            {t('category_products.view_all_stalls', 'View all stalls')}
           </Button>
         </View>
       ) : viewMode === 'list' ? (

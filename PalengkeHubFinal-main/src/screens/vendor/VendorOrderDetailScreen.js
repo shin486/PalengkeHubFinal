@@ -23,6 +23,7 @@ import {
   vendorBorderRadius,
   vendorShadows,
 } from '../../theme/vendorTheme';
+import { useI18n } from '../../contexts/i18nContext';
 import { VendorStatusBadge, VendorPaymentStatusBadge } from '../../components/vendor/VendorStatusBadge';
 import { VendorSkeletonCard, VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorSectionHeader } from '../../components/vendor/VendorSectionHeader';
@@ -56,19 +57,20 @@ const formatTime = (dateStr) => {
   }
 };
 
-const getTimeline = (status) => {
+const getTimeline = (status, t) => {
   const steps = [
-    { key: 'pending', label: 'Order Placed', icon: 'document-text-outline' },
-    { key: 'confirmed', label: 'Order Confirmed', icon: 'checkmark-circle-outline' },
-    { key: 'preparing', label: 'Preparing', icon: 'restaurant-outline' },
-    { key: 'ready', label: 'Ready for Pickup', icon: 'flag-outline' },
-    { key: 'completed', label: 'Completed', icon: 'checkmark-done-outline' },
+    { key: 'pending', label: t('vendor_order_detail.timeline_placed', 'Order Placed'), icon: 'document-text-outline' },
+    { key: 'confirmed', label: t('vendor_order_detail.timeline_confirmed', 'Order Confirmed'), icon: 'checkmark-circle-outline' },
+    { key: 'preparing', label: t('vendor_order_detail.timeline_preparing', 'Preparing'), icon: 'restaurant-outline' },
+    { key: 'ready', label: t('vendor_order_detail.timeline_ready', 'Ready for Pickup'), icon: 'flag-outline' },
+    { key: 'completed', label: t('vendor_order_detail.timeline_completed', 'Completed'), icon: 'checkmark-done-outline' },
   ];
   const idx = steps.findIndex(s => s.key === status);
   return { steps, currentIdx: idx === -1 ? -1 : idx };
 };
 
 export default function VendorOrderDetailScreen({ navigation, route }) {
+  const { t } = useI18n();
   const vendorColors = useVendorColors();
   const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
   const { orderId } = route.params || {};
@@ -106,12 +108,12 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       setOrder(data);
     } catch (err) {
       console.error('Error fetching order:', err);
-      setError('Failed to load order. Please try again.');
+      setError(t('vendor_order_detail.unable_load_order', 'Failed to load order. Please try again.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orderId]);
+  }, [orderId, t]);
 
   useEffect(() => {
     fetchOrder();
@@ -157,10 +159,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       }
 
       await fetchOrder();
-      Alert.alert('Success', 'Order status updated');
+      Alert.alert(t('common.success', 'Success'), t('vendor_order_detail.status_updated', 'Order status updated'));
     } catch (err) {
       console.error('Error updating order:', err);
-      Alert.alert('Error', 'Failed to update order');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_update', 'Failed to update order'));
     } finally {
       setUpdating(false);
     }
@@ -192,10 +194,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       });
 
       await fetchOrder();
-      Alert.alert('Payment Approved', 'Payment verified and order is now preparing');
+      Alert.alert(t('vendor_order_detail.payment_approved', 'Payment Approved'), t('vendor_order_detail.payment_verified_desc', 'Payment verified and order is now preparing'));
     } catch (err) {
       console.error('Error approving payment:', err);
-      Alert.alert('Error', 'Failed to approve payment');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment'));
     } finally {
       setUpdating(false);
     }
@@ -207,7 +209,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const confirmRejectPayment = async () => {
     if (!order || !rejectReason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for rejection');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.provide_reason_rejection', 'Please provide a reason for rejection'));
       return;
     }
     setUpdating(true);
@@ -236,10 +238,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       await fetchOrder();
       setShowPaymentModal(false);
       setRejectReason('');
-      Alert.alert('Payment Rejected', 'Customer has been notified');
+      Alert.alert(t('vendor_order_detail.payment_rejected_title', 'Payment Rejected'), t('vendor_order_detail.customer_notified', 'Customer has been notified'));
     } catch (err) {
       console.error('Error rejecting payment:', err);
-      Alert.alert('Error', 'Failed to reject payment');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment'));
     } finally {
       setUpdating(false);
     }
@@ -247,7 +249,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const handleRejectOrder = async () => {
     if (!order || !rejectReason.trim()) {
-      Alert.alert('Error', 'Please provide a reason');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.provide_reason', 'Please provide a reason'));
       return;
     }
     setRejecting(true);
@@ -276,10 +278,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       await fetchOrder();
       setShowRejectModal(false);
       setRejectReason('');
-      Alert.alert('Order Rejected', 'The order has been cancelled');
+      Alert.alert(t('vendor_order_detail.order_rejected_title', 'Order Rejected'), t('vendor_order_detail.order_cancelled_desc', 'The order has been cancelled'));
     } catch (err) {
       console.error('Error rejecting order:', err);
-      Alert.alert('Error', 'Failed to reject order');
+      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_order', 'Failed to reject order'));
     } finally {
       setRejecting(false);
     }
@@ -288,7 +290,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Order Details" subtitle="Loading order..." showBack onBackPress={() => navigation.goBack()} />
+        <Header title={t('vendor_order_detail.title', 'Order Details')} subtitle={t('vendor_order_detail.loading_order', 'Loading order...')} showBack onBackPress={() => navigation.goBack()} />
         <VendorSkeletonList count={4} />
       </View>
     );
@@ -297,28 +299,28 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   if (error || !order) {
     return (
       <View style={styles.container}>
-        <Header title="Order Details" showBack onBackPress={() => navigation.goBack()} />
+        <Header title={t('vendor_order_detail.title', 'Order Details')} showBack onBackPress={() => navigation.goBack()} />
         <View style={styles.errorContainer}>
           <View style={styles.errorIconContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={vendorColors.danger} />
           </View>
-          <Text style={styles.errorTitle}>Unable to load order</Text>
-          <Text style={styles.errorText}>{error || 'Order not found'}</Text>
+          <Text style={styles.errorTitle}>{t('vendor_order_detail.unable_load_order', 'Unable to load order')}</Text>
+          <Text style={styles.errorText}>{error || t('vendor_order_detail.order_not_found', 'Order not found')}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchOrder(); }}>
-            <Text style={styles.retryText}>Try Again</Text>
+            <Text style={styles.retryText}>{t('common.try_again', 'Try Again')}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  const { steps, currentIdx } = getTimeline(order.status);
+  const { steps, currentIdx } = getTimeline(order.status, t);
 
   return (
     <View style={styles.container}>
       <Header
-        title={`Order #${order.order_number?.slice(-8) || order.id.slice(-8)}`}
-        subtitle="Order Details"
+        title={`${t('vendor_orders.order_prefix', 'Order #')}${order.order_number?.slice(-8) || order.id.slice(-8)}`}
+        subtitle={t('vendor_order_detail.title', 'Order Details')}
         showBack
         onBackPress={() => navigation.goBack()}
       />
@@ -331,12 +333,12 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <View>
-              <Text style={styles.statusLabel}>Current Status</Text>
+              <Text style={styles.statusLabel}>{t('vendor_order_detail.current_status', 'Current Status')}</Text>
               <VendorStatusBadge status={order.status} size="md" />
             </View>
             {order.payment_status && (
               <View style={styles.paymentStatusCol}>
-                <Text style={styles.statusLabel}>Payment</Text>
+                <Text style={styles.statusLabel}>{t('vendor_order_detail.payment', 'Payment')}</Text>
                 <VendorPaymentStatusBadge status={order.payment_status} size="md" />
               </View>
             )}
@@ -374,7 +376,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
         {/* Customer Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="Customer" />
+          <VendorSectionHeader title={t('vendor_order_detail.customer', 'Customer')} />
           <View style={styles.customerInfoCard}>
             <View style={styles.customerAvatar}>
               {order.profiles?.avatar_url ? (
@@ -386,7 +388,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               )}
             </View>
             <View style={styles.customerDetails}>
-              <Text style={styles.customerName}>{order.profiles?.full_name || 'Customer'}</Text>
+              <Text style={styles.customerName}>{order.profiles?.full_name || t('vendor_order_detail.customer_fallback', 'Customer')}</Text>
               {order.profiles?.phone && <Text style={styles.customerSub}>{order.profiles.phone}</Text>}
               {order.profiles?.email && <Text style={styles.customerSub}>{order.profiles.email}</Text>}
             </View>
@@ -395,7 +397,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
         {/* Items Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="Items" subtitle={`${(order.items || []).length} items`} />
+          <VendorSectionHeader
+            title={t('vendor_order_detail.items', 'Items')}
+            subtitle={t('vendor_order_detail.items_count', '%{count} items', { count: (order.items || []).length })}
+          />
           {(order.items || []).map((item, idx) => (
             <View key={idx} style={styles.itemRow}>
               <View style={styles.itemInfo}>
@@ -409,21 +414,21 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
           ))}
 
           <View style={styles.subtotalRow}>
-            <Text style={styles.subtotalLabel}>Subtotal</Text>
+            <Text style={styles.subtotalLabel}>{t('vendor_order_detail.subtotal', 'Subtotal')}</Text>
             <Text style={styles.subtotalValue}>₱{order.total_amount}</Text>
           </View>
         </View>
 
         {/* Pickup Section */}
         <View style={styles.section}>
-          <VendorSectionHeader title="Pickup" />
+          <VendorSectionHeader title={t('vendor_order_detail.pickup', 'Pickup')} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Scheduled Pickup</Text>
+            <Text style={styles.infoLabel}>{t('vendor_order_detail.scheduled_pickup', 'Scheduled Pickup')}</Text>
             <Text style={styles.infoValue}>{formatTime(order.pickup_time)}</Text>
           </View>
           {order.placed_for_12pm && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Pickup Window</Text>
+              <Text style={styles.infoLabel}>{t('vendor_order_detail.pickup_window', 'Pickup Window')}</Text>
               <Text style={styles.infoValue}>12:00 PM</Text>
             </View>
           )}
@@ -432,28 +437,28 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         {/* Payment Section */}
         {order.payment_status && (
           <View style={styles.section}>
-            <VendorSectionHeader title="Payment" />
+            <VendorSectionHeader title={t('vendor_order_detail.payment', 'Payment')} />
             
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Amount</Text>
+              <Text style={styles.infoLabel}>{t('vendor_order_detail.amount', 'Amount')}</Text>
               <Text style={[styles.infoValue, styles.amountValue]}>₱{order.total_amount}</Text>
             </View>
             
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={styles.infoLabel}>{t('vendor_order_detail.status', 'Status')}</Text>
               <VendorPaymentStatusBadge status={order.payment_status} size="sm" />
             </View>
 
             {order.payment_method && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Method</Text>
+                <Text style={styles.infoLabel}>{t('vendor_order_detail.method', 'Method')}</Text>
                 <Text style={styles.infoValue}>{order.payment_method}</Text>
               </View>
             )}
 
             {order.payment_reference && (
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Reference #</Text>
+                <Text style={styles.infoLabel}>{t('vendor_order_detail.reference_no', 'Reference #')}</Text>
                 <Text style={styles.infoValue}>{order.payment_reference}</Text>
               </View>
             )}
@@ -462,8 +467,8 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               <View style={[styles.scanVerdict, order.payment_scan_matched ? styles.scanVerdictOk : styles.scanVerdictWarn]}>
                 <Text style={[styles.scanVerdictText, { color: order.payment_scan_matched ? vendorColors.success : vendorColors.warning }]}>
                   {order.payment_scan_matched
-                    ? 'Receipt scan: reference number and amount matched'
-                    : 'Receipt scan: could not confirm a match — verify manually'}
+                    ? t('vendor_order_detail.scan_matched', 'Receipt scan: reference number and amount matched')
+                    : t('vendor_order_detail.scan_unmatched', 'Receipt scan: could not confirm a match — verify manually')}
                 </Text>
               </View>
             )}
@@ -473,13 +478,13 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 style={styles.receiptButton}
                 onPress={() => setShowReceipt(true)}
               >
-                <Text style={styles.receiptButtonText}>View Payment Receipt</Text>
+                <Text style={styles.receiptButtonText}>{t('vendor_order_detail.view_receipt', 'View Payment Receipt')}</Text>
               </TouchableOpacity>
             )}
 
             {order.payment_status === 'rejected' && order.payment_rejection_reason && (
               <View style={styles.rejectionBanner}>
-                <Text style={styles.rejectionTitle}>Rejection Reason</Text>
+                <Text style={styles.rejectionTitle}>{t('vendor_order_detail.rejection_reason', 'Rejection Reason')}</Text>
                 <Text style={styles.rejectionText}>{order.payment_rejection_reason}</Text>
               </View>
             )}
@@ -487,20 +492,24 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
             {order.payment_status === 'awaiting_verification' && (
               <View style={styles.verifyActions}>
                 <TouchableOpacity
-                  style={[styles.verifyBtn, styles.approveBtn]}
-                  onPress={() => setShowApproveModal(true)}
-                  disabled={updating}
-                >
-                  <Text style={styles.verifyBtnText}>
-                    {updating ? 'Processing...' : 'Approve Payment'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={[styles.verifyBtn, styles.rejectPaymentBtn]}
                   onPress={handleRejectPayment}
                   disabled={updating}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.verifyBtnText}>Reject Payment</Text>
+                  <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.verifyBtnText}>{t('vendor_orders.reject_payment', 'Reject Payment')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.verifyBtn, styles.approveBtn]}
+                  onPress={() => setShowApproveModal(true)}
+                  disabled={updating}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.verifyBtnText}>
+                    {updating ? t('vendor_order_detail.processing', 'Processing...') : t('vendor_orders.approve_payment', 'Approve Payment')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -510,7 +519,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         {/* Special Instructions */}
         {order.special_instructions && (
           <View style={styles.section}>
-            <VendorSectionHeader title="Special Instructions" />
+            <VendorSectionHeader title={t('vendor_order_detail.special_instructions', 'Special Instructions')} />
             <View style={styles.instructionsBox}>
               <Text style={styles.instructionsText}>{order.special_instructions}</Text>
             </View>
@@ -518,23 +527,27 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         )}
 
         {/* Order Actions */}
-        {order.status !== 'completed' && order.status !== 'cancelled' && (
+        {order.status !== 'completed' && order.status !== 'cancelled' && (order.status !== 'pending' || order.payment_status !== 'awaiting_verification') && (
           <View style={styles.actionsSection}>
             {order.status === 'pending' && (
               <View style={styles.actionsRow}>
                 <TouchableOpacity
-                  style={[styles.mainActionBtn, styles.acceptBtn]}
-                  onPress={() => handleUpdateStatus('confirmed')}
-                  disabled={updating}
-                >
-                  <Text style={styles.mainActionText}>Accept Order</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={[styles.mainActionBtn, styles.rejectBtn]}
                   onPress={() => setShowRejectModal(true)}
                   disabled={updating}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.mainActionText}>Reject Order</Text>
+                  <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.mainActionText}>{t('vendor_order_detail.reject_order', 'Reject Order')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.mainActionBtn, styles.acceptBtn]}
+                  onPress={() => handleUpdateStatus('confirmed')}
+                  disabled={updating}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.mainActionText}>{t('vendor_order_detail.accept_order', 'Accept Order')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -544,8 +557,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 style={[styles.fullActionBtn, styles.prepareBtn]}
                 onPress={() => handleUpdateStatus('preparing')}
                 disabled={updating}
+                activeOpacity={0.7}
               >
-                <Text style={styles.fullActionText}>Mark as Preparing</Text>
+                <Ionicons name="restaurant-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.fullActionText}>{t('vendor_order_detail.mark_preparing', 'Mark as Preparing')}</Text>
               </TouchableOpacity>
             )}
 
@@ -554,14 +569,17 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 style={[styles.fullActionBtn, styles.readyBtn]}
                 onPress={() => handleUpdateStatus('ready')}
                 disabled={updating}
+                activeOpacity={0.7}
               >
-                <Text style={styles.fullActionText}>Ready for Pickup</Text>
+                <Ionicons name="flag-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.fullActionText}>{t('vendor_order_detail.ready_for_pickup', 'Ready for Pickup')}</Text>
               </TouchableOpacity>
             )}
 
             {order.status === 'ready' && (
               <TouchableOpacity
                 style={[styles.fullActionBtn, styles.completeBtn]}
+                activeOpacity={0.7}
                 onPress={() => {
                   // Same confirm gate as the Orders list's quick-action
                   // button (ModernOrderCard.js) — this screen previously
@@ -570,17 +588,17 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                   if (!['verified', 'paid'].includes(order.payment_status)) {
                     // react-native-web does NOT implement Alert.alert — use window.confirm on web
                     if (Platform.OS === 'web') {
-                      if (window.confirm("This order's payment hasn't been verified yet. Complete it anyway?")) {
+                      if (window.confirm(t('vendor_order_detail.payment_not_verified_msg', "This order's payment hasn't been verified yet. Complete it anyway?"))) {
                         handleUpdateStatus('completed');
                       }
                       return;
                     }
                     Alert.alert(
-                      'Payment not verified',
-                      "This order's payment hasn't been verified yet. Complete it anyway?",
+                      t('vendor_order_detail.payment_not_verified', 'Payment not verified'),
+                      t('vendor_order_detail.payment_not_verified_msg', "This order's payment hasn't been verified yet. Complete it anyway?"),
                       [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Complete Anyway', onPress: () => handleUpdateStatus('completed') },
+                        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+                        { text: t('vendor_order_detail.complete_anyway', 'Complete Anyway'), onPress: () => handleUpdateStatus('completed') },
                       ]
                     );
                     return;
@@ -589,7 +607,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 }}
                 disabled={updating}
               >
-                <Text style={styles.fullActionText}>Complete Order</Text>
+                <Text style={styles.fullActionText}>{t('vendor_order_detail.complete_order', 'Complete Order')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -600,11 +618,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       <Modal visible={showRejectModal} transparent animationType="fade" onRequestClose={() => setShowRejectModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Reject Order</Text>
-            <Text style={styles.modalSubtitle}>Provide a reason for the customer</Text>
+            <Text style={styles.modalTitle}>{t('vendor_order_detail.reject_order_title', 'Reject Order')}</Text>
+            <Text style={styles.modalSubtitle}>{t('vendor_order_detail.reject_order_subtitle', 'Provide a reason for the customer')}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Reason for rejection..."
+              placeholder={t('vendor_order_detail.reject_reason_placeholder', 'Reason for rejection...')}
               placeholderTextColor="#9CA3AF"
               value={rejectReason}
               onChangeText={setRejectReason}
@@ -613,7 +631,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRejectModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel', 'Cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalConfirmBtn, (!rejectReason.trim() || rejecting) && styles.modalBtnDisabled]}
@@ -623,7 +641,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 {rejecting ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text style={styles.modalConfirmText}>Confirm Reject</Text>
+                  <Text style={styles.modalConfirmText}>{t('vendor_order_detail.confirm_reject', 'Confirm Reject')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -635,11 +653,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       <Modal visible={showPaymentModal} transparent animationType="fade" onRequestClose={() => setShowPaymentModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Reject Payment</Text>
-            <Text style={styles.modalSubtitle}>Select or enter a reason</Text>
+            <Text style={styles.modalTitle}>{t('vendor_orders.reject_payment_modal_title', 'Reject Payment')}</Text>
+            <Text style={styles.modalSubtitle}>{t('vendor_order_detail.select_or_enter_reason', 'Select or enter a reason')}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Reason for payment rejection..."
+              placeholder={t('vendor_orders.reject_payment_placeholder', 'Reason for payment rejection...')}
               placeholderTextColor="#9CA3AF"
               value={rejectReason}
               onChangeText={setRejectReason}
@@ -651,7 +669,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 setShowPaymentModal(false);
                 setRejectReason('');
               }}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel', 'Cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalConfirmBtn, (!rejectReason.trim() || updating) && styles.modalBtnDisabled]}
@@ -661,7 +679,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                 {updating ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text style={styles.modalConfirmText}>Confirm Reject</Text>
+                  <Text style={styles.modalConfirmText}>{t('vendor_orders.confirm_reject_payment_btn', 'Confirm Reject')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -938,24 +956,27 @@ const createStyles = (vendorColors) => StyleSheet.create({
   verifyActions: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    marginTop: 14,
   },
   verifyBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: vendorBorderRadius.md,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: vendorBorderRadius.md,
+    gap: 6,
   },
   approveBtn: {
-    backgroundColor: vendorColors.success,
+    backgroundColor: '#16A34A',
   },
   rejectPaymentBtn: {
-    backgroundColor: vendorColors.danger,
+    backgroundColor: '#DC2626',
   },
   verifyBtnText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   actionsSection: {
     paddingHorizontal: vendorSpacing.lg,
@@ -967,39 +988,45 @@ const createStyles = (vendorColors) => StyleSheet.create({
   },
   mainActionBtn: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: vendorBorderRadius.md,
-    alignItems: 'center',
+    gap: 6,
   },
   acceptBtn: {
-    backgroundColor: vendorColors.success,
+    backgroundColor: '#16A34A',
   },
   rejectBtn: {
-    backgroundColor: vendorColors.danger,
+    backgroundColor: '#DC2626',
   },
   mainActionText: {
-    color: '#FFF',
+    color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   fullActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: vendorBorderRadius.md,
-    alignItems: 'center',
+    gap: 6,
   },
   prepareBtn: {
-    backgroundColor: vendorColors.purple,
+    backgroundColor: '#7C3AED',
   },
   readyBtn: {
-    backgroundColor: vendorColors.success,
+    backgroundColor: '#16A34A',
   },
   completeBtn: {
     backgroundColor: vendorColors.primary,
   },
   fullActionText: {
-    color: '#FFF',
+    color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   // Error/loading
   errorContainer: {

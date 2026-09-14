@@ -1,4 +1,4 @@
-﻿// src/screens/customer/ProfileScreen.js
+// src/screens/customer/ProfileScreen.js
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -109,7 +109,7 @@ export default function ProfileScreen({ navigation }) {
   // there's no notification-tap-only path, since a dismissed notification
   // would otherwise leave them stuck.
   const fetchVendorApplication = async () => {
-    if (profile?.role === 'vendor') { setVendorApplication(null); return; }
+    if (!user?.id || profile?.role === 'vendor') { setVendorApplication(null); return; }
     try {
       const { data } = await supabase
         .from('vendor_applications')
@@ -141,37 +141,37 @@ export default function ProfileScreen({ navigation }) {
 
   // Step 0  verify the password against Supabase (so the PIN can sign in later)
   const handlePinVerifyCredentials = async () => {
-    if (!pinIdentifier.trim() || !pinPassword) {
-      setPinError('Ilagay ang email/phone at password mo.');
+    const rawId = pinIdentifier.trim();
+    if (!rawId || !pinPassword) {
+      setPinError('Ilagay ang email/phone at password.');
       return;
     }
     setPinBusy(true);
     setPinError('');
     try {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const credentials = emailRegex.test(pinIdentifier.trim())
-        ? { email: pinIdentifier.trim() }
-        : { phone: pinIdentifier.trim() };
+      const email = rawId.includes('@')
+        ? rawId.toLowerCase()
+        : `${rawId.replace(/[^0-9]/g, '')}@phone.palengkehub.local`;
       const { error } = await supabase.auth.signInWithPassword({
-        ...credentials,
+        email,
         password: pinPassword,
       });
       if (error) {
-        setPinError('Maling password. Subukan muli.');
+        setPinError('Maling credentials. Pakisuri at subukan muli.');
         setPinBusy(false);
         return;
       }
+      setPinBusy(false);
       setPinStep(1);
     } catch (e) {
-      setPinError('Hindi ma-verify ang password. Subukan muli.');
-    } finally {
+      setPinError(e.message || 'May naganap na error.');
       setPinBusy(false);
     }
   };
 
   const handlePinNext = () => {
-    if (!/^\d{4}$/.test(newPin)) {
-      setPinError('Ang PIN ay dapat 4 na numero.');
+    if (newPin.length !== 4) {
+      setPinError('Dapat ay 4-digit ang PIN.');
       return;
     }
     setPinError('');
@@ -183,9 +183,10 @@ export default function ProfileScreen({ navigation }) {
       setPinError('Hindi magkatugma ang PIN. Subukan muli.');
       return;
     }
+    if (!user?.id) return;
     setPinBusy(true);
     setPinError('');
-    await savePinWithCredentials(newPin, user?.id, pinIdentifier.trim(), pinPassword);
+    await savePinWithCredentials(newPin, user.id, String(pinIdentifier || '').trim(), pinPassword);
     setPinBusy(false);
     setHasPin(true);
     setPinSaved(true);
@@ -200,6 +201,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const fetchUserStats = async () => {
+    if (!user?.id) return;
     try {
       const { count: orderCount } = await supabase
         .from('orders')
@@ -237,15 +239,16 @@ export default function ProfileScreen({ navigation }) {
       }
       return;
     }
-    Alert.alert('Profile Photo', null, [
-      { text: 'View Photo', onPress: () => setPhotoViewerVisible(true) },
-      { text: 'Change Photo', onPress: uploadAvatar },
-      { text: 'Remove Photo', style: 'destructive', onPress: removeProfilePhoto },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('profile_shared.photo_options'), '', [
+      { text: t('profile_shared.view_photo'), onPress: () => setPhotoViewerVisible(true) },
+      { text: t('profile_shared.change_photo'), onPress: uploadAvatar },
+      { text: t('profile_shared.remove_photo'), style: 'destructive', onPress: removeProfilePhoto },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
   const uploadAvatar = async () => {
+    if (!user?.id) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant gallery permissions to upload profile picture');
@@ -325,6 +328,7 @@ export default function ProfileScreen({ navigation }) {
 
   //  NEW: Remove Profile Photo Function
   const removeProfilePhoto = async () => {
+    if (!user?.id) return;
     const doRemove = async () => {
       setRemovingPhoto(true);
       try {
@@ -358,11 +362,11 @@ export default function ProfileScreen({ navigation }) {
     }
 
     Alert.alert(
-      'Remove Profile Photo',
-      'Are you sure you want to remove your profile photo?',
+      t('profile_shared.remove_photo'),
+      t('profile_shared.remove_photo_confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: doRemove },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('profile_shared.remove_photo'), style: 'destructive', onPress: doRemove },
       ]
     );
   };
@@ -379,12 +383,12 @@ export default function ProfileScreen({ navigation }) {
     }
     
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      t('profile_shared.logout_confirm_title'),
+      t('profile_shared.logout_confirm_msg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Logout',
+          text: t('profile_shared.logout'),
           style: 'destructive',
           onPress: async () => {
             const result = await logout();
@@ -394,7 +398,7 @@ export default function ProfileScreen({ navigation }) {
                 routes: [{ name: 'Login' }],
               });
             } else {
-              Alert.alert('Error', result.error);
+              Alert.alert(t('common.error'), result.error);
             }
           }
         }
@@ -418,12 +422,12 @@ export default function ProfileScreen({ navigation }) {
     }
 
     Alert.alert(
-      'Switch to Guest Mode',
-      'You will be logged out and continue as guest. Continue?',
+      t('profile_shared.guest_switch_title'),
+      t('profile_shared.guest_switch_msg'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Continue',
+          text: t('common.continue'),
           onPress: () => {
             supabase.auth.signOut();
             if (setIsGuest) {
@@ -633,29 +637,29 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Account Information */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Account Information</Text>
+          <Text style={styles.infoTitle}>{t('profile_shared.account_information')}</Text>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email</Text>
+            <Text style={styles.infoLabel}>{t('profile_shared.email')}</Text>
             <Text style={styles.infoValue}>{user?.email}</Text>
           </View>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Full Name</Text>
-            <Text style={styles.infoValue}>{profile?.full_name || 'Not set'}</Text>
+            <Text style={styles.infoLabel}>{t('profile_shared.full_name')}</Text>
+            <Text style={styles.infoValue}>{profile?.full_name || t('profile_shared.not_set')}</Text>
           </View>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue}>{profile?.phone || 'Not set'}</Text>
+            <Text style={styles.infoLabel}>{t('profile_shared.phone')}</Text>
+            <Text style={styles.infoValue}>{profile?.phone || t('profile_shared.not_set')}</Text>
           </View>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Member Since</Text>
+            <Text style={styles.infoLabel}>{t('profile_shared.member_since')}</Text>
             <Text style={styles.infoValue}>
-              {profile?.created_at 
+              {profile?.created_at && !isNaN(new Date(profile.created_at).getTime())
                 ? new Date(profile.created_at).toLocaleDateString() 
-                : 'Recently'}
+                : t('profile_shared.recently')}
             </Text>
           </View>
         </View>
@@ -668,14 +672,14 @@ export default function ProfileScreen({ navigation }) {
           >
             <View style={styles.menuItem}>
               <Ionicons name="document-text" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-              <Text style={styles.menuItemText}>Vendor Application</Text>
+              <Text style={styles.menuItemText}>{t('profile_shared.vendor_application')}</Text>
               {vendorApplication.resubmission_status === 'requested' ? (
                 <View style={styles.actionNeededBadge}>
-                  <Text style={styles.actionNeededBadgeText}>Action Needed</Text>
+                  <Text style={styles.actionNeededBadgeText}>{t('profile_shared.action_needed')}</Text>
                 </View>
               ) : (
                 <Text style={[styles.languageValue, { textTransform: 'capitalize' }]}>
-                  {vendorApplication.status === 'rejected' ? 'Not Approved' : vendorApplication.status}
+                  {vendorApplication.status === 'rejected' ? t('profile_shared.not_approved') : vendorApplication.status}
                 </Text>
               )}
               <Text style={styles.chevron}>›</Text>
@@ -694,7 +698,7 @@ export default function ProfileScreen({ navigation }) {
           {/* Theme Toggle */}
           <View style={styles.menuItem}>
             <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>Dark Mode</Text>
+            <Text style={styles.menuItemText}>{t('profile_shared.dark_mode')}</Text>
             <ThemeToggle />
           </View>
 
@@ -709,8 +713,8 @@ export default function ProfileScreen({ navigation }) {
           {/* PIN Login */}
           <TouchableOpacity style={styles.menuItem} onPress={openPinModal}>
             <Ionicons name="keypad" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>PIN Login</Text>
-            <Text style={styles.languageValue}>{hasPin ? 'Naka-on' : 'Naka-off'}</Text>
+            <Text style={styles.menuItemText}>{t('profile_shared.pin_login')}</Text>
+            <Text style={styles.languageValue}>{hasPin ? t('profile_shared.on') : t('profile_shared.off')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
@@ -722,21 +726,21 @@ export default function ProfileScreen({ navigation }) {
           {biometricHardwareAvailable && (
             <TouchableOpacity style={styles.menuItem} onPress={toggleBiometricUnlock}>
               <Ionicons name="finger-print" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-              <Text style={styles.menuItemText}>Biometric Unlock</Text>
-              <Text style={styles.languageValue}>{biometricUnlockEnabled ? 'Naka-on' : 'Naka-off'}</Text>
+              <Text style={styles.menuItemText}>{t('profile_shared.biometric_unlock')}</Text>
+              <Text style={styles.languageValue}>{biometricUnlockEnabled ? t('profile_shared.on') : t('profile_shared.off')}</Text>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport', { role: 'customer' })}>
             <Ionicons name="help-circle" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>Help & Support</Text>
+            <Text style={styles.menuItemText}>{t('profile_shared.help_support')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('PrivacyPolicy', { role: 'customer' })}>
             <Ionicons name="lock-closed" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
-            <Text style={styles.menuItemText}>Privacy Policy</Text>
+            <Text style={styles.menuItemText}>{t('profile_shared.privacy_policy')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>
@@ -751,62 +755,26 @@ export default function ProfileScreen({ navigation }) {
               colors={[COLORS.primary, COLORS.primaryLight]}
               style={styles.vendorGradient}
             >
-              <Text style={styles.vendorButtonText}>Open Vendor Dashboard →</Text>
+              <Text style={styles.vendorButtonText}>{t('profile_shared.vendor_dashboard')} →</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
 
         {/* Switch to Guest Button */}
         <TouchableOpacity style={styles.switchGuestButton} onPress={handleSwitchToGuest}>
-          <Text style={styles.switchGuestText}>Switch to Guest Mode</Text>
+          <Text style={styles.switchGuestText}>{t('profile_shared.switch_guest')}</Text>
         </TouchableOpacity>
 
         {/* LOGOUT BUTTON */}
-        {Platform.OS === 'web' ? (
-          <button
-            onClick={async () => {
-              console.log(' Logout button clicked on web');
-              const confirmLogout = window.confirm('Are you sure you want to logout?');
-              if (confirmLogout) {
-                console.log(' User confirmed, signing out...');
-                try {
-                  const { error } = await supabase.auth.signOut();
-                  if (error) console.error('SignOut error:', error);
-                  console.log(' SignOut complete, redirecting to login...');
-                  window.location.href = '/';
-                } catch (err) {
-                  console.error('Error during logout:', err);
-                  window.location.href = '/';
-                }
-              }
-            }}
-            style={{
-              backgroundColor: '#DC2626',
-              color: 'white',
-              padding: '14px 20px',
-              borderRadius: '12px',
-              border: 'none',
-              cursor: 'pointer',
-              width: '100%',
-              fontSize: '16px',
-              fontWeight: '600',
-              marginTop: '16px',
-              marginBottom: '30px',
-              fontFamily: 'Nunito_600SemiBold',
-            }}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <LinearGradient
+            colors={['#DC2626', '#EF4444']}
+            style={styles.logoutGradient}
           >
-            Logout
-          </button>
-        ) : (
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LinearGradient
-              colors={['#DC2626', '#EF4444']}
-              style={styles.logoutGradient}
-            >
-              <Text style={styles.logoutButtonText}>Logout</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+            <Text style={styles.logoutButtonText}>{t('profile_shared.logout')}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
         {/* VERSION LABEL */}
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>PalengkeHub v1.0.6 (build 7)</Text>
@@ -814,10 +782,10 @@ export default function ProfileScreen({ navigation }) {
       </ScrollView>
 
       {/* Language Picker Modal */}
-      <Modal visible={showLanguagePicker} transparent animationType="slide">
+      <Modal visible={showLanguagePicker} transparent animationType="slide" onRequestClose={() => setShowLanguagePicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('profile.select_language')}</Text>
+            <Text style={styles.modalTitle}>{t('profile_shared.select_language')}</Text>
             <TouchableOpacity
               style={[styles.langOption, locale === 'en' && styles.langOptionActive]}
               onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
@@ -842,7 +810,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Modal>
       {/* PIN Login Setup Modal */}
-      <Modal visible={showPinModal} transparent animationType="slide">
+      <Modal visible={showPinModal} transparent animationType="slide" onRequestClose={() => setShowPinModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>PIN Login</Text>

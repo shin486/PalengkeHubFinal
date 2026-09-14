@@ -21,6 +21,7 @@ import { Header } from '../../components/Header';
 import { WovenBackground } from '../../components/WovenBackground';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { useVendorOrders } from '../../hooks/useVendorOrders';
 import { chatService } from '../../services/chatService';
 import { ModernOrderCard } from '../../components/vendor/ModernOrderCard';
@@ -33,8 +34,8 @@ import { SPACING, RADIUS, TEXT_STYLES } from '../../theme/tokens';
 // COLORS - Theme-aware (from ThemeContext)
 // ============================================================
 
-//  Status Tabs - No Emojis
-const STATUS_TABS = [
+//  Status Tabs - Base definitions
+const BASE_TABS = [
   { key: 'pending', label: 'Pending', icon: 'time-outline' },
   { key: 'confirmed', label: 'Confirmed', icon: 'checkmark-circle-outline' },
   { key: 'preparing', label: 'Preparing', icon: 'restaurant-outline' },
@@ -46,9 +47,19 @@ const STATUS_TABS = [
 export default function VendorOrdersScreen({ navigation }) {
   const { user } = useAuth();
   const { colors: COLORS, isDark } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stall, setStall] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
+
+  const statusTabs = useMemo(() => [
+    { key: 'pending', label: t('vendor_orders.tab_pending', 'Pending'), icon: 'time-outline' },
+    { key: 'confirmed', label: t('vendor_orders.tab_confirmed', 'Confirmed'), icon: 'checkmark-circle-outline' },
+    { key: 'preparing', label: t('vendor_orders.tab_preparing', 'Preparing'), icon: 'restaurant-outline' },
+    { key: 'ready', label: t('vendor_orders.tab_ready', 'Ready'), icon: 'flag-outline' },
+    { key: 'completed', label: t('vendor_orders.tab_completed', 'Completed'), icon: 'checkmark-done-outline' },
+    { key: 'cancelled', label: t('vendor_orders.tab_cancelled', 'Cancelled'), icon: 'close-circle-outline' },
+  ], [t]);
   const [refreshing, setRefreshing] = useState(false);
   const [showRejectPaymentModal, setShowRejectPaymentModal] = useState(false);
   const [showApprovePaymentModal, setShowApprovePaymentModal] = useState(false);
@@ -313,12 +324,12 @@ export default function VendorOrdersScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <WovenBackground isDark={isDark} />
-      <Header title="Orders" subtitle={stall?.stall_name || 'Manage your orders'} />
+      <Header title={t('vendor_orders.title', 'Orders')} subtitle={stall?.stall_name || t('vendor_orders.subtitle', 'Manage your stall orders')} />
 
       {/* Status Tabs - No Emojis */}
       <View style={styles.tabsWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContent}>
-          {STATUS_TABS.map((tab) => {
+          {statusTabs.map((tab) => {
             const count = (orderStats[tab.key] || []).length;
             const isActive = activeTab === tab.key;
             const iconColor = getTabIconColor(tab.key, isActive);
@@ -355,10 +366,10 @@ export default function VendorOrdersScreen({ navigation }) {
           <View style={styles.emptyIconContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
           </View>
-          <Text style={styles.emptyTitle}>Failed to load orders</Text>
+          <Text style={styles.emptyTitle}>{t('vendor_orders.failed_to_load', 'Failed to load orders')}</Text>
           <Text style={styles.emptyText}>{ordersError}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={refreshOrders}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
+            <Text style={styles.retryButtonText}>{t('vendor_orders.try_again', 'Try Again')}</Text>
           </TouchableOpacity>
         </View>
       ) : currentOrders.length === 0 ? (
@@ -370,11 +381,16 @@ export default function VendorOrdersScreen({ navigation }) {
               color={COLORS.text.lighter} 
             />
           </View>
-          <Text style={styles.emptyTitle}>No {activeTab} orders</Text>
+          <Text style={styles.emptyTitle}>
+            {t(`vendor_orders.empty_${activeTab}_title`, `No ${activeTab} orders`)}
+          </Text>
           <Text style={styles.emptyText}>
-            {activeTab === 'pending'
-              ? 'New orders will appear here in real-time'
-              : `Orders will appear here when their status changes to ${activeTab}`}
+            {t(
+              `vendor_orders.empty_${activeTab}_text`,
+              activeTab === 'pending'
+                ? 'New orders will appear here in real-time'
+                : `Orders will appear here when their status changes to ${activeTab}`
+            )}
           </Text>
         </View>
       ) : (
@@ -396,14 +412,14 @@ export default function VendorOrdersScreen({ navigation }) {
               <View style={styles.modalHeaderIcon}>
                 <Ionicons name="close-circle-outline" size={24} color={COLORS.error} />
               </View>
-              <Text style={styles.modalTitle}>Reject Payment</Text>
+              <Text style={styles.modalTitle}>{t('vendor_orders.reject_payment_modal_title', 'Reject Payment')}</Text>
             </View>
             <Text style={styles.modalSubtitle}>
-              {selectedOrder ? `Order #${selectedOrder.order_number?.slice(-8)}` : ''}
+              {selectedOrder ? `${t('vendor_orders.order_prefix', 'Order #')}${selectedOrder.order_number?.slice(-8)}` : ''}
             </Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Reason for payment rejection..."
+              placeholder={t('vendor_orders.reject_payment_placeholder', 'Reason for payment rejection...')}
               placeholderTextColor={COLORS.text.lighter}
               value={rejectReason}
               onChangeText={setRejectReason}
@@ -413,7 +429,7 @@ export default function VendorOrdersScreen({ navigation }) {
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRejectPaymentModal(false)} activeOpacity={0.7}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('vendor_orders.cancel', 'Cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalConfirmBtn, (!rejectReason.trim() || processing) && styles.modalBtnDisabled]}
@@ -424,7 +440,7 @@ export default function VendorOrdersScreen({ navigation }) {
                 {processing ? (
                   <ActivityIndicator size="small" color={COLORS.text.inverse} />
                 ) : (
-                  <Text style={styles.modalConfirmText}>Confirm Reject</Text>
+                  <Text style={styles.modalConfirmText}>{t('vendor_orders.confirm_reject_payment_btn', 'Confirm Reject')}</Text>
                 )}
               </TouchableOpacity>
             </View>

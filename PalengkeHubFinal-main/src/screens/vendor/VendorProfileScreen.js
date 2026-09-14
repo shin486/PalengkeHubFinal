@@ -70,7 +70,7 @@ export default function VendorProfileScreen({ navigation }) {
 
   // ── Settings: theme / language / PIN login ──
   const { isDark } = useTheme();
-  const { locale, changeLanguage } = useI18n();
+  const { t, locale, changeLanguage } = useI18n();
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [hasPin, setHasPin] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -108,15 +108,16 @@ export default function VendorProfileScreen({ navigation }) {
       }
       return;
     }
-    Alert.alert('Profile Photo', null, [
-      { text: 'View Photo', onPress: () => setPhotoViewerVisible(true) },
-      { text: 'Change Photo', onPress: uploadAvatar },
-      { text: 'Remove Photo', style: 'destructive', onPress: removeProfilePhoto },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('profile_shared.photo_options', 'Profile Photo'), '', [
+      { text: t('profile_shared.view_photo', 'View Photo'), onPress: () => setPhotoViewerVisible(true) },
+      { text: t('profile_shared.change_photo', 'Change Photo'), onPress: uploadAvatar },
+      { text: t('profile_shared.remove_photo', 'Remove Photo'), style: 'destructive', onPress: removeProfilePhoto },
+      { text: t('common.cancel', 'Cancel'), style: 'cancel' },
     ]);
   };
 
   const removeProfilePhoto = async () => {
+    if (!user?.id) return;
     const doRemove = async () => {
       setRemovingPhoto(true);
       try {
@@ -127,10 +128,10 @@ export default function VendorProfileScreen({ navigation }) {
         if (error) throw error;
         await checkUser();
         hapticSuccess();
-        Alert.alert('Success', 'Profile photo removed successfully');
+        Alert.alert(t('common.success', 'Success'), t('profile_shared.remove_photo_success', 'Profile photo removed successfully'));
       } catch (error) {
         console.error('Remove photo error:', error);
-        Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
+        Alert.alert(t('common.error', 'Error'), 'Failed to remove profile photo. Please try again.');
       } finally {
         setRemovingPhoto(false);
       }
@@ -145,11 +146,11 @@ export default function VendorProfileScreen({ navigation }) {
     }
 
     Alert.alert(
-      'Remove Profile Photo',
-      'Are you sure you want to remove your profile photo?',
+      t('profile_shared.remove_photo', 'Remove Profile Photo'),
+      t('profile_shared.remove_photo_confirm', 'Are you sure you want to remove your profile photo?'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: doRemove },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: t('profile_shared.remove_photo', 'Remove'), style: 'destructive', onPress: doRemove },
       ]
     );
   };
@@ -158,6 +159,7 @@ export default function VendorProfileScreen({ navigation }) {
   // Mirrors the customer ProfileScreen flow: pick → Supabase Storage upload →
   // profiles.avatar_url update → AuthContext refresh.
   const uploadAvatar = async () => {
+    if (!user?.id) return;
     hapticLight();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -371,21 +373,25 @@ export default function VendorProfileScreen({ navigation }) {
       return;
     }
 
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await logout();
-          if (result.success) {
-            resetToLogin();
-          } else {
-            Alert.alert('Error', result.error || 'Failed to logout');
+    Alert.alert(
+      t('profile_shared.logout_confirm_title', 'Logout'),
+      t('profile_shared.logout_confirm_msg', 'Are you sure you want to logout?'),
+      [
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('profile_shared.logout', 'Logout'),
+          style: 'destructive',
+          onPress: async () => {
+            const result = await logout();
+            if (result.success) {
+              resetToLogin();
+            } else {
+              Alert.alert(t('common.error', 'Error'), result.error || 'Failed to logout');
+            }
           }
         }
-      }
-    ]);
+      ]
+    );
   };
 
   // ============================================================
@@ -453,10 +459,10 @@ export default function VendorProfileScreen({ navigation }) {
       
       setEditModalVisible(false);
       setEditingField(null);
-      Alert.alert('Success', 'Stall information updated successfully!');
+      Alert.alert(t('common.success', 'Success'), t('vendor_profile.stall_info_updated', 'Stall information updated successfully!'));
     } catch (error) {
       console.error('Error updating stall:', error);
-      Alert.alert('Error', 'Failed to update stall information. Please try again.');
+      Alert.alert(t('common.error', 'Error'), t('vendor_profile.stall_info_update_failed', 'Failed to update stall information. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -479,7 +485,7 @@ export default function VendorProfileScreen({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              Edit {editingField?.label || 'Field'}
+              {t('vendor_profile.edit_field', `Edit ${editingField?.label || 'Field'}`, { field: editingField?.label || t('vendor_profile.field', 'Field') })}
             </Text>
             <TouchableOpacity
               onPress={() => {
@@ -498,7 +504,7 @@ export default function VendorProfileScreen({ navigation }) {
             onChangeText={(text) => {
               setEditingField(prev => prev ? { ...prev, value: text } : null);
             }}
-            placeholder={`Enter ${editingField?.label?.toLowerCase() || 'value'}`}
+            placeholder={t('vendor_profile.enter_field', `Enter ${editingField?.label?.toLowerCase() || 'value'}`, { field: editingField?.label?.toLowerCase() || 'value' })}
             placeholderTextColor={COLORS.text.lighter}
             multiline={editingField?.field === 'location_notes' || editingField?.field === 'description'}
             numberOfLines={editingField?.field === 'location_notes' || editingField?.field === 'description' ? 4 : 1}
@@ -513,7 +519,7 @@ export default function VendorProfileScreen({ navigation }) {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel', 'Cancel')}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -525,7 +531,7 @@ export default function VendorProfileScreen({ navigation }) {
               {saving ? (
                 <ActivityIndicator size="small" color={COLORS.text.inverse} />
               ) : (
-                <Text style={styles.modalSaveText}>Save</Text>
+                <Text style={styles.modalSaveText}>{t('common.save', 'Save')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -552,7 +558,7 @@ export default function VendorProfileScreen({ navigation }) {
         <View style={styles.infoContent}>
           <Text style={styles.infoLabel}>{label}</Text>
           <Text style={[styles.infoValue, !value && styles.infoValueEmpty]} numberOfLines={2}>
-            {value || 'Not set'}
+            {value || t('profile_shared.not_set', 'Not set')}
           </Text>
         </View>
       </View>
@@ -590,10 +596,10 @@ export default function VendorProfileScreen({ navigation }) {
     return (
       <View style={styles.container}>
         <WovenBackground isDark={isDark} />
-      <Header title="Profile" subtitle="Account settings" showBack onBackPress={() => navigation.goBack()} />
+        <Header title={t('nav.profile', 'Profile')} subtitle={t('vendor_profile.account_settings', 'Account settings')} showBack onBackPress={() => navigation.goBack()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>{t('vendor_profile.loading_profile', 'Loading profile...')}</Text>
         </View>
       </View>
     );
@@ -602,7 +608,7 @@ export default function VendorProfileScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <WovenBackground isDark={isDark} />
-      <Header title="Profile" subtitle="Account settings" showBack onBackPress={() => navigation.goBack()} />
+      <Header title={t('nav.profile', 'Profile')} subtitle={t('vendor_profile.account_settings', 'Account settings')} showBack onBackPress={() => navigation.goBack()} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -638,13 +644,13 @@ export default function VendorProfileScreen({ navigation }) {
             )}
           </TouchableOpacity>
           <Text style={styles.changePhotoHint}>
-            {profile?.avatar_url ? 'Tap photo for options' : 'Tap photo to add one'}
+            {profile?.avatar_url ? t('profile_shared.tap_photo_options', 'Tap photo for options') : t('profile_shared.tap_photo_add', 'Tap photo to add one')}
           </Text>
-          <Text style={styles.name}>{profile?.full_name || 'Vendor'}</Text>
+          <Text style={styles.name}>{profile?.full_name || t('vendor_profile.vendor_badge', 'Vendor')}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.roleBadge}>
             <Ionicons name="storefront-outline" size={14} color={COLORS.primary} />
-            <Text style={styles.roleText}>Vendor</Text>
+            <Text style={styles.roleText}>{t('vendor_profile.vendor_badge', 'Vendor')}</Text>
           </View>
         </View>
 
@@ -655,13 +661,13 @@ export default function VendorProfileScreen({ navigation }) {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
               <Ionicons name="storefront-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Stall Information</Text>
+              <Text style={styles.sectionTitle}>{t('vendor.stall_section', 'Stall Information')}</Text>
             </View>
           </View>
 
           {/* Stall Number - NOT EDITABLE */}
           <InfoRow
-            label="Stall Number"
+            label={t('vendor_profile.stall_number', 'Stall Number')}
             value={stall?.stall_number}
             icon="pricetag-outline"
             editable={false}
@@ -669,33 +675,35 @@ export default function VendorProfileScreen({ navigation }) {
 
           {/* Stall Name - EDITABLE */}
           <InfoRow
-            label="Stall Name"
+            label={t('vendor_profile.stall_name', 'Stall Name')}
             value={stallName}
             icon="storefront-outline"
             editable={true}
-            onPress={() => openEditModal('stall_name', stallName, 'Stall Name')}
+            onPress={() => openEditModal('stall_name', stallName, t('vendor_profile.stall_name', 'Stall Name'))}
           />
 
           {/* Section - EDITABLE */}
           <InfoRow
-            label="Section"
-            value={section}
+            label={t('vendor_profile.section', 'Section')}
+            value={section ? t(`market_sections.${section}`, section) : ''}
             icon="grid-outline"
             editable={true}
-            onPress={() => openEditModal('section', section, 'Section')}
+            onPress={() => openEditModal('section', section, t('vendor_profile.section', 'Section'))}
           />
 
           {/* Location - EDITABLE, opens the GPS capture flow */}
           <InfoRow
-            label="Stall Location"
+            label={t('vendor_profile.stall_location', 'Stall Location')}
             value={
               !stallLocation
-                ? 'Not set — tap to capture'
+                ? t('vendor_profile.location_not_set', 'Not set — tap to capture')
                 : stallLocation.reregister_reason
-                  ? 'Flagged for re-registration'
+                  ? t('vendor_profile.location_flagged', 'Flagged for re-registration')
                   : !stallLocation.verified_by_admin
-                    ? `Pending review (~${stallLocation.accuracy_meters != null ? Math.round(stallLocation.accuracy_meters) + 'm' : 'manual'})`
-                    : 'Verified'
+                    ? t('vendor_profile.location_pending_review', `Pending review (~${stallLocation.accuracy_meters != null ? Math.round(stallLocation.accuracy_meters) + 'm' : 'manual'})`, {
+                        detail: stallLocation.accuracy_meters != null ? Math.round(stallLocation.accuracy_meters) + 'm' : t('vendor_profile.location_manual', 'manual'),
+                      })
+                    : t('vendor_profile.location_verified', 'Verified')
             }
             icon="location-outline"
             editable={true}
@@ -714,33 +722,30 @@ export default function VendorProfileScreen({ navigation }) {
           {/* Coordinates - Display Only */}
           {stallLocation && (
             <InfoRow
-              label="Coordinates"
+              label={t('vendor_profile.coordinates', 'Coordinates')}
               value={`${stallLocation.lat.toFixed(6)}, ${stallLocation.lng.toFixed(6)}`}
               icon="compass-outline"
               editable={false}
             />
           )}
 
-          {/* Directions Note - EDITABLE, the text complement to the GPS pin.
-              A covered market blocks GPS lock for most captures, so the
-              pin alone often only gets you to the building — this fills
-              the "which aisle, which side" gap a coordinate can't. */}
+          {/* Directions Note - EDITABLE */}
           <InfoRow
-            label="Directions Note"
-            value={locationNotes || 'Not set — e.g. "3rd aisle, left side, near the fish section"'}
+            label={t('vendor_profile.directions_note', 'Directions Note')}
+            value={locationNotes || t('vendor_profile.directions_note_placeholder', 'Not set — e.g. "3rd aisle, left side, near the fish section"')}
             icon="walk-outline"
             editable={true}
             iconColor={locationNotes ? COLORS.success : COLORS.primary}
-            onPress={() => openEditModal('location_notes', locationNotes, 'Directions Note')}
+            onPress={() => openEditModal('location_notes', locationNotes, t('vendor_profile.directions_note', 'Directions Note'))}
           />
 
           {/* Description - EDITABLE */}
           <InfoRow
-            label="Description"
+            label={t('vendor_profile.description', 'Description')}
             value={description}
             icon="document-text-outline"
             editable={true}
-            onPress={() => openEditModal('description', description, 'Description')}
+            onPress={() => openEditModal('description', description, t('vendor_profile.description', 'Description'))}
           />
 
           {/* Status - NOT EDITABLE */}
@@ -754,9 +759,9 @@ export default function VendorProfileScreen({ navigation }) {
                 />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Status</Text>
+                <Text style={styles.infoLabel}>{t('vendor_profile.status', 'Status')}</Text>
                 <Text style={[styles.infoValue, { color: stall?.is_temporarily_closed ? COLORS.error : COLORS.success }]}>
-                  {stall?.is_temporarily_closed ? 'Closed' : 'Open'}
+                  {stall?.is_temporarily_closed ? t('vendor.status_closed', 'Closed') : t('vendor.status_open', 'Open')}
                 </Text>
               </View>
             </View>
@@ -770,25 +775,25 @@ export default function VendorProfileScreen({ navigation }) {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
               <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Account</Text>
+              <Text style={styles.sectionTitle}>{t('vendor.account_section')}</Text>
             </View>
           </View>
 
           <MenuItem
             icon="star-outline"
-            label="Ratings & Reviews"
+            label={t('vendor.ratings_reviews')}
             onPress={() => navigation.navigate('VendorRatings')}
           />
 
           <MenuItem
             icon="document-text-outline"
-            label="My Reports"
+            label={t('vendor.my_reports')}
             onPress={() => navigation.navigate('VendorReportsList')}
           />
 
-                    <MenuItem
+          <MenuItem
             icon="flag-outline"
-            label="Report an Issue"
+            label={t('vendor.report_issue')}
             onPress={() => navigation.navigate('VendorReportIssue')}
           />
         </View>
@@ -800,7 +805,7 @@ export default function VendorProfileScreen({ navigation }) {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
               <Ionicons name="options-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Settings</Text>
+              <Text style={styles.sectionTitle}>{t('vendor.settings_section')}</Text>
             </View>
           </View>
 
@@ -808,27 +813,27 @@ export default function VendorProfileScreen({ navigation }) {
             <View style={[styles.menuIconContainer, { backgroundColor: COLORS.primarySurface }]}>
               <Ionicons name={isDark ? 'moon-outline' : 'sunny-outline'} size={22} color={COLORS.primary} />
             </View>
-            <Text style={styles.menuLabel}>Dark Mode</Text>
+            <Text style={styles.menuLabel}>{t('vendor.dark_mode')}</Text>
             <ThemeToggle />
           </View>
           <MenuItem
             icon="language-outline"
-            label={`Language · ${locale === 'en' ? 'English' : 'Filipino'}`}
+            label={`${t('profile.language')} · ${locale === 'en' ? 'English' : 'Filipino'}`}
             onPress={() => setShowLanguagePicker(true)}
           />
           <MenuItem
             icon="keypad-outline"
-            label={`PIN Login · ${hasPin ? 'On' : 'Off'}`}
+            label={`${t('vendor.pin_login')} · ${hasPin ? t('vendor.on') : t('vendor.off')}`}
             onPress={openPinModal}
           />
           <MenuItem
             icon="help-circle-outline"
-            label="Help & Support"
+            label={t('profile_shared.help_support')}
             onPress={() => navigation.navigate('HelpSupport', { role: 'vendor' })}
           />
           <MenuItem
             icon="lock-closed-outline"
-            label="Privacy & Policy"
+            label={t('profile_shared.privacy_policy')}
             onPress={() => navigation.navigate('PrivacyPolicy', { role: 'vendor' })}
           />
         </View>
@@ -838,7 +843,7 @@ export default function VendorProfileScreen({ navigation }) {
         ============================================================ */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={20} color={COLORS.text.inverse} />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>{t('profile_shared.logout')}</Text>
         </TouchableOpacity>
 
         <View style={styles.bottomSpacer} />
@@ -861,23 +866,26 @@ export default function VendorProfileScreen({ navigation }) {
       <Modal visible={showLanguagePicker} transparent animationType="slide" onRequestClose={() => setShowLanguagePicker(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Language</Text>
+            <Text style={styles.modalTitle}>{t('profile_shared.select_language')}</Text>
             <TouchableOpacity
-              style={styles.optionRow}
+              style={[styles.langOption, locale === 'en' && styles.langOptionActive]}
               onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
             >
-              <Text style={[styles.optionText, locale === 'en' && styles.optionTextActive]}>English</Text>
+              <Text style={styles.langOptionText}>English</Text>
               {locale === 'en' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.optionRow}
+              style={[styles.langOption, locale === 'fil' && styles.langOptionActive]}
               onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
             >
-              <Text style={[styles.optionText, locale === 'fil' && styles.optionTextActive]}>Filipino</Text>
+              <Text style={styles.langOptionText}>Filipino</Text>
               {locale === 'fil' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow} onPress={() => setShowLanguagePicker(false)}>
-              <Text style={styles.optionText}>Cancel</Text>
+            <TouchableOpacity
+              style={styles.langCancelBtn}
+              onPress={() => setShowLanguagePicker(false)}
+            >
+              <Text style={styles.langCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -890,18 +898,18 @@ export default function VendorProfileScreen({ navigation }) {
             {pinSaved ? (
               <View style={styles.pinSuccessBox}>
                 <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
-                <Text style={styles.pinSuccessText}>PIN saved! You can now sign in with your 4-digit PIN.</Text>
+                <Text style={styles.pinSuccessText}>{t('vendor_profile.pin_saved_success', 'PIN saved! You can now sign in with your 4-digit PIN.')}</Text>
               </View>
             ) : (
               <>
                 <Text style={styles.modalTitle}>
-                  {pinStep === 0 ? 'Verify your account' : pinStep === 1 ? 'Create your PIN' : 'Confirm your PIN'}
+                  {pinStep === 0 ? t('vendor_profile.pin_verify_account', 'Verify your account') : pinStep === 1 ? t('vendor_profile.pin_create_pin', 'Create your PIN') : t('vendor_profile.pin_confirm_pin', 'Confirm your PIN')}
                 </Text>
                 {pinStep === 0 && (
                   <>
                     <TextInput
                       style={styles.pinInput}
-                      placeholder="Email or phone"
+                      placeholder={t('auth.email_or_phone', 'Email or phone')}
                       placeholderTextColor={COLORS.text.lighter}
                       value={pinIdentifier}
                       onChangeText={setPinIdentifier}
@@ -909,7 +917,7 @@ export default function VendorProfileScreen({ navigation }) {
                     />
                     <TextInput
                       style={styles.pinInput}
-                      placeholder="Current password"
+                      placeholder={t('auth.current_password', 'Current password')}
                       placeholderTextColor={COLORS.text.lighter}
                       value={pinPassword}
                       onChangeText={setPinPassword}
@@ -920,7 +928,7 @@ export default function VendorProfileScreen({ navigation }) {
                 {(pinStep === 1 || pinStep === 2) && (
                   <TextInput
                     style={styles.pinInput}
-                    placeholder="4-digit PIN"
+                    placeholder={t('vendor_profile.pin_placeholder', '4-digit PIN')}
                     placeholderTextColor={COLORS.text.lighter}
                     value={pinStep === 1 ? newPin : confirmPin}
                     onChangeText={(v) => /^\d{0,4}$/.test(v) && (pinStep === 1 ? setNewPin : setConfirmPin)(v)}
@@ -936,11 +944,11 @@ export default function VendorProfileScreen({ navigation }) {
                   onPress={pinStep === 0 ? handlePinVerifyCredentials : pinStep === 1 ? handlePinNext : handlePinSave}
                 >
                   <Text style={styles.pinPrimaryBtnText}>
-                    {pinBusy ? 'Please wait...' : pinStep === 0 ? 'Verify' : pinStep === 1 ? 'Next' : 'Save PIN'}
+                    {pinBusy ? t('common.loading', 'Please wait...') : pinStep === 0 ? t('vendor_profile.pin_verify_btn', 'Verify') : pinStep === 1 ? t('common.next', 'Next') : t('vendor_profile.pin_save_btn', 'Save PIN')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.pinSecondaryBtn} onPress={() => setShowPinModal(false)}>
-                  <Text style={styles.pinSecondaryBtnText}>Cancel</Text>
+                  <Text style={styles.pinSecondaryBtnText}>{t('common.cancel', 'Cancel')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1480,21 +1488,34 @@ const createStyles = (COLORS) => StyleSheet.create({
     padding: SPACING.xl,
     width: '100%',
   },
-  optionRow: {
+  // Language picker — matches customer ProfileScreen card style
+  langOption: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: COLORS.surfaceSecondary,
   },
-  optionText: {
-    fontSize: 15,
+  langOptionActive: {
+    backgroundColor: COLORS.successLight,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  langOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
     color: COLORS.text.dark,
   },
-  optionTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
+  langCancelBtn: {
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  langCancelText: {
+    color: COLORS.text.light,
+    fontSize: 15,
   },
   pinInput: {
     borderWidth: 1.5,

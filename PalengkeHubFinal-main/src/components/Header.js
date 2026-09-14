@@ -209,7 +209,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   subtitle: {
     ...TEXT_STYLES.caption,
-    color: COLORS.text.tertiary,
+    color: COLORS.text.secondary,
     marginTop: 1,
     includeFontPadding: false,
   },

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../contexts/ThemeContext';
+import { useI18n } from '../contexts/i18nContext';
 import { hapticSelection } from '../theme/motion';
 import { NAV_SPACING, LAYOUT, TYPE, SHADOWS } from '../theme/tokens';
 
@@ -35,6 +36,7 @@ export default function BottomNavigation({
 }) {
   const insets = useSafeAreaInsets();
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
   
@@ -133,23 +135,23 @@ export default function BottomNavigation({
     const configs = {
       Home: {
         icon: isFocused ? 'home' : 'home-outline',
-        label: 'Home',
+        label: t('nav.home', 'Home'),
       },
       Cart: {
         icon: isFocused ? 'cart' : 'cart-outline',
-        label: 'PalengKart',
+        label: t('nav.cart', 'PalengKart'),
       },
       Orders: {
         icon: isFocused ? 'receipt' : 'receipt-outline',
-        label: 'Orders',
+        label: t('nav.orders', 'Orders'),
       },
       Chats: {
         icon: isFocused ? 'chatbubble' : 'chatbubble-outline',
-        label: 'Chats',
+        label: t('nav.chats', 'Chats'),
       },
       Profile: {
         icon: isFocused ? 'person' : 'person-outline',
-        label: 'Profile',
+        label: t('nav.profile', 'Profile'),
       },
     };
     return configs[routeName] || configs.Home;

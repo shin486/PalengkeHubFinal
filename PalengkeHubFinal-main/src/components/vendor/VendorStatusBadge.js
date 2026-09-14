@@ -1,7 +1,7 @@
-// src/components/vendor/VendorStatusBadge.js
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import {
   vendorBorderRadius,
   getStatusColorForTheme,
@@ -11,11 +11,13 @@ import {
 
 export const VendorStatusBadge = ({ status, size = 'sm', style }) => {
   const { isDark } = useTheme();
+  const { t } = useI18n();
   // getStatusColor (no theme) always read the light-mode map regardless
   // of the app's actual theme — getStatusColorForTheme already existed
   // for exactly this, just wasn't being called from here.
   const color = getStatusColorForTheme(status, isDark);
-  const label = getStatusLabel(status);
+  const defaultLabel = getStatusLabel(status);
+  const label = t('order_status.' + status, defaultLabel);
   const isSmall = size === 'sm';
 
   return (
@@ -39,11 +41,13 @@ export const VendorStatusBadge = ({ status, size = 'sm', style }) => {
 
 export const VendorPaymentStatusBadge = ({ status, size = 'sm' }) => {
   const { isDark } = useTheme();
+  const { t } = useI18n();
   // getPaymentStatusColor reads the exact same underlying map as
   // getStatusColor (see vendorTheme.js) — reusing the theme-aware
   // version here too rather than adding a parallel one.
   const color = getStatusColorForTheme(status, isDark);
-  const label = getPaymentStatusLabel(status);
+  const defaultLabel = getPaymentStatusLabel(status);
+  const label = t('payment_status.' + status, defaultLabel);
   const isSmall = size === 'sm';
 
   return (

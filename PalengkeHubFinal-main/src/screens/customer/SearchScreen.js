@@ -1409,10 +1409,10 @@ export default function SearchScreen({ navigation }) {
             <View style={styles.filterSheetHandle} />
             <Text style={styles.filterSheetTitle}>Filters</Text>
 
-            <Text style={styles.filterSectionLabel}>Category</Text>
+            <Text style={styles.filterSectionLabel}>{t('categories.title', 'Category')}</Text>
             <View style={styles.filterChipWrap}>
               <Chip size="compact" isOn={!categoryFilter} onPress={() => setCategoryFilter(null)} style={styles.filterChipItem}>
-                All
+                {t('categories.all', 'All')}
               </Chip>
               {CATEGORY_OPTIONS.map((cat) => (
                 <Chip
@@ -1422,7 +1422,7 @@ export default function SearchScreen({ navigation }) {
                   onPress={() => setCategoryFilter(categoryFilter === cat.id ? null : cat.id)}
                   style={styles.filterChipItem}
                 >
-                  {cat.label}
+                  {t(`categories.${cat.id}`, cat.label)}
                 </Chip>
               ))}
             </View>

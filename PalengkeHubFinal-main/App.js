@@ -74,6 +74,10 @@ import VendorReportsListScreen from './src/screens/vendor/VendorReportsListScree
 import VendorOffersScreen from './src/screens/vendor/VendorOffersScreen';
 import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 
+// Shared Screens
+import HelpSupportScreen from './src/screens/shared/HelpSupportScreen';
+import PrivacyPolicyScreen from './src/screens/shared/PrivacyPolicyScreen';
+
 // Import the redesigned HomeScreen
 import HomeScreen from './src/screens/customer/HomeScreen';
 
@@ -368,6 +372,8 @@ function AppStack({ isGuest }) {
       'ProductDetails',
       'Search',
       'CategoryProducts',
+      'HelpSupport',
+      'PrivacyPolicy',
     ];
     
     const isHeaderHidden = hiddenScreens.includes(routeName);
@@ -473,6 +479,8 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
         <Stack.Screen name="CustomerReports" component={CustomerReportsScreen} />
         <Stack.Screen name="Favorites" component={FavoritesScreen} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       </Stack.Navigator>
     </View>
     </ActiveScreenProvider>
@@ -638,6 +646,8 @@ function RootNavigator() {
             applicants). Registered here for the same reason as that
             comment explains. */}
         <Stack.Screen name="VendorSuspended" component={VendorSuspendedScreen} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
 
         {/* Customer / Guest App */}
         <Stack.Screen name="App">

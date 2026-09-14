@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { NAV_SPACING, LAYOUT, TYPE, SHADOWS } from '../../theme/tokens';
 
 const { width } = Dimensions.get('window');
@@ -36,6 +37,7 @@ export default function VendorBottomNavigation({
 }) {
   const insets = useSafeAreaInsets();
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const animatedValues = useRef({});
 
@@ -128,23 +130,23 @@ export default function VendorBottomNavigation({
     const configs = {
       VendorDashboard: {
         icon: isFocused ? 'home' : 'home-outline',
-        label: 'Home',
+        label: t('nav.home', 'Home'),
       },
       VendorOrders: {
         icon: isFocused ? 'receipt' : 'receipt-outline',
-        label: 'Orders',
+        label: t('nav.orders', 'Orders'),
       },
       VendorProducts: {
         icon: isFocused ? 'cube' : 'cube-outline',
-        label: 'Products',
+        label: t('nav.products', 'Products'),
       },
       VendorChats: {
         icon: isFocused ? 'chatbubble' : 'chatbubble-outline',
-        label: 'Chats',
+        label: t('nav.chats', 'Chats'),
       },
       VendorProfile: {
         icon: isFocused ? 'person' : 'person-outline',
-        label: 'Profile',
+        label: t('nav.profile', 'Profile'),
       },
     };
     return configs[routeName] || configs.VendorDashboard;
