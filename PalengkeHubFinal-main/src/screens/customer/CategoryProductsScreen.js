@@ -9,7 +9,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Dimensions,
   Alert,
   Image,
   Animated,
@@ -17,6 +16,7 @@ import {
   Platform,
   ScrollView,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -34,11 +34,18 @@ import { CATEGORY_CHIPS_BY_NAME, CATEGORY_TONES } from '../../constants/category
 import { WovenBackground } from '../../components/WovenBackground';
 import { fetchAllStallRatings } from '../../services/stallRatingsService';
 
-const { width } = Dimensions.get('window');
 // D-08: 2 columns at 375px, widening on larger (web) viewports rather than
-// stretching two enormous cards.
-const numColumns = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
-const gridCardWidthPct = `${Math.floor(100 / numColumns) - 2}%`;
+// stretching two enormous cards. numColumns/gridCardWidthPct used to be
+// computed once here at module-load time from Dimensions.get('window') —
+// whatever the viewport happened to measure at that single instant (which
+// on web can be a placeholder size before layout settles), frozen for the
+// rest of the app session. Every category shared this one file, so a
+// wrong-for-the-real-viewport width/column mismatch showed up on every
+// category: cards sized for N columns rendered into a row actually laid
+// out for a different N, overlapping the row below. Moved inside the
+// component via useWindowDimensions() (same fix HomeScreen.js already
+// needed for its own card-width computation) so both stay correct as the
+// real viewport is measured and on any later resize/rotation.
 
 // CATEGORY_CONFIG used to be its own hand-maintained copy of icon +
 // description, kept in sync with HomeScreen.js's category chips "by
@@ -243,6 +250,10 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const { isDark } = useTheme();
   const { t, locale } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
+
+  const { width } = useWindowDimensions();
+  const numColumns = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
+  const gridCardWidthPct = `${Math.floor(100 / numColumns) - 2}%`;
 
   // See ChatDetailScreen.js for why this screen announces itself directly
   // instead of App.js trying to infer the active screen from outside.
@@ -1184,7 +1195,15 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   stallChipScroll: {
     flexGrow: 0,
-    height: 42 + SPACING.md * 2,
+    // Was a fixed `height` computed to the exact pixel needed (chip's own
+    // 42 minHeight + this row's own top/bottom padding, zero margin for
+    // error) — any small rendering discrepancy (border-box sizing, font
+    // metrics, sub-pixel rounding) pushed the real content past that exact
+    // height, and a fixed height on a ScrollView clips overflow instead of
+    // growing to fit, cutting the chips down to a sliver. minHeight (with
+    // a bit of real slack) lets it grow if it ever needs to, instead of
+    // silently clipping the one thing in this row people need to tap.
+    minHeight: 42 + SPACING.md * 2 + SPACING.sm,
   },
   stallChipRow: {
     alignItems: 'center',

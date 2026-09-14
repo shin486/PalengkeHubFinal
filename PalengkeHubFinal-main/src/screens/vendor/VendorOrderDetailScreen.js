@@ -85,6 +85,24 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [paymentWasInsufficient, setPaymentWasInsufficient] = useState(false);
+
+  // react-native-web does NOT implement Alert.alert — it silently no-ops,
+  // so every Alert.alert in this file (success confirmations AND error
+  // messages) was invisible when testing on web. Same fix as
+  // CheckoutContent.js this session.
+  const notify = (title, message) => {
+    if (Platform.OS === 'web') {
+      window.alert(message ? `${title}\n\n${message}` : title);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  const openRejectModal = () => {
+    setPaymentWasInsufficient(false);
+    setShowRejectModal(true);
+  };
 
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
@@ -159,10 +177,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       }
 
       await fetchOrder();
-      Alert.alert(t('common.success', 'Success'), t('vendor_order_detail.status_updated', 'Order status updated'));
+      notify(t('common.success', 'Success'), t('vendor_order_detail.status_updated', 'Order status updated'));
     } catch (err) {
       console.error('Error updating order:', err);
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_update', 'Failed to update order'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_update', 'Failed to update order'));
     } finally {
       setUpdating(false);
     }
@@ -194,10 +212,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       });
 
       await fetchOrder();
-      Alert.alert(t('vendor_order_detail.payment_approved', 'Payment Approved'), t('vendor_order_detail.payment_verified_desc', 'Payment verified and order is now preparing'));
+      notify(t('vendor_order_detail.payment_approved', 'Payment Approved'), t('vendor_order_detail.payment_verified_desc', 'Payment verified and order is now preparing'));
     } catch (err) {
       console.error('Error approving payment:', err);
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment'));
     } finally {
       setUpdating(false);
     }
@@ -209,7 +227,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const confirmRejectPayment = async () => {
     if (!order || !rejectReason.trim()) {
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.provide_reason_rejection', 'Please provide a reason for rejection'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.provide_reason_rejection', 'Please provide a reason for rejection'));
       return;
     }
     setUpdating(true);
@@ -238,10 +256,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       await fetchOrder();
       setShowPaymentModal(false);
       setRejectReason('');
-      Alert.alert(t('vendor_order_detail.payment_rejected_title', 'Payment Rejected'), t('vendor_order_detail.customer_notified', 'Customer has been notified'));
+      notify(t('vendor_order_detail.payment_rejected_title', 'Payment Rejected'), t('vendor_order_detail.customer_notified', 'Customer has been notified'));
     } catch (err) {
       console.error('Error rejecting payment:', err);
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment'));
     } finally {
       setUpdating(false);
     }
@@ -249,9 +267,17 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const handleRejectOrder = async () => {
     if (!order || !rejectReason.trim()) {
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.provide_reason', 'Please provide a reason'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.provide_reason', 'Please provide a reason'));
       return;
     }
+    // A customer who already submitted payment proof (payment_status
+    // stays 'awaiting_verification' — cancelling here never touches it)
+    // is owed either fulfillment or a refund. Cancelling that order
+    // without a trace left the customer with no recourse. The vendor's
+    // "insufficient payment" checkbox is the one legitimate exemption —
+    // if the customer underpaid, cancelling isn't a dispute-worthy event.
+    const hadPayment = order.payment_status === 'awaiting_verification';
+    const disputable = hadPayment && !paymentWasInsufficient;
     setRejecting(true);
     try {
       const { error } = await supabase
@@ -259,6 +285,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         .update({
           status: 'cancelled',
           cancel_reason: rejectReason.trim(),
+          payment_insufficient: hadPayment ? paymentWasInsufficient : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', order.id);
@@ -267,10 +294,12 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
       await supabase.from('notifications').insert({
         user_id: order.consumer_id,
-        title: 'Order Cancelled',
-        message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${rejectReason}`,
+        title: disputable ? 'Order Cancelled — Refund Needed' : 'Order Cancelled',
+        message: disputable
+          ? `Your order #${order.order_number?.slice(-8)} was cancelled after you already paid. Reason: ${rejectReason}. Open the order in your Orders tab to file a dispute and request a refund.`
+          : `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${rejectReason}`,
         type: 'order',
-        data: { order_id: order.id, type: 'cancellation' },
+        data: { order_id: order.id, type: disputable ? 'cancelled_after_payment' : 'cancellation' },
         is_read: false,
         created_at: new Date().toISOString(),
       });
@@ -278,10 +307,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       await fetchOrder();
       setShowRejectModal(false);
       setRejectReason('');
-      Alert.alert(t('vendor_order_detail.order_rejected_title', 'Order Rejected'), t('vendor_order_detail.order_cancelled_desc', 'The order has been cancelled'));
+      setPaymentWasInsufficient(false);
+      notify(t('vendor_order_detail.order_rejected_title', 'Order Rejected'), t('vendor_order_detail.order_cancelled_desc', 'The order has been cancelled'));
     } catch (err) {
       console.error('Error rejecting order:', err);
-      Alert.alert(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_order', 'Failed to reject order'));
+      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_order', 'Failed to reject order'));
     } finally {
       setRejecting(false);
     }
@@ -315,6 +345,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   }
 
   const { steps, currentIdx } = getTimeline(order.status, t);
+  // Same source of truth as ModernOrderCard.js: once payment is awaiting
+  // verification, Approve/Reject Payment supersede Accept/Reject Order —
+  // approving payment already advances status straight to 'preparing'.
+  const paymentNeedsVerification = order.payment_status === 'awaiting_verification';
 
   return (
     <View style={styles.container}>
@@ -529,11 +563,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         {/* Order Actions */}
         {order.status !== 'completed' && order.status !== 'cancelled' && (order.status !== 'pending' || order.payment_status !== 'awaiting_verification') && (
           <View style={styles.actionsSection}>
-            {order.status === 'pending' && (
+            {order.status === 'pending' && !paymentNeedsVerification && (
               <View style={styles.actionsRow}>
                 <TouchableOpacity
                   style={[styles.mainActionBtn, styles.rejectBtn]}
-                  onPress={() => setShowRejectModal(true)}
+                  onPress={openRejectModal}
                   disabled={updating}
                   activeOpacity={0.7}
                 >
@@ -550,6 +584,20 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
                   <Text style={styles.mainActionText}>{t('vendor_order_detail.accept_order', 'Accept Order')}</Text>
                 </TouchableOpacity>
               </View>
+            )}
+
+            {/* Payment is already awaiting verification above — Approve/Reject
+                Payment are the primary actions. Full order cancellation is
+                still possible (e.g. out of stock) but demoted to a secondary
+                link so it doesn't compete with the payment decision. */}
+            {order.status === 'pending' && paymentNeedsVerification && (
+              <TouchableOpacity
+                style={styles.cancelAnywayLink}
+                onPress={openRejectModal}
+                disabled={updating}
+              >
+                <Text style={styles.cancelAnywayText}>Cancel this order instead</Text>
+              </TouchableOpacity>
             )}
 
             {order.status === 'confirmed' && (
@@ -629,6 +677,31 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
               multiline
               numberOfLines={4}
             />
+
+            {paymentNeedsVerification && (
+              <>
+                <TouchableOpacity
+                  style={styles.insufficientCheckRow}
+                  onPress={() => setPaymentWasInsufficient(!paymentWasInsufficient)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={paymentWasInsufficient ? 'checkbox' : 'square-outline'}
+                    size={20}
+                    color={paymentWasInsufficient ? vendorColors.warning : vendorColors.text.tertiary}
+                  />
+                  <Text style={styles.insufficientCheckText}>
+                    Customer's payment was insufficient (didn't cover the order total)
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.disputeWarning}>
+                  {paymentWasInsufficient
+                    ? "No dispute will be filed — the customer's own underpayment caused this."
+                    : 'The customer already submitted payment for this order. Cancelling will tell them to file a dispute for a refund.'}
+                </Text>
+              </>
+            )}
+
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowRejectModal(false)}>
                 <Text style={styles.modalCancelText}>{t('common.cancel', 'Cancel')}</Text>
@@ -1006,6 +1079,17 @@ const createStyles = (vendorColors) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  cancelAnywayLink: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  cancelAnywayText: {
+    color: vendorColors.danger,
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   fullActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1100,6 +1184,24 @@ const createStyles = (vendorColors) => StyleSheet.create({
     color: vendorColors.text.primary,
     textAlignVertical: 'top',
     minHeight: 80,
+  },
+  insufficientCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  insufficientCheckText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: vendorColors.text.secondary,
+  },
+  disputeWarning: {
+    fontSize: 11,
+    color: vendorColors.text.tertiary,
+    marginTop: 6,
+    lineHeight: 15,
   },
   modalButtons: {
     flexDirection: 'row',

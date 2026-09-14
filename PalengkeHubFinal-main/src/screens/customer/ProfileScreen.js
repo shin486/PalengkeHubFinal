@@ -732,6 +732,12 @@ export default function ProfileScreen({ navigation }) {
             </TouchableOpacity>
           )}
 
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('CustomerReports')}>
+            <Ionicons name="flag-outline" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
+            <Text style={styles.menuItemText}>{t('reports.my_reports')}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('HelpSupport', { role: 'customer' })}>
             <Ionicons name="help-circle" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('profile_shared.help_support')}</Text>

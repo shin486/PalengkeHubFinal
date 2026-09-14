@@ -19,35 +19,11 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
 import { useColors } from '../../contexts/ThemeContext';
 import { SPACING, RADIUS, TYPE } from '../../theme/tokens';
+import { ensureLeafletCss, ensureDefaultIcon } from '../../utils/leafletSetup';
 
-const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-const LEAFLET_VERSION_PATH = 'https://unpkg.com/leaflet@1.9.4/dist/images/';
 const PIN_SIZE = 36;
-
-let iconConfigured = false;
-function ensureDefaultIcon() {
-  if (iconConfigured) return;
-  iconConfigured = true;
-  delete L.Icon.Default.prototype._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconUrl: `${LEAFLET_VERSION_PATH}marker-icon.png`,
-    iconRetinaUrl: `${LEAFLET_VERSION_PATH}marker-icon-2x.png`,
-    shadowUrl: `${LEAFLET_VERSION_PATH}marker-shadow.png`,
-  });
-}
-
-function ensureLeafletCss() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById('leaflet-css')) return;
-  const link = document.createElement('link');
-  link.id = 'leaflet-css';
-  link.rel = 'stylesheet';
-  link.href = LEAFLET_CSS_URL;
-  document.head.appendChild(link);
-}
 
 // Must live inside <MapContainer> — useMapEvents only works in that
 // context. Reports the map's center whenever the vendor stops panning

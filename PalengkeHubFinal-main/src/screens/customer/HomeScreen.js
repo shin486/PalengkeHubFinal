@@ -795,6 +795,54 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const { t } = useI18n();
   const { colors, isDark } = useTheme();
   const { items: lastViewedItems } = useLastViewed();
+  // useLastViewed's AsyncStorage snapshot is taken once, at view time, and
+  // never updated — good for tracking recency/order (that's genuinely
+  // client-local browsing history), but a bad source for the photo/price
+  // shown here: if a vendor added a photo (or changed the price) any time
+  // after a customer viewed that product, this section kept showing the
+  // old, blank-photo/stale-price snapshot forever. "Buy Again" below
+  // already avoids this by re-reading currentProduct.image_url fresh from
+  // the DB — same fix here, keyed off the cached list's ids and order.
+  const [freshLastViewed, setFreshLastViewed] = useState([]);
+  useEffect(() => {
+    if (!lastViewedItems.length) {
+      setFreshLastViewed([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const ids = lastViewedItems.map((i) => i.id);
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, price, image_url, stalls:stall_id (stall_name)')
+          .in('id', ids);
+        if (error) throw error;
+        if (cancelled) return;
+        const byId = new Map((data || []).map((p) => [p.id, p]));
+        // Keep the cached recency order; drop anything since deleted/
+        // unlisted rather than show stale ghost data for it.
+        const merged = lastViewedItems
+          .map((cached) => {
+            const live = byId.get(cached.id);
+            if (!live) return null;
+            return {
+              id: live.id,
+              name: live.name,
+              image: live.image_url,
+              price: live.price,
+              stall_name: live.stalls?.stall_name || cached.stall_name,
+            };
+          })
+          .filter(Boolean);
+        setFreshLastViewed(merged);
+      } catch (e) {
+        console.warn('Recently Viewed live refresh failed, using cached snapshot:', e.message);
+        if (!cancelled) setFreshLastViewed(lastViewedItems);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lastViewedItems]);
   // Computed fresh here (not a module-level snapshot at import time) so
   // it can't go stale relative to the real viewport — that staleness is
   // exactly what blew card widths up to ~4x on first web-preview load.
@@ -1270,6 +1318,15 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 </Text>
               </View>
 
+              {/* Market Map */}
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => navigation.navigate('MarketMap')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="map-outline" size={22} color={colors.text.primary} />
+              </TouchableOpacity>
+
               {/*  Notification Bell */}
               <TouchableOpacity
                 style={styles.notificationButton}
@@ -1518,7 +1575,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         {/* ============================================================
             RECENTLY VIEWED
         ============================================================ */}
-        {lastViewedItems.length > 0 && (
+        {freshLastViewed.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
@@ -1531,7 +1588,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
             >
-              {lastViewedItems.map((item) => (
+              {freshLastViewed.map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.productCard, { marginRight: SPACING.md }]}

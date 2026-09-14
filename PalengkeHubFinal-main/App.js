@@ -50,6 +50,7 @@ import ProductDetailsScreen from './src/screens/customer/ProductDetailsScreen';
 import StallsDirectoryScreen from './src/screens/customer/StallsDirectoryScreen';
 import StallDetailsScreen from './src/screens/customer/StallDetailsScreen';
 import StallReviewsScreen from './src/screens/customer/StallReviewsScreen';
+import MarketMapScreen from './src/screens/customer/MarketMapScreen';
 import CartScreen from './src/screens/customer/CartScreen';
 import SearchScreen from './src/screens/customer/SearchScreen';
 import OrdersScreen from './src/screens/customer/OrdersScreen';
@@ -74,7 +75,7 @@ import VendorReportsListScreen from './src/screens/vendor/VendorReportsListScree
 import VendorOffersScreen from './src/screens/vendor/VendorOffersScreen';
 import VendorPromotionsScreen from './src/screens/vendor/VendorPromotionsScreen';
 
-// Shared Screens
+// Shared screens (reached from both the customer and vendor Profile screens)
 import HelpSupportScreen from './src/screens/shared/HelpSupportScreen';
 import PrivacyPolicyScreen from './src/screens/shared/PrivacyPolicyScreen';
 
@@ -394,6 +395,11 @@ function AppStack({ isGuest }) {
         return { title: 'My Profile', subtitle: 'Manage your account' };
       case 'StallsDirectory':
         return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
+      case 'MarketMap':
+        // MarketMapScreen used to render its own Header underneath this
+        // one — same redundant-header bug as Notifications above, same
+        // fix: this global header (with showBack) replaces it.
+        return { title: 'Market Map', subtitle: 'Every pinned stall in one place', showBack: true };
       case 'Favorites':
         return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
       case 'StallReviews':
@@ -464,6 +470,7 @@ function AppStack({ isGuest }) {
         <Stack.Screen name="StallDetails" component={StallDetailsScreen} />
         <Stack.Screen name="StallReviews" component={StallReviewsScreen} />
         <Stack.Screen name="StallsDirectory" component={StallsDirectoryScreen} />
+        <Stack.Screen name="MarketMap" component={MarketMapScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="PickupPass" component={PickupPassScreen} />
         <Stack.Screen name="Notifications" component={NotificationScreen} />
@@ -596,10 +603,18 @@ function RootNavigator() {
 
   if (isGuest) {
     initialRoute = 'App';
-  } else if (user && profile?.role === 'vendor') {
-    initialRoute = vendorRouteFor(vendorStatus);
-  } else if (user && profile?.role === 'consumer') {
-    initialRoute = 'App';
+  } else if (user) {
+    // A signed-in user always gets routed forward, even if `profile`
+    // hasn't resolved (still loading, or the fetch failed — RLS hiccup,
+    // network blip, whatever). This used to require profile?.role to be
+    // exactly 'vendor' or 'consumer', so a null/slow profile silently
+    // fell through to the 'Login' default DESPITE a valid session —
+    // "I signed in and landed back on the Login page". The reactive
+    // redirect effect above already treats "user but no vendor profile"
+    // as 'App' (see `target = profile?.role === 'vendor' ? ... : 'App'`);
+    // this just makes the initial synchronous route agree with it instead
+    // of contradicting it for that first render.
+    initialRoute = profile?.role === 'vendor' ? vendorRouteFor(vendorStatus) : 'App';
   }
 
   return (
@@ -635,6 +650,14 @@ function RootNavigator() {
         <Stack.Screen name="VendorReportsList" component={VendorReportsListScreen} />
         <Stack.Screen name="VendorOffers" component={VendorOffersScreen} />
         <Stack.Screen name="VendorPromotions" component={VendorPromotionsScreen} />
+        {/* Reached from both ProfileScreen.js (customer, nested inside "App")
+            and VendorProfileScreen.js (vendor, on this root stack directly) --
+            registering once here lets both find it via React Navigation's
+            bubble-up-to-parent lookup. Never registered before, so every tap
+            was a silent no-op (see the VendorApplicationStatus comment above
+            for why that's silent, not an error). */}
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
         {/* VendorNotifications lives on this root navigator (not nested inside
             "App" like its customer-side twin above), so VendorApplicationStatus
             needs its own registration here too — navigating to a screen name

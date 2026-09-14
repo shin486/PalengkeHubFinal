@@ -81,18 +81,18 @@ const OrderCardInner = ({ order, onUpdateStatus, onRejectOrder, onRequestPayment
     { id: 'other', label: t('vendor_orders.reason_other', 'Other (custom reason)') },
   ], [t]);
 
-  const nextStep = getNextStatus(order.status, t);
-  const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled';
-  const canReject = order.status === 'pending';
-  const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
-  const canProposeChange = order.status === 'pending';
+  // A submitted-but-unverified payment makes Approve/Reject the only
+  // sensible actions — handleApprovePayment jumps status straight to
+  // 'preparing' (not 'confirmed'), so the separate order-level Reject and
+  // "Confirm Order" buttons weren't just redundant, they raced the same
+  // order against two different, sometimes-conflicting action paths at
+  // once.
   const paymentNeedsVerification = order.payment_status === 'awaiting_verification';
-  // Nothing in the pending->confirmed->preparing->ready->completed ladder
-  // ever checked payment_status — a vendor could tap through to
-  // "Complete Order" with payment never requested or verified. Only the
-  // final step is gated (a confirm, not a hard block — some vendors take
-  // payment outside the tracked GCash-receipt flow) since the earlier
-  // steps are prep work that legitimately can happen before payment.
+  const nextStep = getNextStatus(order.status, t);
+  const canUpdate = nextStep && order.status !== 'completed' && order.status !== 'cancelled' && !paymentNeedsVerification;
+  const canReject = order.status === 'pending' && !paymentNeedsVerification;
+  const canRequestPayment = order.status === 'confirmed' && !['verified', 'paid', 'awaiting_verification', 'rejected'].includes(order.payment_status);
+  const canProposeChange = order.status === 'pending' && !paymentNeedsVerification;
   const isPaymentUnverified = !['verified', 'paid'].includes(order.payment_status);
 
   const handleUpdatePress = () => {

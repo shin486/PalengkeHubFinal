@@ -2,10 +2,51 @@
 
 ## Prerequisites
 - Android SDK installed and configured
-- **Java JDK 17+** installed (Gradle 8.14.3 + AGP 8.x requires Java 17+)
-  - Android Studio's bundled JBR (Java 17/21/25) works automatically via `gradle.properties`
+- **Java JDK 17 or 21 — NOT 25.** Recent Android Studio installs bundle a
+  Java 25 JBR, but this project's Gradle/Kotlin DSL version (8.14.3) crashes
+  trying to parse that version string (`IllegalArgumentException: 25.0.2`
+  in `enforce_order_update_rules`-unrelated Kotlin compiler code, thrown from
+  `JavaVersion.parse`). Point `JAVA_HOME` at a real JDK 17 install instead
+  (e.g. `C:\Program Files\Microsoft\jdk-17.x.x.x-hotspot`) before running
+  gradle — do NOT rely on Android Studio's bundled JBR for this project
+  until it upgrades past this Gradle version.
 - Node.js and npm installed
 - Android Studio (recommended for APK building)
+
+## IMPORTANT: `android/` is gitignored
+
+This folder is NOT tracked in git — every fix below lives only on the
+machine that made it until someone manually re-applies it after a fresh
+`expo prebuild` or a fresh clone that regenerates `android/`. If you hit
+the errors described below, this is why: they were already fixed once,
+just not somewhere git can carry forward.
+
+**`android/gradle.properties`** — `reactNativeArchitectures` must be
+`arm64-v8a` only, not the default `armeabi-v7a,arm64-v8a,x86,x86_64`.
+Building all four ABIs produces a ~110-210MB "universal" APK, which
+GitHub's push hard-rejects past 100MB, and armeabi-v7a's native build
+fails outright on Windows checkouts with a CMake path-length error in a
+node_modules staging path unrelated to this app.
+
+**`android/app/proguard-rules.pro`** — needs `-dontwarn com.gemalto.jp2.JP2Decoder`.
+Without it, `assembleRelease` with minification enabled fails R8 with
+"Missing class com.gemalto.jp2.JP2Decoder" — an optional JPEG2000 decoder
+class referenced by `react-native-html-to-pdf`'s PdfBox-Android dependency
+that's never actually bundled (and never needed, since this app never
+parses JPX-encoded images in a PDF).
+
+**Before running `cap sync android`**, run a FULL `npx expo export` (not
+`--platform android` — Capacitor's sync needs `dist/index.html`, which
+only a full/web export produces), then after `cap sync android` completes,
+delete the iOS and web JS bundles it copied into the Android build that
+Android never uses:
+```bash
+rm -rf android/app/src/main/assets/public/_expo/static/js/ios
+rm -rf android/app/src/main/assets/public/_expo/static/js/web
+```
+This alone saves ~9MB — the difference between an APK that fits under
+GitHub's 100MB limit and one that doesn't, even after the ABI restriction
+and release minification above.
 
 ## Steps to Rebuild the APK
 

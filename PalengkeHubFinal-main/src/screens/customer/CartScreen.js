@@ -11,6 +11,7 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,10 +21,41 @@ import { EmptyState } from '../../components/EmptyState';
 import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import CheckoutContent from '../../components/CheckoutContent';
+import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
 
 const TABS = {
   CART: 'cart',
   CHECKOUT: 'checkout',
+};
+
+// Own component (not inline in the stall .map() below) so each row can
+// track its own image load/error state — a hook can't live inside a
+// .map() callback. Same three-tier fallback used everywhere else a
+// product photo renders (real photo -> curated fallback -> icon): cart
+// rows never had an image slot at all before, so every item showed as
+// text-only regardless of whether the product actually had a photo.
+const CartItemThumb = ({ name, imageUrl, style }) => {
+  const [imageError, setImageError] = useState(false);
+  const fallbackPhoto = !imageUrl || imageError ? getProductFallbackPhoto(name) : null;
+
+  if (imageUrl && !imageError) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={style}
+        resizeMode="cover"
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+  if (fallbackPhoto) {
+    return <Image source={fallbackPhoto} style={style} resizeMode="cover" />;
+  }
+  return (
+    <View style={[style, { justifyContent: 'center', alignItems: 'center' }]}>
+      <Ionicons name="cart-outline" size={22} color="#B8A99A" />
+    </View>
+  );
 };
 
 export default function CartScreen({ navigation, route }) {
@@ -37,24 +69,31 @@ export default function CartScreen({ navigation, route }) {
   const [closedStallIds, setClosedStallIds] = useState([]);
   const [activeTab, setActiveTab] = useState(TABS.CART);
 
+  // ProductDetailsScreen's "Buy Now" hands over a fully-formed item instead
+  // of relying on the shared cart (add-then-select-only-this-item raced
+  // against the cart's own fetch/sync and could land here before the item
+  // existed, showing an empty ₱0.00 checkout). When present, this item is
+  // what gets checked out — the customer's actual cart is never read or
+  // touched for this purchase, so anything already sitting in it can't get
+  // swept in.
+  const directBuyItem = route?.params?.directBuyItem || null;
+  useEffect(() => {
+    if (directBuyItem && route?.params?.openCheckout) {
+      setActiveTab(TABS.CHECKOUT);
+    }
+  }, [directBuyItem, route?.params?.openCheckout]);
+
   // Which cart items are checked in for "this checkout" — the rest stay
   // in the cart untouched. Defaults to everything selected on a normal
-  // cart visit; arriving via ProductDetailsScreen's "Proceed to Checkout"
-  // (route.params.checkoutOnlyProductId) starts with only that one item
-  // checked, so a "buy this now" tap doesn't sweep up unrelated items the
-  // customer was saving for later.
+  // cart visit (a direct-buy visit skips this entirely — see directBuyItem
+  // above).
   const [selectedIds, setSelectedIds] = useState(new Set());
   const selectionInitialized = useRef(false);
   useEffect(() => {
-    if (cart.length === 0) return;
+    if (directBuyItem || cart.length === 0) return;
     setSelectedIds(prev => {
       if (!selectionInitialized.current) {
         selectionInitialized.current = true;
-        const onlyId = route?.params?.checkoutOnlyProductId;
-        if (onlyId != null) {
-          if (route?.params?.openCheckout) setActiveTab(TABS.CHECKOUT);
-          return new Set([onlyId]);
-        }
         return new Set(cart.map(item => item.product_id));
       }
       // Newly-added items (added while already on this screen) default
@@ -67,7 +106,7 @@ export default function CartScreen({ navigation, route }) {
       });
       return changed ? next : prev;
     });
-  }, [cart, route?.params?.checkoutOnlyProductId]);
+  }, [cart, directBuyItem]);
 
   const toggleSelected = (productId) => {
     setSelectedIds(prev => {
@@ -78,7 +117,29 @@ export default function CartScreen({ navigation, route }) {
     });
   };
 
-  const selectedItems = cart.filter(item => selectedIds.has(item.product_id));
+  // One tap to select/deselect every item from a single stall — each stall
+  // pays out separately (own GCash), so "everything from this vendor" is
+  // the natural unit to act on, same as the reference layout's per-seller
+  // checkbox next to the store name.
+  const isStallFullySelected = (items) => items.length > 0 && items.every(item => selectedIds.has(item.product_id));
+  const toggleStallSelected = (items) => {
+    const allSelected = isStallFullySelected(items);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      items.forEach(item => {
+        if (allSelected) next.delete(item.product_id);
+        else next.add(item.product_id);
+      });
+      return next;
+    });
+  };
+
+  const isAllSelected = cart.length > 0 && cart.every(item => selectedIds.has(item.product_id));
+  const toggleSelectAll = () => {
+    setSelectedIds(isAllSelected ? new Set() : new Set(cart.map(item => item.product_id)));
+  };
+
+  const selectedItems = directBuyItem ? [directBuyItem] : cart.filter(item => selectedIds.has(item.product_id));
   const selectedTotal = selectedItems.reduce((sum, item) => sum + (item.quantity || 1) * item.price, 0);
 
   useFocusEffect(
@@ -255,6 +316,19 @@ export default function CartScreen({ navigation, route }) {
           <View key={stallId} style={[styles.stallSection, data.isClosed && styles.closedStallSection]}>
             <View style={styles.stallHeader}>
               <View style={styles.stallHeaderLeft}>
+                {!data.isClosed && (
+                  <TouchableOpacity
+                    onPress={() => toggleStallSelected(data.items)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={isStallFullySelected(data.items) ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={isStallFullySelected(data.items) ? COLORS.primary : COLORS.text.tertiary}
+                    />
+                  </TouchableOpacity>
+                )}
                 <View style={styles.stallIconWrap}>
                   <Ionicons name="storefront-outline" size={18} />
                 </View>
@@ -272,67 +346,67 @@ export default function CartScreen({ navigation, route }) {
             
             {data.items.map((item) => (
               <View key={item.product_id} style={styles.cartItem}>
-                {/* Product name on top, full width */}
-                <View style={styles.itemTopRow}>
-                  <View style={styles.itemNameRow}>
-                    {!data.isClosed && (
-                      <TouchableOpacity
-                        onPress={() => toggleSelected(item.product_id)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name={selectedIds.has(item.product_id) ? 'checkbox' : 'square-outline'}
-                          size={22}
-                          color={selectedIds.has(item.product_id) ? COLORS.primary : COLORS.text.tertiary}
-                        />
-                      </TouchableOpacity>
-                    )}
-                    <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                  </View>
+                <View style={styles.itemMainRow}>
                   {!data.isClosed && (
                     <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => removeItem(item.product_id)}
-                      activeOpacity={0.6}
+                      onPress={() => toggleSelected(item.product_id)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      <Ionicons
+                        name={selectedIds.has(item.product_id) ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={selectedIds.has(item.product_id) ? COLORS.primary : COLORS.text.tertiary}
+                      />
                     </TouchableOpacity>
                   )}
-                </View>
 
-                <View style={styles.itemBottomRow}>
-                  <View style={styles.itemInfo}>
+                  <CartItemThumb name={item.name} imageUrl={item.image_url} style={styles.itemThumb} />
+
+                  <View style={styles.itemDetails}>
+                    <View style={styles.itemTopRow}>
+                      <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                      {!data.isClosed && (
+                        <TouchableOpacity
+                          style={styles.removeBtn}
+                          onPress={() => removeItem(item.product_id)}
+                          activeOpacity={0.6}
+                        >
+                          <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
                     <Text style={styles.itemPrice}>₱{item.price.toFixed(2)} / {item.unit}</Text>
-                  </View>
 
-                  <View style={styles.itemRightSection}>
-                    {!data.isClosed ? (
-                      <View style={styles.quantityControls}>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => updateItemQuantity(item, -1)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.quantityButtonText}>−</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => updateItemQuantity(item, 1)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.quantityButtonText}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View style={styles.closedItemBadge}>
-                        <Text style={styles.closedItemLabel}>Closed</Text>
-                      </View>
-                    )}
-                    <Text style={styles.itemTotal}>
-                      ₱{((item.quantity || 1) * item.price).toFixed(2)}
-                    </Text>
+                    <View style={styles.itemBottomRow}>
+                      {!data.isClosed ? (
+                        <View style={styles.quantityControls}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => updateItemQuantity(item, -1)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.quantityButtonText}>−</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => updateItemQuantity(item, 1)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.quantityButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.closedItemBadge}>
+                          <Text style={styles.closedItemLabel}>Closed</Text>
+                        </View>
+                      )}
+                      <Text style={styles.itemTotal}>
+                        ₱{((item.quantity || 1) * item.price).toFixed(2)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -345,34 +419,30 @@ export default function CartScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Cart</Text>
-        {cart.length > 0 && (
-          <TouchableOpacity onPress={clearCart}>
-            <Text style={styles.clearText}>Clear All</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Tabs */}
+      {/* Tabs + Clear All — no separate "My Cart" header bar; the shared
+          "My PalengKart" header above this screen already says that. */}
       {cart.length > 0 && (
         <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === TABS.CART && styles.activeTab]}
-            onPress={() => setActiveTab(TABS.CART)}
-          >
-            <Text style={[styles.tabText, activeTab === TABS.CART && styles.activeTabText]}>
-              Cart ({cart.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === TABS.CHECKOUT && styles.activeTab]}
-            onPress={() => setActiveTab(TABS.CHECKOUT)}
-          >
-            <Text style={[styles.tabText, activeTab === TABS.CHECKOUT && styles.activeTabText]}>
-              Checkout
-            </Text>
+          <View style={styles.tabGroup}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === TABS.CART && styles.activeTab]}
+              onPress={() => setActiveTab(TABS.CART)}
+            >
+              <Text style={[styles.tabText, activeTab === TABS.CART && styles.activeTabText]}>
+                Cart ({cart.length})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === TABS.CHECKOUT && styles.activeTab]}
+              onPress={() => setActiveTab(TABS.CHECKOUT)}
+            >
+              <Text style={[styles.tabText, activeTab === TABS.CHECKOUT && styles.activeTabText]}>
+                Checkout
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={clearCart} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.clearText}>Clear All</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -402,12 +472,24 @@ export default function CartScreen({ navigation, route }) {
       {activeTab === TABS.CART && (
         <View style={styles.footer}>
           <View style={styles.footerRow}>
-            <View style={styles.footerTotalLeft}>
-              <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
-              <Text style={styles.footerTotalItems}>
-                {selectedItems.length} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.footerSelectAll}
+              onPress={toggleSelectAll}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isAllSelected ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={isAllSelected ? COLORS.primary : COLORS.text.tertiary}
+              />
+              <View>
+                <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
+                <Text style={styles.footerTotalItems}>
+                  {selectedItems.length} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected
+                </Text>
+              </View>
+            </TouchableOpacity>
             <Text style={styles.footerTotalAmount}>₱{selectedTotal.toFixed(2)}</Text>
           </View>
           
@@ -489,21 +571,6 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
 
   // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text.dark,
-  },
   clearText: {
     fontSize: 14,
     color: COLORS.primary,
@@ -513,11 +580,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   // Tabs
   tabContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
+  },
+  tabGroup: {
+    flexDirection: 'row',
   },
   tab: {
     paddingVertical: 8,
@@ -634,28 +706,31 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
+  itemMainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  itemThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    backgroundColor: COLORS.accentSoft,
+  },
+  itemDetails: {
+    flex: 1,
+  },
   itemTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  itemNameRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    paddingRight: 8,
-  },
   itemBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-  },
-  itemInfo: {
-    flex: 1,
-    paddingRight: 12,
   },
   itemName: {
     flex: 1,
@@ -668,11 +743,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   itemPrice: {
     fontSize: 13,
     color: COLORS.text.medium,
-  },
-  itemRightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    marginBottom: 10,
   },
   quantityControls: {
     flexDirection: 'row',
@@ -754,7 +825,10 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-  footerTotalLeft: {
+  footerSelectAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
   },
   footerTotalLabel: {
