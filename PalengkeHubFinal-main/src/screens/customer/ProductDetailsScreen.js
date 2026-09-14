@@ -784,8 +784,18 @@ export default function ProductDetailsScreen({ route, navigation }) {
     }
     
     if (product && stall) {
-      const cartProduct = {
+      // Built straight from screen state and handed to CheckoutScreen as-is
+      // (see CartScreen's directBuyItem handling) instead of going through
+      // addToCart()+"select only this item in the cart" — that round trip
+      // depended on the cart's own fetch/sync finishing before Checkout
+      // read it back, and a slow network (or the customer tapping through
+      // fast) could land on Checkout before the item was there, showing an
+      // empty ₱0.00 cart. This can't race: nothing here is Supabase-backed.
+      // Also means whatever the customer already has sitting in cart is
+      // never swept into a "buy this one now" purchase.
+      const directBuyItem = {
         ...product,
+        product_id: product.id,
         price: effectiveUnitPrice,
         selected_unit: selectedUnit,
         selected_unit_label: getUnitDisplayText(selectedUnit),
@@ -793,14 +803,17 @@ export default function ProductDetailsScreen({ route, navigation }) {
         original_unit: product.unit,
         original_price: product.price,
         promotion_applied: promotion ? true : false,
+        quantity,
+        stall_id: stall.id,
+        stall_name: stall.stall_name,
+        stall_number: stall.stall_number,
+        section: stall.section,
+        gcash_qr_url: stall.gcash_qr_url || null,
+        gcash_number: stall.gcash_number || null,
+        haggle_offer_id: hasAcceptedHaggle ? activeHaggle.id : undefined,
       };
-      
-      addToCart(cartProduct, stall.id, stall, quantity);
-      // checkoutOnlyProductId: CartScreen defaults selection to just this
-      // item (not the whole cart) so this is a real "buy this now"
-      // shortcut rather than accidentally sweeping in things saved for
-      // later. openCheckout jumps straight to the Checkout tab.
-      navigation.navigate('Cart', { checkoutOnlyProductId: product.id, openCheckout: true });
+
+      navigation.navigate('Cart', { directBuyItem, openCheckout: true });
     }
   };
 

@@ -174,6 +174,8 @@ export default function VendorNotificationsScreen({ navigation }) {
     markAsRead(notification);
     if (notification.type === 'vendor_resubmission') {
       navigation.navigate('VendorApplicationStatus', { applicationId: notification.data?.vendor_application_id });
+    } else if (notification.type === 'order' && notification.data?.order_id) {
+      navigation.navigate('VendorOrderDetail', { orderId: notification.data.order_id });
     }
   };
 

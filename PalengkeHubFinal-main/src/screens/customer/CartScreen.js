@@ -69,24 +69,31 @@ export default function CartScreen({ navigation, route }) {
   const [closedStallIds, setClosedStallIds] = useState([]);
   const [activeTab, setActiveTab] = useState(TABS.CART);
 
+  // ProductDetailsScreen's "Buy Now" hands over a fully-formed item instead
+  // of relying on the shared cart (add-then-select-only-this-item raced
+  // against the cart's own fetch/sync and could land here before the item
+  // existed, showing an empty ₱0.00 checkout). When present, this item is
+  // what gets checked out — the customer's actual cart is never read or
+  // touched for this purchase, so anything already sitting in it can't get
+  // swept in.
+  const directBuyItem = route?.params?.directBuyItem || null;
+  useEffect(() => {
+    if (directBuyItem && route?.params?.openCheckout) {
+      setActiveTab(TABS.CHECKOUT);
+    }
+  }, [directBuyItem, route?.params?.openCheckout]);
+
   // Which cart items are checked in for "this checkout" — the rest stay
   // in the cart untouched. Defaults to everything selected on a normal
-  // cart visit; arriving via ProductDetailsScreen's "Proceed to Checkout"
-  // (route.params.checkoutOnlyProductId) starts with only that one item
-  // checked, so a "buy this now" tap doesn't sweep up unrelated items the
-  // customer was saving for later.
+  // cart visit (a direct-buy visit skips this entirely — see directBuyItem
+  // above).
   const [selectedIds, setSelectedIds] = useState(new Set());
   const selectionInitialized = useRef(false);
   useEffect(() => {
-    if (cart.length === 0) return;
+    if (directBuyItem || cart.length === 0) return;
     setSelectedIds(prev => {
       if (!selectionInitialized.current) {
         selectionInitialized.current = true;
-        const onlyId = route?.params?.checkoutOnlyProductId;
-        if (onlyId != null) {
-          if (route?.params?.openCheckout) setActiveTab(TABS.CHECKOUT);
-          return new Set([onlyId]);
-        }
         return new Set(cart.map(item => item.product_id));
       }
       // Newly-added items (added while already on this screen) default
@@ -99,7 +106,7 @@ export default function CartScreen({ navigation, route }) {
       });
       return changed ? next : prev;
     });
-  }, [cart, route?.params?.checkoutOnlyProductId]);
+  }, [cart, directBuyItem]);
 
   const toggleSelected = (productId) => {
     setSelectedIds(prev => {
@@ -132,7 +139,7 @@ export default function CartScreen({ navigation, route }) {
     setSelectedIds(isAllSelected ? new Set() : new Set(cart.map(item => item.product_id)));
   };
 
-  const selectedItems = cart.filter(item => selectedIds.has(item.product_id));
+  const selectedItems = directBuyItem ? [directBuyItem] : cart.filter(item => selectedIds.has(item.product_id));
   const selectedTotal = selectedItems.reduce((sum, item) => sum + (item.quantity || 1) * item.price, 0);
 
   useFocusEffect(
