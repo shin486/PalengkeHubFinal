@@ -23,6 +23,7 @@ import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
 // migration) rendered nothing at all with no onError handling — not
 // broken, not a placeholder, just blank space.
 const FavoriteProductThumb = ({ product, style, placeholderStyle }) => {
+  const COLORS = useColors();
   const [imageError, setImageError] = useState(false);
   const fallbackPhoto = (!product.image_url || imageError) ? getProductFallbackPhoto(product.name) : null;
 
@@ -34,7 +35,7 @@ const FavoriteProductThumb = ({ product, style, placeholderStyle }) => {
   }
   return (
     <View style={placeholderStyle}>
-      <Ionicons name="cart-outline" size={18} />
+      <Ionicons name="cart-outline" size={24} color={COLORS.text.tertiary} />
     </View>
   );
 };
@@ -50,8 +51,8 @@ const FavoriteStallAvatar = ({ stall, colors }) => {
     return <Image source={{ uri: stall.image_url }} style={styles.stallAvatar} onError={() => setImageError(true)} />;
   }
   return (
-    <LinearGradient colors={[colors.primary, colors.primaryLight]} style={styles.stallAvatarGradient}>
-      <Ionicons name="storefront-outline" size={18} />
+    <LinearGradient colors={[colors.primary, colors.primaryDark || colors.primary]} style={styles.stallAvatarGradient}>
+      <Ionicons name="storefront-outline" size={24} color="#FFFFFF" />
     </LinearGradient>
   );
 };
@@ -95,7 +96,7 @@ export default function FavoritesScreen({ navigation }) {
         style={styles.heartBtn}
         onPress={() => toggleProductFavorite(product)}
       >
-        <Ionicons name="heart" size={18} />
+        <Ionicons name="heart" size={18} color={COLORS.error || '#EF4444'} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -111,18 +112,18 @@ export default function FavoritesScreen({ navigation }) {
         <FavoriteStallAvatar stall={stall} colors={COLORS} />
       </View>
       <View style={styles.stallInfo}>
-        <Text style={styles.stallName} numberOfLines={1}>{stall.name || 'Stall'}</Text>
-        {stall.stall_number && <Text style={styles.stallNumber}>Stall #{stall.stall_number}</Text>}
+        <Text style={styles.stallName} numberOfLines={1}>{stall.name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
+        {stall.stall_number && <Text style={styles.stallNumber}>{t('stalls.stall_number', { number: stall.stall_number })}</Text>}
         {stall.section && <Text style={styles.stallSection}>{stall.section}</Text>}
         {stall.rating > 0 && (
-          <Text style={styles.stallRating}> {parseFloat(stall.rating).toFixed(1)}</Text>
+          <Text style={styles.stallRating}>⭐ {parseFloat(stall.rating).toFixed(1)}</Text>
         )}
       </View>
       <TouchableOpacity
         style={styles.heartBtn}
         onPress={() => toggleStallFavorite(stall)}
       >
-        <Ionicons name="heart" size={18} />
+        <Ionicons name="heart" size={18} color={COLORS.error || '#EF4444'} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -136,7 +137,7 @@ export default function FavoritesScreen({ navigation }) {
           onPress={() => setActiveTab('products')}
         >
           <Text style={[styles.tabText, activeTab === 'products' && styles.activeTabText]}>
- {t('favorites.products')} ({favoriteProducts.length})
+            {t('favorites.products')} ({favoriteProducts.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -144,7 +145,7 @@ export default function FavoritesScreen({ navigation }) {
           onPress={() => setActiveTab('stalls')}
         >
           <Text style={[styles.tabText, activeTab === 'stalls' && styles.activeTabText]}>
- {t('favorites.stalls')} ({favoriteStalls.length})
+            {t('favorites.stalls')} ({favoriteStalls.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -153,14 +154,17 @@ export default function FavoritesScreen({ navigation }) {
         {activeTab === 'products' ? (
           favoriteProducts.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="heart" size={18} />
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="heart-outline" size={44} color={COLORS.primary} />
+              </View>
               <Text style={styles.emptyTitle}>{t('favorites.empty_products')}</Text>
               <Text style={styles.emptyText}>{t('favorites.empty_products_subtitle')}</Text>
               <TouchableOpacity
                 style={styles.browseBtn}
                 onPress={() => navigation.navigate('Home')}
+                activeOpacity={0.85}
               >
-                <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.browseGradient}>
+                <LinearGradient colors={[COLORS.primary, COLORS.primaryDark || COLORS.primary]} style={styles.browseGradient}>
                   <Text style={styles.browseBtnText}>{t('favorites.browse_products')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -172,14 +176,17 @@ export default function FavoritesScreen({ navigation }) {
           )
         ) : favoriteStalls.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="storefront-outline" size={18} />
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="storefront-outline" size={44} color={COLORS.primary} />
+            </View>
             <Text style={styles.emptyTitle}>{t('favorites.empty_stalls')}</Text>
             <Text style={styles.emptyText}>{t('favorites.empty_stalls_subtitle')}</Text>
             <TouchableOpacity
               style={styles.browseBtn}
               onPress={() => navigation.navigate('StallsDirectory')}
+              activeOpacity={0.85}
             >
-              <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.browseGradient}>
+              <LinearGradient colors={[COLORS.primary, COLORS.primaryDark || COLORS.primary]} style={styles.browseGradient}>
                 <Text style={styles.browseBtnText}>{t('favorites.browse_stalls')}</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -201,30 +208,38 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.borderLight,
   },
   tab: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: COLORS.borderLight,
+    backgroundColor: COLORS.surfaceSecondary || COLORS.borderLight,
   },
   activeTab: { backgroundColor: COLORS.primary },
-  tabText: { fontSize: 14, fontWeight: '600', color: COLORS.text.medium },
-  activeTabText: { color: COLORS.text.white },
+  tabText: { fontSize: 14, fontWeight: '600', color: COLORS.text.secondary },
+  activeTabText: { color: '#FFFFFF', fontWeight: '700' },
   content: { flex: 1 },
   scrollContent: { padding: 16 },
-  emptyContainer: { alignItems: 'center', paddingVertical: 80 },
-  emptyIcon: { fontSize: 64, marginBottom: 16, opacity: 0.5 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text.dark, marginBottom: 8 },
-  emptyText: { fontSize: 14, color: COLORS.text.light, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  emptyContainer: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 24 },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text.primary, marginBottom: 8, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: COLORS.text.secondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   browseBtn: { borderRadius: 12, overflow: 'hidden' },
-  browseGradient: { paddingHorizontal: 24, paddingVertical: 14 },
-  browseBtnText: { color: 'white', fontSize: 15, fontWeight: '700' },
+  browseGradient: { paddingHorizontal: 24, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  browseBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   productsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   productCard: {
-    width: '47%',
+    width: '48%',
     backgroundColor: COLORS.surface,
     borderRadius: 14,
     overflow: 'hidden',
@@ -238,13 +253,11 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   productImage: { width: '100%', height: 120, backgroundColor: COLORS.inputBg },
   productImagePlaceholder: { height: 120, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.inputBg },
-  productEmoji: { fontSize: 40 },
   productInfo: { padding: 10 },
-  productName: { fontSize: 13, fontWeight: '600', color: COLORS.text.dark, marginBottom: 4 },
+  productName: { fontSize: 13, fontWeight: '600', color: COLORS.text.primary, marginBottom: 4 },
   productPrice: { fontSize: 15, fontWeight: '700', color: COLORS.primary, marginBottom: 2 },
-  productStall: { fontSize: 11, color: COLORS.text.lighter },
-  heartBtn: { position: 'absolute', top: 8, right: 8, padding: 4 },
-  heartIconFilled: { fontSize: 18 },
+  productStall: { fontSize: 11, color: COLORS.text.tertiary },
+  heartBtn: { position: 'absolute', top: 8, right: 8, padding: 6, backgroundColor: COLORS.surface, borderRadius: 16, shadowColor: COLORS.shadowDark || '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2 },
   stallCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,12 +274,11 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderColor: COLORS.borderLight,
   },
   stallAvatarContainer: { marginRight: 14 },
-  stallAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F3F4F6' },
+  stallAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.surfaceSecondary },
   stallAvatarGradient: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  stallAvatarEmoji: { fontSize: 28 },
   stallInfo: { flex: 1 },
-  stallName: { fontSize: 16, fontWeight: '700', color: COLORS.text.dark, marginBottom: 2 },
-  stallNumber: { fontSize: 13, color: COLORS.primary, fontWeight: '500' },
-  stallSection: { fontSize: 12, color: COLORS.text.light, marginTop: 2 },
-  stallRating: { fontSize: 12, color: '#F59E0B', marginTop: 4 },
+  stallName: { fontSize: 16, fontWeight: '700', color: COLORS.text.primary, marginBottom: 2 },
+  stallNumber: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
+  stallSection: { fontSize: 12, color: COLORS.text.secondary, marginTop: 2 },
+  stallRating: { fontSize: 12, color: COLORS.gold || '#F59E0B', marginTop: 4, fontWeight: '600' },
 });

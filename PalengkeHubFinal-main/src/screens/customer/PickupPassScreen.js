@@ -31,17 +31,17 @@ export default function PickupPassScreen({ route, navigation }) {
   const { t } = useI18n();
   const { order, stall } = route.params || {};
   const orderNumber = order?.order_number?.slice(-8) || order?.id?.toString().slice(-8) || '—';
-  const stallName = stall?.stall_name || order?.stalls?.stall_name || 'Market Stall';
+  const stallName = stall?.stall_name || order?.stalls?.stall_name || t('stalls.vendor_fallback', 'Market Stall');
   const stallNumber = stall?.stall_number || order?.stalls?.stall_number || '—';
   const items = Array.isArray(order?.items) ? order.items : [];
   const status = order?.status || 'pending';
-  const statusText = t(`orders.status.${status}`, t('orders.status.pending'));
+  const statusText = t(`order_status.${status}`, status);
   const statusTone = STATUS_TONE[status] || 'warning';
   const isPaid = ['paid', 'verified'].includes(order?.payment_status);
   const pickupTime = order?.pickup_time
     ? new Date(order.pickup_time).toLocaleString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })
     : t('orders.pickup_asap', 'Ngayon');
-  const paymentMethod = order?.payment_method === 'gcash' ? 'GCash' : 'Cash';
+  const paymentMethod = order?.payment_method === 'gcash' ? t('checkout.gcash', 'GCash') : t('checkout.cash_on_pickup', 'Cash');
 
   const toneColor = {
     success: COLORS.success,
@@ -78,12 +78,12 @@ export default function PickupPassScreen({ route, navigation }) {
               </View>
               <View>
                 <Text style={styles.ticketTitle}>{t('orders.pickup_title')}</Text>
-                <Text style={styles.ticketSubtitle}>{t('orders.show_to_vendor', 'Ipakita ito sa vendor')}</Text>
+                <Text style={styles.ticketSubtitle}>{t('orders.show_to_vendor')}</Text>
               </View>
             </View>
             <View style={[styles.paidBadge, { backgroundColor: isPaid ? COLORS.successLight : COLORS.warningLight }]}>
               <Text style={[styles.paidBadgeText, { color: isPaid ? COLORS.success : COLORS.warning }]}>
-                {isPaid ? t('orders.paid', 'BAYAD NA') : t('orders.unpaid', 'HINDI PA BAYAD')}
+                {isPaid ? t('orders.paid_caps') : t('orders.unpaid_caps')}
               </Text>
             </View>
           </View>
@@ -93,19 +93,19 @@ export default function PickupPassScreen({ route, navigation }) {
           </View>
 
           <View style={styles.descRow}>
-            <Text style={styles.descLabel}>{t('orders.stall_number_label', 'Stall')}</Text>
+            <Text style={styles.descLabel}>{t('orders.stall_label')}</Text>
             <Text style={styles.descValue} numberOfLines={1}>{stallName}, #{stallNumber}</Text>
           </View>
           <View style={styles.descRow}>
-            <Text style={styles.descLabel}>{t('orders.pickup_time', 'Oras')}</Text>
+            <Text style={styles.descLabel}>{t('orders.pickup_time')}</Text>
             <Text style={styles.descValue}>{pickupTime}</Text>
           </View>
           <View style={styles.descRow}>
-            <Text style={styles.descLabel}>{t('orders.payment', 'Bayad')}</Text>
-            <Text style={styles.descValue}>{paymentMethod}, {isPaid ? t('orders.confirmed', 'confirmed') : t('orders.pending', 'pending')}</Text>
+            <Text style={styles.descLabel}>{t('orders.payment_label')}</Text>
+            <Text style={styles.descValue}>{paymentMethod}, {isPaid ? t('order_status.confirmed', 'confirmed') : t('order_status.pending', 'pending')}</Text>
           </View>
           <View style={styles.descRow}>
-            <Text style={styles.descLabel}>{t('orders.status_label', 'Status')}</Text>
+            <Text style={styles.descLabel}>{t('orders.status_label')}</Text>
             <View style={[styles.statusChip, { backgroundColor: toneBg }]}>
               <Text style={[styles.statusChipText, { color: toneColor }]}>{statusText}</Text>
             </View>
@@ -117,14 +117,14 @@ export default function PickupPassScreen({ route, navigation }) {
               {items.map((item, idx) => (
                 <View key={idx} style={styles.itemRow}>
                   <Text style={styles.itemName} numberOfLines={1}>
-                    {item.name || 'Item'} {item.quantity && item.quantity > 1 ? `x${item.quantity}` : ''}
+                    {item.name || t('orders.item_fallback')} {item.quantity && item.quantity > 1 ? `x${item.quantity}` : ''}
                   </Text>
                   <Text style={styles.itemPrice}>₱{parseFloat(item.price ?? 0).toFixed(0)}</Text>
                 </View>
               ))}
               {order?.total_amount ? (
                 <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>{t('orders.total_label', 'Kabuuan')}</Text>
+                  <Text style={styles.totalLabel}>{t('orders.total_label')}</Text>
                   <Text style={styles.totalValue}>₱{parseFloat(order.total_amount).toFixed(0)}</Text>
                 </View>
               ) : null}
@@ -320,12 +320,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   instructionText: {
     fontSize: 22,
     fontWeight: '900',
-    color: COLORS.warning,
+    color: COLORS.text.primary,
     textAlign: 'center',
   },
   instructionHint: {
     fontSize: 14,
-    color: COLORS.warning,
+    color: COLORS.text.secondary,
     marginTop: 8,
     textAlign: 'center',
   },

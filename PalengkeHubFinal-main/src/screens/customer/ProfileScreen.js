@@ -75,12 +75,12 @@ export default function ProfileScreen({ navigation }) {
     // Confirm the device can actually authenticate before turning this on —
     // otherwise a misconfigured sensor could lock someone out of their own
     // already-active session.
-    const verified = await authenticateWithBiometrics('Confirm to turn on biometric unlock');
+    const verified = await authenticateWithBiometrics(t('profile_shared.biometric_prompt', 'Confirm to turn on biometric unlock'));
     if (verified) {
       await setBiometricUnlockPreference(true);
       setBiometricUnlockEnabled(true);
     } else {
-      Alert.alert(t('common.error'), 'Could not verify. Biometric unlock was not enabled.');
+      Alert.alert(t('common.error'), t('profile_shared.biometric_verify_failed', 'Could not verify. Biometric unlock was not enabled.'));
     }
   };
 
@@ -143,7 +143,7 @@ export default function ProfileScreen({ navigation }) {
   const handlePinVerifyCredentials = async () => {
     const rawId = pinIdentifier.trim();
     if (!rawId || !pinPassword) {
-      setPinError('Ilagay ang email/phone at password.');
+      setPinError(t('profile_shared.pin_enter_credentials', 'Ilagay ang email/phone at password.'));
       return;
     }
     setPinBusy(true);
@@ -157,21 +157,21 @@ export default function ProfileScreen({ navigation }) {
         password: pinPassword,
       });
       if (error) {
-        setPinError('Maling credentials. Pakisuri at subukan muli.');
+        setPinError(t('profile_shared.pin_invalid_credentials', 'Maling credentials. Pakisuri at subukan muli.'));
         setPinBusy(false);
         return;
       }
       setPinBusy(false);
       setPinStep(1);
     } catch (e) {
-      setPinError(e.message || 'May naganap na error.');
+      setPinError(e.message || t('profile_shared.pin_general_error', 'May naganap na error.'));
       setPinBusy(false);
     }
   };
 
   const handlePinNext = () => {
     if (newPin.length !== 4) {
-      setPinError('Dapat ay 4-digit ang PIN.');
+      setPinError(t('profile_shared.pin_must_be_4_digits', 'Dapat ay 4-digit ang PIN.'));
       return;
     }
     setPinError('');
@@ -180,7 +180,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handlePinSave = async () => {
     if (confirmPin !== newPin) {
-      setPinError('Hindi magkatugma ang PIN. Subukan muli.');
+      setPinError(t('profile_shared.pin_mismatch', 'Hindi magkatugma ang PIN. Subukan muli.'));
       return;
     }
     if (!user?.id) return;
@@ -230,11 +230,11 @@ export default function ProfileScreen({ navigation }) {
     // ever fires) — a >2-option menu has no window.confirm equivalent, so
     // this chains sequential confirms as a web stand-in for the action sheet.
     if (Platform.OS === 'web') {
-      if (window.confirm('View Photo? (OK = View, Cancel = more options)')) {
+      if (window.confirm(t('profile_shared.view_photo_prompt', 'View Photo? (OK = View, Cancel = more options)'))) {
         setPhotoViewerVisible(true);
-      } else if (window.confirm('Change Photo? (OK = Change, Cancel = more options)')) {
+      } else if (window.confirm(t('profile_shared.change_photo_prompt', 'Change Photo? (OK = Change, Cancel = more options)'))) {
         uploadAvatar();
-      } else if (window.confirm('Remove Photo? (OK = Remove, Cancel = close menu)')) {
+      } else if (window.confirm(t('profile_shared.remove_photo_prompt', 'Remove Photo? (OK = Remove, Cancel = close menu)'))) {
         removeProfilePhoto();
       }
       return;
@@ -251,7 +251,7 @@ export default function ProfileScreen({ navigation }) {
     if (!user?.id) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant gallery permissions to upload profile picture');
+      Alert.alert(t('profile_shared.permission_needed', 'Permission needed'), t('profile_shared.gallery_permission_msg', 'Please grant gallery permissions to upload profile picture'));
       return;
     }
 
@@ -315,11 +315,11 @@ export default function ProfileScreen({ navigation }) {
         
         await checkUser();
         setAvatarError(false);
-        Alert.alert('Success', 'Profile picture updated!');
+        Alert.alert(t('common.success'), t('profile_shared.avatar_updated', 'Profile picture updated!'));
         
       } catch (error) {
         console.error('Upload error:', error);
-        Alert.alert('Error', 'Failed to upload image. Please try again.');
+        Alert.alert(t('common.error'), t('profile_shared.avatar_upload_failed', 'Failed to upload image. Please try again.'));
       } finally {
         setUploadingAvatar(false);
       }
@@ -343,11 +343,11 @@ export default function ProfileScreen({ navigation }) {
         // Refresh user profile
         await checkUser();
         setAvatarError(false);
-        Alert.alert('Success', 'Profile photo removed successfully');
+        Alert.alert(t('common.success'), t('profile_shared.photo_removed', 'Profile photo removed successfully'));
 
       } catch (error) {
         console.error('Remove photo error:', error);
-        Alert.alert('Error', 'Failed to remove profile photo. Please try again.');
+        Alert.alert(t('common.error'), t('profile_shared.photo_remove_failed', 'Failed to remove profile photo. Please try again.'));
       } finally {
         setRemovingPhoto(false);
       }
@@ -355,7 +355,7 @@ export default function ProfileScreen({ navigation }) {
 
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to remove your profile photo?')) {
+      if (window.confirm(t('profile_shared.remove_photo_confirm', 'Are you sure you want to remove your profile photo?'))) {
         await doRemove();
       }
       return;
@@ -373,7 +373,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handleLogout = async () => {
     if (Platform.OS === 'web') {
-      const confirmLogout = window.confirm('Are you sure you want to logout?');
+      const confirmLogout = window.confirm(t('profile_shared.logout_confirm_msg', 'Are you sure you want to logout?'));
       if (confirmLogout) {
         console.log(' Logging out...');
         await supabase.auth.signOut();
@@ -408,7 +408,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handleSwitchToGuest = () => {
     if (Platform.OS === 'web') {
-      const confirmSwitch = window.confirm('Switch to Guest Mode? You will be logged out.');
+      const confirmSwitch = window.confirm(t('profile_shared.switch_guest_confirm', 'Switch to Guest Mode? You will be logged out.'));
       if (confirmSwitch) {
         // A hard window.location.href reload used to sit here — it raced
         // signOut() and, worse, remounted AuthContext, whose "reset isGuest
@@ -607,7 +607,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.userEmail}>{user?.email}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>
-              {profile?.role === 'vendor' ? 'Vendor' : 'Shopper'}
+              {profile?.role === 'vendor' ? t('chat.vendor', 'Vendor') : t('profile.shopper_role', 'Shopper')}
             </Text>
           </View>
 
@@ -706,7 +706,7 @@ export default function ProfileScreen({ navigation }) {
           <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguagePicker(true)}>
             <Ionicons name="globe" size={20} color={COLORS.primary} style={styles.menuItemIcon} />
             <Text style={styles.menuItemText}>{t('profile.language')}</Text>
-            <Text style={styles.languageValue}>{locale === 'en' ? 'English' : 'Filipino'}</Text>
+            <Text style={styles.languageValue}>{locale === 'en' ? t('profile.language_en', 'English') : t('profile.language_fil', 'Filipino')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
@@ -796,14 +796,14 @@ export default function ProfileScreen({ navigation }) {
               style={[styles.langOption, locale === 'en' && styles.langOptionActive]}
               onPress={() => { changeLanguage('en'); setShowLanguagePicker(false); }}
             >
-              <Text style={styles.langOptionText}>English</Text>
+              <Text style={styles.langOptionText}>{t('profile.language_en', 'English')}</Text>
               {locale === 'en' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.langOption, locale === 'fil' && styles.langOptionActive]}
               onPress={() => { changeLanguage('fil'); setShowLanguagePicker(false); }}
             >
-              <Text style={styles.langOptionText}>Filipino</Text>
+              <Text style={styles.langOptionText}>{t('profile.language_fil', 'Filipino')}</Text>
               {locale === 'fil' && <Ionicons name="checkmark" size={18} color={COLORS.success} />}
             </TouchableOpacity>
             <TouchableOpacity
@@ -819,23 +819,22 @@ export default function ProfileScreen({ navigation }) {
       <Modal visible={showPinModal} transparent animationType="slide" onRequestClose={() => setShowPinModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>PIN Login</Text>
+            <Text style={styles.modalTitle}>{t('profile_shared.pin_login')}</Text>
 
             {pinSaved ? (
               <>
                 <Text style={styles.pinHint}>
- Naka-enable na! Sa susunod, PIN na lang ang kailangan para makapasok.
+                  {t('profile_shared.pin_enabled_msg')}
                 </Text>
               </>
             ) : pinStep === 0 ? (
               <>
                 <Text style={styles.pinHint}>
-                  Para sa seguridad, ilagay ang email/phone at password mo. Ise-save ito
-                  sa device na ito (naka-encrypt) para makapasok ka gamit ang PIN.
+                  {t('profile_shared.pin_security_hint')}
                 </Text>
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="Email o phone"
+                  placeholder={t('auth.email_or_phone')}
                   placeholderTextColor={COLORS.text.lighter}
                   value={pinIdentifier}
                   onChangeText={(v) => { setPinIdentifier(v); setPinError(''); }}
@@ -844,7 +843,7 @@ export default function ProfileScreen({ navigation }) {
                 />
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="Password"
+                  placeholder={t('auth.password')}
                   placeholderTextColor={COLORS.text.lighter}
                   value={pinPassword}
                   onChangeText={(v) => { setPinPassword(v); setPinError(''); }}
@@ -853,7 +852,7 @@ export default function ProfileScreen({ navigation }) {
                 {pinError ? <Text style={styles.pinError}>{pinError}</Text> : null}
                 {hasPin && (
                   <TouchableOpacity style={styles.langCancelBtn} onPress={handlePinRemove}>
-                    <Text style={[styles.langCancelText, { color: COLORS.error, fontWeight: '600' }]}>Tanggalin ang PIN</Text>
+                    <Text style={[styles.langCancelText, { color: COLORS.error, fontWeight: '600' }]}>{t('profile_shared.pin_remove_btn')}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -861,13 +860,13 @@ export default function ProfileScreen({ navigation }) {
                   onPress={handlePinVerifyCredentials}
                   disabled={pinBusy}
                 >
-                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagve-verify...' : 'I-verify →'}</Text>
+                  <Text style={styles.langOptionText}>{pinBusy ? t('profile_shared.pin_verifying') : t('profile_shared.pin_verify_btn')}</Text>
                 </TouchableOpacity>
               </>
             ) : pinStep === 1 ? (
               <>
                 <Text style={styles.pinHint}>
-                  Maglagay ng bagong 4-digit na PIN.
+                  {t('profile_shared.pin_enter_new_hint')}
                 </Text>
                 <TextInput
                   style={styles.pinInput}
@@ -884,20 +883,20 @@ export default function ProfileScreen({ navigation }) {
                   style={[styles.langOption, newPin.length === 4 && styles.langOptionActive]}
                   onPress={handlePinNext}
                 >
-                  <Text style={styles.langOptionText}>Susunod →</Text>
+                  <Text style={styles.langOptionText}>{t('common.next')} →</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(0)}>
-                  <Text style={styles.langCancelText}>Bumalik</Text>
+                  <Text style={styles.langCancelText}>{t('common.back')}</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <Text style={styles.pinHint}>
-                  Ulitin ang PIN para kumpirmahin.
+                  {t('profile_shared.pin_confirm_hint')}
                 </Text>
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="● ● ● ● (ulitin)"
+                  placeholder={t('profile_shared.pin_repeat_placeholder')}
                   placeholderTextColor={COLORS.text.lighter}
                   value={confirmPin}
                   onChangeText={(v) => { setConfirmPin(v.replace(/\D/g, '').slice(0, 4)); setPinError(''); }}
@@ -911,10 +910,10 @@ export default function ProfileScreen({ navigation }) {
                   onPress={handlePinSave}
                   disabled={pinBusy}
                 >
-                  <Text style={styles.langOptionText}>{pinBusy ? 'Nagse-save...' : 'I-save ang PIN '}</Text>
+                  <Text style={styles.langOptionText}>{pinBusy ? t('profile_shared.pin_saving') : t('profile_shared.pin_save_btn')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.langCancelBtn} onPress={() => setPinStep(1)}>
-                  <Text style={styles.langCancelText}>Bumalik</Text>
+                  <Text style={styles.langCancelText}>{t('common.back')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1017,12 +1016,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   guestName: {
     fontSize: 24,
     fontWeight: '800',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   guestEmail: {
     fontSize: 14,
-    color: COLORS.text.medium,
+    color: COLORS.text.secondary,
     marginBottom: 12,
   },
   guestBadge: {
@@ -1039,12 +1038,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   userName: {
     fontSize: 24,
     fontWeight: '800',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: COLORS.text.medium,
+    color: COLORS.text.secondary,
     marginBottom: 12,
   },
   roleBadge: {
@@ -1063,15 +1062,15 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
     borderWidth: 1, borderColor: COLORS.borderLight,
   },
-  benefitsTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.dark, marginBottom: 20, textAlign: 'center' },
+  benefitsTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.primary, marginBottom: 20, textAlign: 'center' },
   benefitItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   benefitIconContainer: {
     width: 48, height: 48, backgroundColor: COLORS.accentSoft, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16,
   },
   benefitIcon: { fontSize: 24 },
   benefitContent: { flex: 1 },
-  benefitText: { fontSize: 16, fontWeight: '700', color: COLORS.text.dark, marginBottom: 2 },
-  benefitSubtext: { fontSize: 13, color: COLORS.text.medium },
+  benefitText: { fontSize: 16, fontWeight: '700', color: COLORS.text.primary, marginBottom: 2 },
+  benefitSubtext: { fontSize: 13, color: COLORS.text.secondary },
   actionSection: { marginHorizontal: 16, marginBottom: 30 },
   signInButton: { borderRadius: 16, overflow: 'hidden', marginBottom: 12, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   signInGradient: { paddingVertical: 16, alignItems: 'center' },
@@ -1085,17 +1084,17 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   statItem: { flex: 1, alignItems: 'center' },
   statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
-  statLabel: { fontSize: 12, color: COLORS.text.medium },
+  statLabel: { fontSize: 12, color: COLORS.text.secondary },
   statDivider: { width: 1, backgroundColor: COLORS.border, marginHorizontal: 8 },
   infoCard: {
     backgroundColor: COLORS.surface, marginHorizontal: 16, marginBottom: 20, padding: 20, borderRadius: 20,
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
     borderWidth: 1, borderColor: COLORS.borderLight,
   },
-  infoTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.dark, marginBottom: 16 },
+  infoTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text.primary, marginBottom: 16 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
-  infoLabel: { fontSize: 14, color: COLORS.text.medium },
-  infoValue: { fontSize: 14, color: COLORS.text.dark, fontWeight: '600' },
+  infoLabel: { fontSize: 14, color: COLORS.text.secondary },
+  infoValue: { fontSize: 14, color: COLORS.text.primary, fontWeight: '600' },
   vendorButton: { marginHorizontal: 16, marginBottom: 16, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   vendorGradient: { paddingVertical: 14, alignItems: 'center' },
   vendorButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
@@ -1121,7 +1120,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: COLORS.borderLight,
   },
   menuItemIcon: { fontSize: 20, width: 28, textAlign: 'center' },
-  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: COLORS.text.dark },
+  menuItemText: { flex: 1, marginLeft: 14, fontSize: 15, color: COLORS.text.primary },
   languageValue: { fontSize: 13, color: COLORS.success, fontWeight: '600', marginRight: 8 },
   chevron: { fontSize: 20, color: COLORS.text.lighter },
   actionNeededBadge: { backgroundColor: COLORS.errorLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginRight: 8 },
@@ -1129,27 +1128,28 @@ const createStyles = (COLORS) => StyleSheet.create({
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text.primary, marginBottom: 16 },
   langOption: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16,
     borderRadius: 12, marginBottom: 8, backgroundColor: COLORS.surfaceSecondary,
   },
   langOptionActive: { backgroundColor: COLORS.successLight, borderWidth: 1, borderColor: COLORS.success },
-  langOptionText: { fontSize: 16, fontWeight: '500' },
+  langOptionText: { fontSize: 16, fontWeight: '500', color: COLORS.text.primary },
   langCheck: { fontSize: 18, color: COLORS.success, fontWeight: '700' },
   langCancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
-  langCancelText: { color: COLORS.text.light, fontSize: 15 },
-  pinHint: { fontSize: 13, color: COLORS.text.light, marginBottom: 12, lineHeight: 19 },
+  langCancelText: { color: COLORS.text.secondary, fontSize: 15 },
+  pinHint: { fontSize: 13, color: COLORS.text.secondary, marginBottom: 12, lineHeight: 19 },
   pinInput: {
     borderWidth: 1.5,
     borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceSecondary,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 22,
     letterSpacing: 8,
     textAlign: 'center',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   pinError: { color: COLORS.error, fontSize: 13, marginBottom: 8, fontWeight: '600' },

@@ -1,4 +1,5 @@
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 // src/screens/customer/StallDetailsScreen.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
@@ -70,6 +71,7 @@ const StarRating = ({ rating, size = 14 }) => {
 // ============================================================
 export default function StallDetailsScreen({ navigation, route }) {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { stallId } = route.params;
   const { user, isGuest, setIsGuest } = useAuth();
@@ -244,17 +246,17 @@ export default function StallDetailsScreen({ navigation, route }) {
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to message the stall')) {
+        if (window.confirm(`${t('auth.login_required', 'Login Required')}\n\n${t('stalls.login_to_message', 'Please login to message the stall')}`)) {
           navigation.navigate('Login');
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to message the stall',
+        t('auth.login_required', 'Login Required'),
+        t('stalls.login_to_message', 'Please login to message the stall'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => navigation.navigate('Login') }
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+          { text: t('auth.login', 'Login'), onPress: () => navigation.navigate('Login') }
         ]
       );
       return;
@@ -268,7 +270,7 @@ export default function StallDetailsScreen({ navigation, route }) {
       });
     } catch (error) {
       console.error('Error starting chat:', error);
-      Alert.alert('Error', 'Unable to start conversation');
+      Alert.alert(t('common.error', 'Error'), t('stalls.unable_to_start_chat', 'Unable to start conversation'));
     }
   };
 
@@ -279,17 +281,17 @@ export default function StallDetailsScreen({ navigation, route }) {
     if (!user && !isGuest) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+        if (window.confirm(`${t('auth.login_required', 'Login Required')}\n\n${t('stalls.login_to_cart', 'Please login to add items to cart')}`)) {
           navigation.navigate('Login');
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to add items to cart',
+        t('auth.login_required', 'Login Required'),
+        t('stalls.login_to_cart', 'Please login to add items to cart'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => navigation.navigate('Login') },
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+          { text: t('auth.login', 'Login'), onPress: () => navigation.navigate('Login') },
         ]
       );
       return;
@@ -299,17 +301,17 @@ export default function StallDetailsScreen({ navigation, route }) {
     if (result?.requiresAuth) return;
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm(`${product.name} added to your cart\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+      if (window.confirm(t('stalls.added_to_cart_web', '%{name} added to your cart\n\nOK = View Cart, Cancel = Continue Shopping', { name: product.name }))) {
         navigation.navigate('Cart');
       }
       return;
     }
     Alert.alert(
-      'Added to Cart',
-      `${product.name} added to your cart`,
+      t('stalls.added_to_cart', 'Added to Cart'),
+      t('stalls.added_to_cart_msg', '%{name} added to your cart', { name: product.name }),
       [
-        { text: 'Continue Shopping', style: 'cancel' },
-        { text: 'View Cart', onPress: () => navigation.navigate('Cart') },
+        { text: t('stalls.continue_shopping', 'Continue Shopping'), style: 'cancel' },
+        { text: t('stalls.view_cart', 'View Cart'), onPress: () => navigation.navigate('Cart') },
       ]
     );
   };
@@ -318,17 +320,17 @@ export default function StallDetailsScreen({ navigation, route }) {
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to report a vendor') && setIsGuest) {
+        if (window.confirm(`${t('auth.login_required', 'Login Required')}\n\n${t('stalls.login_to_report', 'Please login to report a vendor')}`) && setIsGuest) {
           setIsGuest(false);
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to report a vendor',
+        t('auth.login_required', 'Login Required'),
+        t('stalls.login_to_report', 'Please login to report a vendor'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => { if (setIsGuest) setIsGuest(false); } }
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+          { text: t('auth.login', 'Login'), onPress: () => { if (setIsGuest) setIsGuest(false); } }
         ]
       );
       return;
@@ -337,18 +339,18 @@ export default function StallDetailsScreen({ navigation, route }) {
     navigation.navigate('ReportIssue', {
       type: 'vendor',
       targetId: stall.id,
-      targetName: stall?.stall_name || `Stall #${stall?.stall_number}`,
+      targetName: stall?.stall_name || `${t('stalls.stall_prefix', 'Stall #')}${stall?.stall_number}`,
       targetType: 'vendor'
     });
   };
 
   const openMapsDirections = () => {
     if (!stallLocation) {
-      Alert.alert('Location not set', 'This stall hasn\'t captured its exact location yet.');
+      Alert.alert(t('stalls.location_not_set', 'Location not set'), t('stalls.location_not_set_msg', 'This stall hasn\'t captured its exact location yet.'));
       return;
     }
     Linking.openURL(getDirectionsUrl(stallLocation.lat, stallLocation.lng)).catch(() => {
-      Alert.alert('Error', 'Could not open maps');
+      Alert.alert(t('common.error', 'Error'), t('stalls.could_not_open_maps', 'Could not open maps'));
     });
   };
 
@@ -387,13 +389,13 @@ export default function StallDetailsScreen({ navigation, route }) {
     return (
       <View style={styles.centerContainer}>
         <Text style={{ color: COLORS.text.medium, fontSize: 15, marginBottom: 16 }}>
-          {error || 'Stall not found'}
+          {error || t('stalls.not_found', 'Stall not found')}
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
           onPress={fetchStallDetails}
         >
-          <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>{t('common.try_again', 'Try Again')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -458,9 +460,9 @@ export default function StallDetailsScreen({ navigation, route }) {
           
           {/* Banner Content - Bottom */}
           <View style={styles.bannerContent}>
-            <Text style={styles.bannerName}>{stall?.stall_name || 'Market Stall'}</Text>
+            <Text style={styles.bannerName}>{stall?.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
             <Text style={styles.bannerSubtitle}>
-              Stall #{stall?.stall_number} • {stall?.section || 'No Section'}
+              {t('stalls.stall_number', 'Stall #%{number}', { number: stall?.stall_number })} • {stall?.section ? t(`market_sections.${stall.section}`, stall.section) : t('stalls.no_section', 'No Section')}
             </Text>
             <View style={styles.bannerChips}>
               <View style={styles.bannerChip}>
@@ -479,7 +481,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                   styles.bannerChipText,
                   stall?.is_temporarily_closed ? styles.bannerChipTextClosed : styles.bannerChipTextOpen
                 ]}>
-                  {stall?.is_temporarily_closed ? 'Closed' : 'Open'}
+                  {stall?.is_temporarily_closed ? t('stalls.closed', 'Closed') : t('stalls.open', 'Open')}
                 </Text>
               </View>
             </View>
@@ -507,7 +509,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                 </LinearGradient>
               )}
               <View style={styles.infoStripText}>
-                <Text style={styles.infoStripName}>{vendor?.full_name || 'Vendor'}</Text>
+                <Text style={styles.infoStripName}>{vendor?.full_name || t('stalls.vendor_fallback', 'Vendor')}</Text>
               </View>
             </View>
             
@@ -525,7 +527,11 @@ export default function StallDetailsScreen({ navigation, route }) {
                 {/*  Underline BELOW the number (3.4) - aligned to the right */}
                 <View style={styles.infoStripRatingUnderline} />
                 <Text style={styles.infoStripReviewCount}>
-                  {ratingCount === 0 ? 'No reviews yet' : `${ratingCount} review${ratingCount === 1 ? '' : 's'}`}
+                  {ratingCount === 0
+                    ? t('stalls.no_reviews', 'No reviews yet')
+                    : (ratingCount === 1
+                        ? t('stalls.reviews_count_singular', '1 review')
+                        : t('stalls.reviews_count_plural', '%{count} reviews', { count: ratingCount }))}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
@@ -542,7 +548,7 @@ export default function StallDetailsScreen({ navigation, route }) {
               <View style={styles.sectionIcon}>
                 <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
               </View>
-              <Text style={styles.sectionTitle}>About this Stall</Text>
+              <Text style={styles.sectionTitle}>{t('stalls.about_stall', 'About this Stall')}</Text>
             </View>
             <Text style={styles.descriptionText}>{stall.description}</Text>
           </View>
@@ -556,17 +562,17 @@ export default function StallDetailsScreen({ navigation, route }) {
             <View style={styles.sectionIcon}>
               <Ionicons name="person-circle-outline" size={20} color={COLORS.primary} />
             </View>
-            <Text style={styles.sectionTitle}>Vendor Information</Text>
+            <Text style={styles.sectionTitle}>{t('stalls.vendor_info_title', 'Vendor Information')}</Text>
           </View>
           
           <View style={styles.vendorInfoGrid}>
             <View style={styles.vendorInfoItem}>
-              <Text style={styles.vendorInfoLabel}>Vendor Name</Text>
-              <Text style={styles.vendorInfoValue}>{vendor?.full_name || 'Not Available'}</Text>
+              <Text style={styles.vendorInfoLabel}>{t('stalls.vendor_name', 'Vendor Name')}</Text>
+              <Text style={styles.vendorInfoValue}>{vendor?.full_name || t('common.not_available', 'Not Available')}</Text>
             </View>
             {vendor?.phone && (
               <View style={styles.vendorInfoItem}>
-                <Text style={styles.vendorInfoLabel}>Phone</Text>
+                <Text style={styles.vendorInfoLabel}>{t('stalls.phone', 'Phone')}</Text>
                 <Text style={styles.vendorInfoValue}>{vendor.phone}</Text>
               </View>
             )}
@@ -581,7 +587,7 @@ export default function StallDetailsScreen({ navigation, route }) {
             <View style={styles.sectionIcon}>
               <Ionicons name="location-outline" size={20} color={COLORS.primary} />
             </View>
-            <Text style={styles.sectionTitle}>Location</Text>
+            <Text style={styles.sectionTitle}>{t('stalls.location', 'Location')}</Text>
           </View>
           
           <TouchableOpacity 
@@ -600,13 +606,13 @@ export default function StallDetailsScreen({ navigation, route }) {
             />
             <View style={styles.mapOverlay}>
               <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.mapOverlayText}>Tap to expand</Text>
+              <Text style={styles.mapOverlayText}>{t('stalls.tap_to_expand', 'Tap to expand')}</Text>
             </View>
           </TouchableOpacity>
           
           <View style={styles.locationInfo}>
             <Text style={styles.locationAddress}>
-              {stall?.section || 'No section'} • Stall #{stall?.stall_number || 'N/A'}
+              {(stall?.section ? t(`market_sections.${stall.section}`, stall.section) : t('stalls.no_section', 'No section'))} • {t('stalls.stall_number', 'Stall #%{number}', { number: stall?.stall_number || 'N/A' })}
             </Text>
             {stall?.location_notes && (
               <Text style={styles.locationNotes}>{stall.location_notes}</Text>
@@ -630,7 +636,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                 style={styles.locationButtonGradient}
               >
                 <Ionicons name="navigate-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.locationButtonText}>Directions</Text>
+                <Text style={styles.locationButtonText}>{t('stalls.directions', 'Directions')}</Text>
               </LinearGradient>
             </TouchableOpacity>
             
@@ -640,7 +646,7 @@ export default function StallDetailsScreen({ navigation, route }) {
               activeOpacity={0.8}
             >
               <Ionicons name="map-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.expandButtonText}>Expand Map</Text>
+              <Text style={styles.expandButtonText}>{t('stalls.expand_map', 'Expand Map')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -653,7 +659,7 @@ export default function StallDetailsScreen({ navigation, route }) {
             <View style={styles.sectionIcon}>
               <Ionicons name="cube-outline" size={20} color={COLORS.primary} />
             </View>
-            <Text style={styles.sectionTitle}>Products ({products.length})</Text>
+            <Text style={styles.sectionTitle}>{t('stalls.products_with_count', 'Products (%{count})', { count: products.length })}</Text>
           </View>
           
           {products.length === 0 ? (
@@ -661,9 +667,9 @@ export default function StallDetailsScreen({ navigation, route }) {
               <View style={styles.emptyStateIcon}>
                 <Ionicons name="cube-outline" size={40} color="#D1D5DB" />
               </View>
-              <Text style={styles.emptyStateTitle}>No Products Available</Text>
+              <Text style={styles.emptyStateTitle}>{t('stalls.no_products_title', 'No Products Available')}</Text>
               <Text style={styles.emptyStateSubtitle}>
-                This vendor has not listed any products yet.
+                {t('stalls.no_products_subtitle', 'This vendor has not listed any products yet.')}
               </Text>
             </View>
           ) : (
@@ -699,7 +705,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                 style={styles.primaryButtonGradient}
               >
                 <Ionicons name="chatbubble-ellipses-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>Message Vendor</Text>
+                <Text style={styles.primaryButtonText}>{t('stalls.message_vendor', 'Message Vendor')}</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -709,7 +715,7 @@ export default function StallDetailsScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Ionicons name="flag-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.secondaryButtonText}>Report Vendor</Text>
+              <Text style={styles.secondaryButtonText}>{t('stalls.report_vendor', 'Report this Vendor')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -743,17 +749,17 @@ export default function StallDetailsScreen({ navigation, route }) {
               </TouchableOpacity>
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle} numberOfLines={1}>
-                  {stall?.stall_name || 'Stall Location'}
+                  {stall?.stall_name || t('stalls.stall_location', 'Stall Location')}
                 </Text>
                 <Text style={styles.modalSubtitle}>
-                  Stall #{stall?.stall_number} • {stall?.section || 'No section'}
+                  {t('stalls.stall_number', 'Stall #%{number}', { number: stall?.stall_number })} • {stall?.section ? t(`market_sections.${stall.section}`, stall.section) : t('stalls.no_section', 'No section')}
                 </Text>
               </View>
               <TouchableOpacity 
                 style={styles.modalShareButton}
                 onPress={() => {
                   // Optional: Add share functionality
-                  Alert.alert('Share', 'Share this location');
+                  Alert.alert(t('common.share', 'Share'), `${stall?.stall_name || t('stalls.details', 'Stall Details')}`);
                 }}
                 activeOpacity={0.7}
               >
@@ -790,7 +796,7 @@ export default function StallDetailsScreen({ navigation, route }) {
                 style={styles.modalDirectionsGradient}
               >
                 <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.modalDirectionsText}>Get Directions</Text>
+                <Text style={styles.modalDirectionsText}>{t('stalls.get_directions', 'Get Directions')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -988,7 +994,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   infoStripName: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
   },
 
   // ── Rating on Right Side ──
@@ -1055,7 +1061,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
   },
 
   // ── Description ──
@@ -1084,7 +1090,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   vendorInfoValue: {
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
   },
 
   // ── Location ──
@@ -1220,7 +1226,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   productName: {
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
   },
   productMeta: {
     fontSize: 12,
@@ -1247,12 +1253,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   emptyStateTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 4,
   },
   emptyStateSubtitle: {
     fontSize: 13,
-    color: COLORS.text.medium,
+    color: COLORS.text.secondary,
     textAlign: 'center',
   },
 
@@ -1288,15 +1294,15 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: COLORS.primary,
-    backgroundColor: 'transparent',
+    backgroundColor: COLORS.surface,
   },
   secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.primary,
   },
 

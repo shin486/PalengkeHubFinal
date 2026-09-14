@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -23,6 +24,7 @@ export default function NotificationScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user } = useAuth();
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -88,11 +90,11 @@ export default function NotificationScreen({ navigation }) {
       }
     } catch (err) {
       console.error('Error loading notifications:', err);
-      setError('Failed to load notifications');
+      setError(t('notifications.error_failed_to_load', 'Failed to load notifications'));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => {
     loadNotifications();
@@ -192,18 +194,18 @@ export default function NotificationScreen({ navigation }) {
 
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to mark all notifications as read?')) {
+      if (window.confirm(t('notifications.mark_all_confirm_msg', 'Are you sure you want to mark all notifications as read?'))) {
         await applyMarkAllAsRead();
       }
       return;
     }
 
     Alert.alert(
-      'Mark All as Read',
-      'Are you sure you want to mark all notifications as read?',
+      t('notifications.mark_all_confirm_title', 'Mark All as Read'),
+      t('notifications.mark_all_confirm_msg', 'Are you sure you want to mark all notifications as read?'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Mark All', onPress: applyMarkAllAsRead },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: t('notifications.mark_all_btn', 'Mark All'), onPress: applyMarkAllAsRead },
       ]
     );
   };
@@ -222,18 +224,18 @@ export default function NotificationScreen({ navigation }) {
 
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to delete this notification?')) {
+      if (window.confirm(t('notifications.delete_confirm_msg', 'Are you sure you want to delete this notification?'))) {
         await doDelete();
       }
       return;
     }
 
     Alert.alert(
-      'Delete Notification',
-      'Are you sure you want to delete this notification?',
+      t('notifications.delete_confirm_title', 'Delete Notification'),
+      t('notifications.delete_confirm_msg', 'Are you sure you want to delete this notification?'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: doDelete },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: t('common.delete', 'Delete'), style: 'destructive', onPress: doDelete },
       ]
     );
   };
@@ -293,16 +295,18 @@ export default function NotificationScreen({ navigation }) {
   };
 
   const formatTime = (dateString) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diff = now - date;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     
     if (days > 7) return date.toLocaleDateString();
-    if (days > 0) return `${days}d ago`;
-    if (diff > 3600000) return `${Math.floor(diff / 3600000)}h ago`;
-    if (diff > 60000) return `${Math.floor(diff / 60000)}m ago`;
-    return 'Just now';
+    if (days > 0) return t('notifications.time_days_ago', '%{count}d ago', { count: days });
+    if (diff > 3600000) return t('notifications.time_hours_ago', '%{count}h ago', { count: Math.floor(diff / 3600000) });
+    if (diff > 60000) return t('notifications.time_mins_ago', '%{count}m ago', { count: Math.floor(diff / 60000) });
+    return t('notifications.time_just_now', 'Just now');
   };
 
   const renderNotification = ({ item }) => {
@@ -337,7 +341,7 @@ export default function NotificationScreen({ navigation }) {
                 onPress={(e) => { e.stopPropagation?.(); handleNotificationNavigate(item); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.viewLink}>View →</Text>
+                <Text style={styles.viewLink}>{t('notifications.view_link', 'View →')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -368,12 +372,12 @@ export default function NotificationScreen({ navigation }) {
         </View>
       ) : error && notifications.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={{ color: COLORS.text.tertiary, fontSize: 15, marginBottom: 16 }}>{error}</Text>
+          <Text style={{ color: COLORS.text.secondary, fontSize: 15, marginBottom: 16 }}>{error}</Text>
           <TouchableOpacity
-            style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+            style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
             onPress={loadNotifications}
           >
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{t('common.try_again', 'Try Again')}</Text>
           </TouchableOpacity>
         </View>
       ) : notifications.length === 0 ? (
@@ -382,10 +386,12 @@ export default function NotificationScreen({ navigation }) {
             colors={[COLORS.accentSoft, COLORS.surface]}
             style={styles.emptyCard}
           >
-            <Ionicons name="notifications-outline" size={18} />
-            <Text style={styles.emptyTitle}>No Notifications</Text>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="notifications-outline" size={40} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>{t('notifications.no_notifications_title', 'No Notifications')}</Text>
             <Text style={styles.emptyText}>
-              When you receive notifications, they will appear here
+              {t('notifications.no_notifications_desc', 'When you receive notifications, they will appear here')}
             </Text>
           </LinearGradient>
         </View>
@@ -398,12 +404,17 @@ export default function NotificationScreen({ navigation }) {
             style={[styles.markAllButton, !hasUnread && styles.markAllButtonDisabled]}
             onPress={handleMarkAllAsRead}
             disabled={!hasUnread}
+            activeOpacity={0.8}
           >
             <LinearGradient
-              colors={!hasUnread ? [COLORS.text.lighter, COLORS.text.lighter] : [COLORS.primary, COLORS.primary]}
+              colors={!hasUnread ? [COLORS.border, COLORS.border] : [COLORS.primary, COLORS.primaryLight]}
               style={styles.markAllGradient}
             >
-              <Text style={styles.markAllText}>{!hasUnread ? 'All caught up' : 'Mark all as read'}</Text>
+              <Text style={styles.markAllText}>
+                {!hasUnread
+                  ? t('notifications.all_caught_up', 'All caught up')
+                  : t('notifications.mark_all_read', 'Mark all as read')}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
           
@@ -483,25 +494,32 @@ const createStyles = (COLORS) => StyleSheet.create({
   emptyCard: {
     width: '100%',
     alignItems: 'center',
-    padding: 40,
+    padding: 36,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.accentSoft,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface,
   },
-  emptyIcon: {
-    fontSize: 60,
+  emptyIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.accentSoft,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: COLORS.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: COLORS.text.tertiary,
+    color: COLORS.text.secondary,
     textAlign: 'center',
+    lineHeight: 20,
   },
   markAllButton: {
     marginHorizontal: 16,
@@ -510,9 +528,16 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     alignSelf: 'flex-end',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   markAllButtonDisabled: {
     opacity: 0.6,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   markAllGradient: {
     paddingHorizontal: 16,
@@ -520,13 +545,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   markAllText: {
     fontSize: 12,
-    color: COLORS.text.inverse,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   notificationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -536,23 +561,23 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     borderWidth: 1,
-    borderColor: COLORS.surfaceSecondary,
+    borderColor: COLORS.borderLight,
   },
   unreadCard: {
     backgroundColor: COLORS.accentSoft,
-    borderColor: COLORS.accentSoft,
+    borderColor: COLORS.primary,
   },
   notificationIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: COLORS.accentSoft,
+    backgroundColor: COLORS.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   cancellationIcon: {
-    backgroundColor: COLORS.accentSoft,
+    backgroundColor: COLORS.errorLight,
   },
   iconText: {
     fontSize: 24,
@@ -562,7 +587,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   notificationTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.text.primary,
     marginBottom: 4,
   },
@@ -571,7 +596,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   notificationMessage: {
     fontSize: 13,
-    color: COLORS.text.tertiary,
+    color: COLORS.text.secondary,
     marginBottom: 4,
     lineHeight: 18,
   },
@@ -583,7 +608,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   notificationTime: {
     fontSize: 11,
-    color: COLORS.text.quaternary,
+    color: COLORS.text.secondary,
   },
   viewLink: {
     fontSize: 12,

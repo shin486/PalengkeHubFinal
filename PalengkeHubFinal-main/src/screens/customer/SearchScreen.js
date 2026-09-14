@@ -965,11 +965,11 @@ export default function SearchScreen({ navigation }) {
         <View style={styles.comparisonHeader}>
           <View style={styles.comparisonHeaderLeft}>
             <Text style={styles.comparisonHeaderText}>{item.name}</Text>
-            <Text style={styles.comparisonHeaderSubtext}>Available from multiple stalls</Text>
+            <Text style={styles.comparisonHeaderSubtext}>{t('search.available_multiple_stalls')}</Text>
           </View>
           <Badge tone="brand">
-            {comparableCount} stall{comparableCount === 1 ? '' : 's'}
-            {differentUnitCount > 0 ? ` (+${differentUnitCount} ibang unit)` : ''}
+            {t('search.stalls_count', { count: comparableCount, defaultValue: `${comparableCount} ${comparableCount === 1 ? 'stall' : 'stalls'}` })}
+            {differentUnitCount > 0 ? ` (+${differentUnitCount} ${t('search.other_units')})` : ''}
           </Badge>
         </View>
       );
@@ -1015,20 +1015,20 @@ export default function SearchScreen({ navigation }) {
           <View style={styles.comparisonStallInfo}>
             <View style={styles.comparisonStallHeader}>
               <Ionicons name="storefront-outline" size={14} color={COLORS.primary} />
-              <Text style={styles.comparisonStallName} numberOfLines={2}>{stall.stall_name || 'Market Stall'}</Text>
+              <Text style={styles.comparisonStallName} numberOfLines={2}>{stall.stall_name || t('stalls.vendor_fallback')}</Text>
             </View>
-            <Text style={styles.comparisonStallNumber}>Stall #{stall.stall_number}</Text>
-            <Text style={styles.comparisonSection}>{stall.section}</Text>
+            <Text style={styles.comparisonStallNumber}>{t('stalls.stall_number')} #{stall.stall_number}</Text>
+            <Text style={styles.comparisonSection}>{stall.section ? t('market_sections.' + stall.section, stall.section) : ''}</Text>
             <View style={styles.ratingRow}>
               <StarRating rating={stallRating} size={12} />
               <Text style={styles.comparisonRating}> {stallRating.toFixed(1)}</Text>
-              <Text style={styles.ratingCount}>({ratingCount} reviews)</Text>
+              <Text style={styles.ratingCount}>({ratingCount} {t('search.reviews_count')})</Text>
             </View>
             {isCheapest && (
-              <VerdictChip verdict="PINAKAMURA" solid style={styles.bestDealBadge} />
+              <VerdictChip verdict={t('products.cheapest', 'PINAKAMURA')} solid style={styles.bestDealBadge} />
             )}
             {hasDifferentUnitSiblings && !isCheapest && (
-              <Text style={styles.differentUnitMarker}>Ibang unit</Text>
+              <Text style={styles.differentUnitMarker}>{t('search.other_unit')}</Text>
             )}
           </View>
           <View style={styles.comparisonPriceSection}>
@@ -1095,8 +1095,8 @@ export default function SearchScreen({ navigation }) {
             <Ionicons name="storefront" size={24} color={COLORS.primary} />
           </View>
           <View style={styles.cardInfo}>
-            <Text style={styles.resultName}>Stall #{item.stall_number}</Text>
-            <Text style={styles.resultStallName}>{item.stall_name || 'Market Stall'}</Text>
+            <Text style={styles.resultName}>{t('stalls.stall_number', { number: item.stall_number })}</Text>
+            <Text style={styles.resultStallName}>{item.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
             <View style={styles.cardMeta}>
               <View style={styles.sectionBadge}>
                 <Text style={styles.sectionBadgeText}>{item.section}</Text>
@@ -1128,7 +1128,7 @@ export default function SearchScreen({ navigation }) {
           <Text style={styles.recentTitle}>{t('search.recent_searches')}</Text>
         </View>
         <TouchableOpacity onPress={clearRecentSearches} activeOpacity={0.7}>
-          <Text style={styles.clearRecentText}>Clear All</Text>
+          <Text style={styles.clearRecentText}>{t('search.clear_all', 'Clear All')}</Text>
         </TouchableOpacity>
       </View>
       {recentSearches.map((item, index) => (
@@ -1184,7 +1184,7 @@ export default function SearchScreen({ navigation }) {
                           ? `₱${priceRange.min.toFixed(2)} – ₱${priceRange.max.toFixed(2)}`
                           : `₱${Number(product.price).toFixed(2)} / ${product.unit}`}
                       </Text>
-                      <Text style={styles.suggestionCardStall} numberOfLines={1}>{product.stalls?.stall_name || 'Market Stall'}</Text>
+                      <Text style={styles.suggestionCardStall} numberOfLines={1}>{product.stalls?.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -1197,7 +1197,7 @@ export default function SearchScreen({ navigation }) {
             <View style={[styles.recentHeader, { marginTop: SPACING.lg }]}>
               <View style={styles.recentHeaderLeft}>
                 <Ionicons name="storefront-outline" size={18} color={COLORS.primary} />
-                <Text style={styles.recentTitle}>{t('search.suggested_stalls') || 'Suggested Stalls'}</Text>
+                <Text style={styles.recentTitle}>{t('search.suggested_stalls', 'Suggested Stalls')}</Text>
               </View>
             </View>
             {suggestedStalls.map((stall) => (
@@ -1215,7 +1215,7 @@ export default function SearchScreen({ navigation }) {
         <Ionicons name="search-outline" size={56} color={COLORS.primary} />
       </View>
       <Text style={styles.emptyTitle}>{t('common.no_results')}</Text>
-      <Text style={styles.emptyText}>Try searching with a different keyword</Text>
+      <Text style={styles.emptyText}>{t('search.try_different_keyword', 'Try searching with a different keyword')}</Text>
     </View>
   );
 
@@ -1237,7 +1237,7 @@ export default function SearchScreen({ navigation }) {
             <Ionicons name="search-outline" size={20} color={COLORS.primary} />
             <TextInput
               style={styles.searchInput}
-              placeholder={isListening ? 'Listening... speak now (Tagalog or English)' : t('search.placeholder')}
+              placeholder={isListening ? t('search.voice_listening', 'Listening... speak now (Tagalog or English)') : t('search.placeholder')}
               placeholderTextColor={isListening ? COLORS.primary : COLORS.text.lighter}
               value={searchQuery}
               onChangeText={handleQueryChange}
@@ -1329,7 +1329,7 @@ export default function SearchScreen({ navigation }) {
               onPress={() => setSortOption(opt.id)}
               style={styles.sortChip}
             >
-              {opt.label}
+              {t('search.sort_' + opt.id, opt.label)}
             </Chip>
           ))}
           <Chip
@@ -1339,7 +1339,7 @@ export default function SearchScreen({ navigation }) {
             onPress={() => setFilterSheetVisible(true)}
             style={styles.sortChip}
           >
-            Filters
+            {t('search.filters', 'Filters')}
           </Chip>
           {activeFilterCount > 0 && (
             <View style={styles.filterCountDot}>
@@ -1354,14 +1354,14 @@ export default function SearchScreen({ navigation }) {
         <View style={styles.suggestionBanner}>
           <Ionicons name="bulb-outline" size={18} color={COLORS.warning} />
           <Text style={styles.suggestionText}>
-            Did you mean <Text style={styles.suggestionHighlight}>"{suggestion}"</Text>?
+            {t('search.did_you_mean', 'Did you mean')} <Text style={styles.suggestionHighlight}>"{suggestion}"</Text>?
           </Text>
           <TouchableOpacity
             style={styles.suggestionButton}
             onPress={() => applySuggestion(suggestion)}
             activeOpacity={0.8}
           >
-            <Text style={styles.suggestionButtonText}>Search</Text>
+            <Text style={styles.suggestionButtonText}>{t('common.search', 'Search')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1379,7 +1379,7 @@ export default function SearchScreen({ navigation }) {
       ) : loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Searching...</Text>
+          <Text style={styles.loadingText}>{t('search.searching', 'Searching...')}</Text>
         </View>
       ) : searchType === 'products' ? (
         <FlatList
@@ -1407,7 +1407,7 @@ export default function SearchScreen({ navigation }) {
         <TouchableOpacity style={styles.filterSheetOverlay} activeOpacity={1} onPress={() => setFilterSheetVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.filterSheet} onPress={() => {}}>
             <View style={styles.filterSheetHandle} />
-            <Text style={styles.filterSheetTitle}>Filters</Text>
+            <Text style={styles.filterSheetTitle}>{t('search.filters', 'Filters')}</Text>
 
             <Text style={styles.filterSectionLabel}>{t('categories.title', 'Category')}</Text>
             <View style={styles.filterChipWrap}>
@@ -1427,10 +1427,10 @@ export default function SearchScreen({ navigation }) {
               ))}
             </View>
 
-            <Text style={styles.filterSectionLabel}>Price Range</Text>
+            <Text style={styles.filterSectionLabel}>{t('search.price_range', 'Price Range')}</Text>
             <View style={styles.filterChipWrap}>
               <Chip size="compact" isOn={!priceRangeFilter} onPress={() => setPriceRangeFilter(null)} style={styles.filterChipItem}>
-                Any
+                {t('search.any_price', 'Any')}
               </Chip>
               {PRICE_RANGES.map((range) => (
                 <Chip
@@ -1440,7 +1440,7 @@ export default function SearchScreen({ navigation }) {
                   onPress={() => setPriceRangeFilter(priceRangeFilter?.id === range.id ? null : range)}
                   style={styles.filterChipItem}
                 >
-                  {range.label}
+                  {t('search.range_' + range.id, range.label)}
                 </Chip>
               ))}
             </View>
@@ -1450,13 +1450,13 @@ export default function SearchScreen({ navigation }) {
                 style={styles.filterClearButton}
                 onPress={() => { setCategoryFilter(null); setPriceRangeFilter(null); }}
               >
-                <Text style={styles.filterClearButtonText}>Clear All</Text>
+                <Text style={styles.filterClearButtonText}>{t('search.clear_all', 'Clear All')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.filterApplyButton, { backgroundColor: COLORS.primary }]}
                 onPress={() => setFilterSheetVisible(false)}
               >
-                <Text style={styles.filterApplyButtonText}>Show Results</Text>
+                <Text style={styles.filterApplyButtonText}>{t('search.show_results', 'Show Results')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>

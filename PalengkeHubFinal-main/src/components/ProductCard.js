@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../contexts/ThemeContext';
+import { useI18n } from '../contexts/i18nContext';
 import { useFavorites } from '../hooks/useFavorites';
 import { speak } from '../services/voiceService';
 import { PriceTrendBadge } from './PriceTrendBadge';
@@ -64,6 +65,7 @@ export const ProductCard = ({
   onComparePress,
 }) => {
   const COLORS = useColors();
+  const { t } = useI18n();
   const fav = useFavorites();
   const controlled = onToggleWishlist != null;
   const wishlisted = controlled ? !!isWishlisted : fav.isProductFavorite(product?.id);
@@ -266,7 +268,7 @@ export const ProductCard = ({
               onPress={onComparePress}
               style={styles.addButton}
             >
-              {`Ikumpara (${compareCount})`}
+              {t('product_card.compare_count', `Ikumpara (${compareCount})`, { count: compareCount })}
             </Button>
           ) : (
             <Button
@@ -277,7 +279,7 @@ export const ProductCard = ({
               onPress={onAddToCart}
               style={styles.addButton}
             >
-              Idagdag sa Kart
+              {t('product_card.add_to_cart', 'Idagdag sa Kart')}
             </Button>
           )}
         </View>

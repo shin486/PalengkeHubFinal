@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -16,11 +17,17 @@ import { fetchAllStallRatings } from '../../services/stallRatingsService';
 
 export default function StallsDirectoryScreen({ navigation, isGuest }) {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stalls, setStalls] = useState([]);
   const [sections, setSections] = useState([]);
   const [selectedSection, setSelectedSection] = useState('All');
   const [loading, setLoading] = useState(true);
+
+  const formatSection = (sec) => {
+    if (!sec || sec === 'All') return t('stalls.all_sections', 'All');
+    return t(`market_sections.${sec}`, sec);
+  };
   // Real per-stall ratings — stalls.average_rating (used below before this
   // fix) is never written to by anything in the app, so every card's
   // rating silently never showed at all.
@@ -72,26 +79,28 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
           <Text style={styles.stallNumber}>#{item.stall_number}</Text>
           {stallRatingsMap[item.id]?.average > 0 && (
             <View style={styles.ratingContainer}>
-              <Ionicons name="star" size={18} />
+              <Ionicons name="star" size={14} color="#F59E0B" />
               <Text style={styles.ratingValue}>{stallRatingsMap[item.id].average.toFixed(1)}</Text>
             </View>
           )}
         </View>
         
-        <Text style={styles.stallName}>{item.stall_name || 'Market Stall'}</Text>
+        <Text style={styles.stallName}>{item.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
         
-        <View style={styles.sectionBadge}>
-          <Text style={styles.sectionText}>{item.section}</Text>
-        </View>
+        {item.section ? (
+          <View style={styles.sectionBadge}>
+            <Text style={styles.sectionText}>{formatSection(item.section)}</Text>
+          </View>
+        ) : null}
         
-        {item.description && (
+        {item.description ? (
           <Text style={styles.stallDescription} numberOfLines={2}>
             {item.description}
           </Text>
-        )}
+        ) : null}
         
         <View style={styles.productCount}>
-          <Text style={styles.productCountText}>View Products →</Text>
+          <Text style={styles.productCountText}>{t('stalls.view_products', 'View Products →')}</Text>
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -101,7 +110,7 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.accent} />
-        <Text style={styles.loadingText}>Loading stalls...</Text>
+        <Text style={styles.loadingText}>{t('stalls.loading_stalls', 'Loading stalls...')}</Text>
       </View>
     );
   }
@@ -132,7 +141,7 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
               ]}
               numberOfLines={1}
             >
-              {section}
+              {formatSection(section)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -141,7 +150,9 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
       {/* Results Count */}
       <View style={styles.countContainer}>
         <Text style={styles.countText}>
-          {filteredStalls.length} {filteredStalls.length === 1 ? 'Stall' : 'Stalls'}
+          {filteredStalls.length === 1
+            ? t('stalls.stall_count_singular', '1 Stall')
+            : t('stalls.stall_count_plural', '%{count} Stalls', { count: filteredStalls.length })}
         </Text>
       </View>
 
@@ -156,8 +167,8 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
               {selectedSection === 'All' 
-                ? 'No active stalls available at the moment' 
-                : `No active stalls found in ${selectedSection}`}
+                ? t('stalls.empty_all', 'No active stalls available at the moment') 
+                : t('stalls.empty_section', 'No active stalls found in %{section}', { section: formatSection(selectedSection) })}
             </Text>
           </View>
         }
@@ -204,7 +215,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.tertiary,
   },
   filterChipTextActive: {
-    color: COLORS.text.inverse,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   countContainer: {
     paddingHorizontal: 16,
@@ -212,7 +224,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   countText: {
     fontSize: 14,
-    color: COLORS.text.tertiary,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
   },
   listContainer: {
     padding: 16,
@@ -227,6 +240,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   stallGradient: {
     padding: 16,
@@ -239,21 +254,21 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   stallNumber: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.accent,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   ratingStar: {
     fontSize: 12,
   },
   ratingValue: {
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.text.tertiary,
+    fontWeight: '700',
+    color: COLORS.text.primary,
   },
   stallName: {
     fontSize: 18,
@@ -271,11 +286,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   sectionText: {
     fontSize: 11,
-    color: COLORS.text.tertiary,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
   },
   stallDescription: {
     fontSize: 13,
-    color: COLORS.text.quaternary,
+    color: COLORS.text.secondary,
     lineHeight: 18,
     marginBottom: 12,
   },
@@ -285,15 +301,16 @@ const createStyles = (COLORS) => StyleSheet.create({
   productCountText: {
     fontSize: 13,
     color: COLORS.accent,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 16,
-    color: COLORS.text.quaternary,
+    fontSize: 15,
+    color: COLORS.text.secondary,
     textAlign: 'center',
+    lineHeight: 22,
   },
 });

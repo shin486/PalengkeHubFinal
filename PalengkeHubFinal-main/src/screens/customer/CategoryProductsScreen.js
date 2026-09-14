@@ -127,6 +127,7 @@ const StallGroupProductThumb = ({ item, styles }) => {
 // ============================================================
 const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewStall, rating }) => {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
   return (
@@ -144,7 +145,7 @@ const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewSt
           <View style={styles.stallGroupMeta}>
             <StarRating rating={rating} size={10} />
             <Text style={styles.stallGroupRating}>{rating.toFixed(1)}</Text>
-            <Text style={styles.stallGroupCount}>• {products.length} products</Text>
+            <Text style={styles.stallGroupCount}>• {t('category_products.products_count', { count: products.length })}</Text>
           </View>
         </View>
         <View style={styles.stallGroupArrow}>
@@ -191,7 +192,7 @@ const StallGroupCard = ({ stall, products, onProductPress, onAddToCart, onViewSt
             style={styles.stallGroupViewMore}
             onPress={onViewStall}
           >
-            <Text style={styles.stallGroupViewMoreText}>+{products.length - 3} more products</Text>
+            <Text style={styles.stallGroupViewMoreText}>+{products.length - 3} {t('category_products.more_products', 'more products')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -291,10 +292,10 @@ export default function CategoryProductsScreen({ route, navigation }) {
   const [headerImageError, setHeaderImageError] = useState(false);
   const showHeaderImage = config.image && !headerImageError;
   const sortOptions = [
-    { label: 'Recommended', value: 'recommended' },
-    { label: 'Lowest Price', value: 'price_asc' },
-    { label: 'Highest Rated Stall', value: 'rating_desc' },
-    { label: 'Recently Updated', value: 'recent' },
+    { label: t('category_products.sort_recommended', 'Recommended'), value: 'recommended' },
+    { label: t('category_products.sort_price_asc', 'Lowest Price'), value: 'price_asc' },
+    { label: t('category_products.sort_rating_desc', 'Highest Rated Stall'), value: 'rating_desc' },
+    { label: t('category_products.sort_recent', 'Recently Updated'), value: 'recent' },
   ];
 
   useEffect(() => {
@@ -388,21 +389,23 @@ export default function CategoryProductsScreen({ route, navigation }) {
 
   const handleAddToCart = async (product, stall) => {
     if (!user && !isGuest) {
+      const loginTitle = t('auth.login_required', 'Login Required');
+      const loginMsg = t('auth.login_to_add_cart', 'Please login to add items to cart');
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+        if (window.confirm(`${loginTitle}\n\n${loginMsg}`)) {
           navigation.navigate('Login');
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to add items to cart',
+        loginTitle,
+        loginMsg,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
           // This previously had no onPress at all — tapping "Login" natively
           // just dismissed the alert with no navigation.
-          { text: 'Login', onPress: () => navigation.navigate('Login') }
+          { text: t('auth.login', 'Login'), onPress: () => navigation.navigate('Login') }
         ]
       );
       return;
@@ -416,19 +419,23 @@ export default function CategoryProductsScreen({ route, navigation }) {
       // that leads to an empty cart.
       const result = await addToCart(product, stall.id, stall, 1);
       if (result?.requiresAuth) return;
+      const addedTitle = t('cart.added_to_cart', 'Added to Cart');
+      const addedMsg = t('category_products.added_to_cart_msg', { name: product.name });
+      const viewCartText = t('cart.view_cart', 'View Cart');
+      const continueText = t('cart.continue_shopping', 'Continue Shopping');
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm(`${product.name} added to your cart\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+        if (window.confirm(`${addedMsg}\n\nOK = ${viewCartText}, Cancel = ${continueText}`)) {
           navigation.navigate('Cart');
         }
         return;
       }
       Alert.alert(
-        'Added to Cart',
-        `${product.name} added to your cart`,
+        addedTitle,
+        addedMsg,
         [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
+          { text: continueText, style: 'cancel' },
+          { text: viewCartText, onPress: () => navigation.navigate('Cart') }
         ]
       );
     }
@@ -704,7 +711,7 @@ export default function CategoryProductsScreen({ route, navigation }) {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sort By</Text>
+              <Text style={styles.modalTitle}>{t('search.sort_by', 'Sort By')}</Text>
               <TouchableOpacity onPress={() => setShowSortModal(false)}>
                 <Ionicons name="close" size={24} color={COLORS.text.dark} />
               </TouchableOpacity>

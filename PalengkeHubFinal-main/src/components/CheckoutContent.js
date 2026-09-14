@@ -25,6 +25,7 @@ import { Capacitor } from '@capacitor/core';
 import { useAuth, SIGNED_URL_TTL_SECONDS } from '../contexts/AuthContext';
 import { useCart } from '../hooks/useCart';
 import { useColors } from '../contexts/ThemeContext';
+import { useI18n } from '../contexts/i18nContext';
 import { supabase } from '../../lib/supabase';
 import { normalizeReference, isValidGcashReference, scanReceipt, computeImageHash, validateReceiptScan } from '../utils/receiptScanner';
 import { clampPickupTime, MARKET_OPEN_HOUR, MARKET_CLOSE_HOUR } from '../utils/marketHours';
@@ -74,6 +75,7 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
   const { removeItems, syncPrices } = useCart();
+  const { t } = useI18n();
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   
@@ -151,8 +153,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       });
       
       notify(
-        'Payment Time Expired',
-        `Your 10-minute payment window for ${payment.stallName} has expired. This vendor's order has been cancelled.`
+        t('checkout.payment_expired_title', 'Payment Time Expired'),
+        t('checkout.payment_expired_desc', 'Your 10-minute payment window for %{stall} has expired. This order has been cancelled.', { stall: payment.stallName })
       );
       
     } catch (error) {
@@ -192,7 +194,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       // Web fallback: browser camera picker.
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        notify('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
+        notify(
+          t('checkout.camera_permission_title', 'Permission Needed'),
+          t('checkout.camera_permission_body', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.')
+        );
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -239,7 +244,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        notify('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+        notify(
+          t('checkout.gallery_permission_title', 'Permission Needed'),
+          t('checkout.gallery_permission_body', 'Please allow photo library access to upload your GCash receipt.')
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -257,7 +265,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       }
     } catch (error) {
       console.error('Error picking receipt:', error);
-      notify('Error', 'Failed to select receipt image.');
+      notify(t('common.error', 'Error'), t('checkout.receipt_select_error', 'Failed to select receipt image.'));
     }
   };
 
@@ -312,7 +320,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       return await imageToCompressedDataUri(uri);
     } catch (error) {
       console.error('Error uploading receipt:', error);
-      notify('Upload Error', 'Failed to upload receipt. Please try again.');
+      notify(t('checkout.upload_error_title', 'Upload Error'), t('checkout.upload_error_body', 'Failed to upload receipt. Please try again.'));
       return null;
     } finally {
       setGcashReceiptUploading(false);
@@ -327,11 +335,17 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     const referenceDigits = normalizeReference(payment.referenceNumber);
 
     if (!isValidGcashReference(referenceDigits)) {
-      notify('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
+      notify(
+        t('checkout.invalid_reference_title', 'Invalid Reference Number'),
+        t('checkout.invalid_reference_body', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.')
+      );
       return;
     }
     if (!payment.receiptUri) {
-      notify('Missing Receipt', 'Please take a photo of your GCash receipt.');
+      notify(
+        t('checkout.missing_receipt_title', 'Missing Receipt'),
+        t('checkout.missing_receipt_body', 'Please take a photo of your GCash receipt.')
+      );
       return;
     }
     if (payment.isProcessing) return;
@@ -342,7 +356,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       return updated;
     });
     setGcashScanError(null);
-    setGcashScanStatus('Scanning receipt…');
+    setGcashScanStatus(t('checkout.scanning_receipt', 'Scanning receipt…'));
 
     try {
       // 1) Scan the receipt with OCR — best effort, matching CheckoutScreen.js:
@@ -384,22 +398,25 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           : validation.digitCandidates.length
             ? validation.digitCandidates.join(', ')
             : 'no number sequence found';
-        const body = `We scanned your receipt and could not find the reference number you typed.\n\nYou typed: ${referenceDigits}\nFound on receipt: ${found}`;
+        const body = t('checkout.ref_not_found_body', 'We scanned your receipt and could not find the reference number you typed.\n\nYou typed: %{typed}\nFound on receipt: %{found}', { typed: referenceDigits, found });
         setGcashScanError(`Reference number not found on receipt. You typed: ${referenceDigits}. Found: ${found}`);
-        softIssue = { title: 'Reference Number Not Found on Receipt', body };
+        softIssue = { title: t('checkout.ref_not_found_title', 'Reference Number Not Found on Receipt'), body };
       } else if (!validation.amountMatched) {
         const body = validation.amounts.length === 0
-          ? `We could not find the total amount on your receipt (should be ₱${(payment.total || 0).toFixed(2)}).`
-          : `The amount on your receipt (${validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', ')}) does not match this vendor's total (₱${(payment.total || 0).toFixed(2)}).`;
+          ? t('checkout.amount_not_found', 'We could not find the total amount on your receipt (should be ₱%{amount}).', { amount: (payment.total || 0).toFixed(2) })
+          : t('checkout.amount_mismatch', 'The amount on your receipt (%{receiptAmount}) does not match this vendor\'s total (₱%{expectedAmount}).', {
+              receiptAmount: validation.amounts.map((a) => `₱${a.toFixed(2)}`).join(', '),
+              expectedAmount: (payment.total || 0).toFixed(2),
+            });
         setGcashScanError(body);
-        softIssue = { title: 'Receipt Amount Problem', body };
+        softIssue = { title: t('checkout.amount_problem_title', 'Receipt Amount Problem'), body };
       } else if (!validation.timeOk) {
         const body = validation.timeProblem === 'future'
-          ? 'The date/time on this receipt is in the future. Please upload the correct receipt.'
-          : 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.';
+          ? t('checkout.date_future', 'The date/time on this receipt is in the future. Please upload the correct receipt.')
+          : t('checkout.date_old', 'The date/time on this receipt is too old. Please upload the receipt for THIS payment.');
         setGcashScanError(body);
         softIssue = {
-          title: validation.timeProblem === 'future' ? 'Invalid Receipt Date' : 'Old Receipt Detected',
+          title: validation.timeProblem === 'future' ? t('checkout.invalid_receipt_date', 'Invalid Receipt Date') : t('checkout.old_receipt_detected', 'Old Receipt Detected'),
           body,
         };
       }
@@ -408,12 +425,12 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       // 3) Soft failures get a manual-verification escape hatch instead of a
       // dead end — matches CheckoutScreen.js's pattern.
       if (scanFailed || softIssue) {
-        const title = scanFailed ? 'Receipt Scan Unavailable' : softIssue.title;
+        const title = scanFailed ? t('checkout.receipt_scan_unavailable_title', 'Receipt Scan Unavailable') : softIssue.title;
         const body = scanFailed
-          ? 'We could not read your receipt automatically. Please check your internet connection or retake a clearer photo.'
+          ? t('checkout.receipt_scan_unavailable_body', 'We could not read your receipt automatically. Please check your internet connection or retake a clearer photo.')
           : softIssue.body;
 
-        const confirmBody = `${body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`;
+        const confirmBody = `${body}\n\n${t('checkout.vendor_verify_suffix', 'Vendors verify every payment manually — you can submit now and your vendor will confirm it.')}`;
         // react-native-web does NOT implement Alert.alert — its button
         // callbacks never fire on web, so the Promise below would hang
         // forever. window.confirm() is synchronous, so no Promise needed.
@@ -424,15 +441,15 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               title,
               confirmBody,
               [
-                { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
-                { text: 'Submit Anyway', onPress: () => resolve(true) },
+                { text: t('checkout.fix_it', 'Fix It'), style: 'cancel', onPress: () => resolve(false) },
+                { text: t('checkout.submit_anyway', 'Submit Anyway'), onPress: () => resolve(true) },
               ]
             );
           });
         if (!proceed) return;
       }
 
-      setGcashScanStatus('Checking for duplicates…');
+      setGcashScanStatus(t('checkout.checking_duplicates', 'Checking for duplicates…'));
 
       // 3) The same GCash reference cannot be used on another order.
       const { data: duplicateRef } = await supabase
@@ -442,10 +459,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         .neq('id', payment.orderId)
         .maybeSingle();
       if (duplicateRef) {
-        setGcashScanError('This GCash reference number was already used on another order. Every payment must have a unique reference number.');
+        setGcashScanError(t('checkout.duplicate_reference_body', 'This GCash reference number was already used on another order. Every payment must have a unique reference number.'));
         notify(
-          'Reference Already Used',
-          'This GCash reference number was already used on another order. Every payment must have a unique reference number.'
+          t('checkout.duplicate_reference_title', 'Reference Already Used'),
+          t('checkout.duplicate_reference_body', 'This GCash reference number was already used on another order. Every payment must have a unique reference number.')
         );
         return;
       }
@@ -461,10 +478,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
             .neq('id', payment.orderId)
             .maybeSingle();
           if (duplicateImage) {
-            setGcashScanError('This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.');
+            setGcashScanError(t('checkout.duplicate_receipt_body', 'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'));
             notify(
-              'Duplicate Receipt Detected',
-              'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'
+              t('checkout.duplicate_receipt_title', 'Duplicate Receipt Detected'),
+              t('checkout.duplicate_receipt_body', 'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.')
             );
             return;
           }
@@ -473,10 +490,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         }
       }
 
-      setGcashScanStatus('Uploading receipt…');
+      setGcashScanStatus(t('checkout.uploading_receipt', 'Uploading receipt…'));
       const receiptUrl = await uploadGcashReceipt(payment.receiptUri, payment.stallId, index);
       if (!receiptUrl) {
-        setGcashScanError('Failed to upload your receipt. Please try again.');
+        setGcashScanError(t('checkout.upload_error_body', 'Failed to upload receipt. Please try again.'));
         return;
       }
       
@@ -533,18 +550,19 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         }
         setTimeout(() => {
           setGcashModalVisible(false);
-          const successBody = 'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.';
+          const successBody = t('checkout.all_payments_submitted_body', 'Your GCash payments have been submitted. The vendors will verify each payment against their own GCash records and confirm your orders.');
+          const successTitle = t('checkout.all_payments_submitted_title', 'All Payments Submitted!');
           // react-native-web does NOT implement Alert.alert — use window.confirm on web
           if (Platform.OS === 'web') {
-            navigation.navigate(window.confirm(`All Payments Submitted!\n\n${successBody}\n\nOK = View Orders, Cancel = Continue Shopping`) ? 'Orders' : 'Home');
+            navigation.navigate(window.confirm(`${successTitle}\n\n${successBody}\n\nOK = ${t('checkout.view_orders', 'View Orders')}, Cancel = ${t('checkout.continue_shopping', 'Continue Shopping')}`) ? 'Orders' : 'Home');
             return;
           }
           Alert.alert(
-            'All Payments Submitted!',
+            successTitle,
             successBody,
             [
-              { text: 'View Orders', onPress: () => navigation.navigate('Orders') },
-              { text: 'Continue Shopping', onPress: () => navigation.navigate('Home') }
+              { text: t('checkout.view_orders', 'View Orders'), onPress: () => navigation.navigate('Orders') },
+              { text: t('checkout.continue_shopping', 'Continue Shopping'), onPress: () => navigation.navigate('Home') }
             ]
           );
         }, 1500);
@@ -556,16 +574,16 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           // Start timer for next vendor
           startTimerForVendor(nextIndex);
           notify(
-            'Payment Submitted!',
-            `Payment for ${payment.stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.`
+            t('checkout.payment_submitted', 'Payment Submitted!'),
+            t('checkout.payment_submitted_for_vendor', 'Payment for %{stallName} was submitted and is now waiting for vendor verification. Please proceed to pay the next vendor.', { stallName: payment.stallName })
           );
         }
       }
       
     } catch (error) {
       console.error('Error submitting payment:', error);
-      setGcashScanError('Failed to submit payment. Please try again.');
-      notify('Error', 'Failed to submit payment. Please try again.');
+      setGcashScanError(t('checkout.submit_payment_error', 'Failed to submit payment. Please try again.'));
+      notify(t('common.error', 'Error'), t('checkout.submit_payment_error', 'Failed to submit payment. Please try again.'));
     } finally {
       setGcashPayments(prev => {
         const updated = [...prev];
@@ -676,7 +694,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     newTime.setSeconds(0, 0);
 
     if (newTime.getHours() < MARKET_OPEN_HOUR || newTime.getHours() >= MARKET_CLOSE_HOUR) {
-      notify('Outside Market Hours', 'Pickup time must be between 5:00 AM and 7:00 PM.');
+      notify(t('checkout.outside_hours_title', 'Outside Market Hours'), t('checkout.outside_hours_body', 'Pickup time must be between 5:00 AM and 7:00 PM.'));
       return;
     }
 
@@ -689,7 +707,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     const now = new Date();
     const earliest = new Date(now.getTime() + 15 * 60 * 1000);
     if (newTime.toDateString() === now.toDateString() && newTime < earliest) {
-      notify('Invalid Time', 'Pickup time must be at least 15 minutes from now.');
+      notify(t('checkout.invalid_time_title', 'Invalid Time'), t('checkout.invalid_time_body', 'Pickup time must be at least 15 minutes from now.'));
       return;
     }
 
@@ -738,7 +756,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     background: 'transparent',
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     fontFamily: 'inherit',
     outline: 'none',
     cursor: 'pointer',
@@ -762,7 +780,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       .in('id', productIds);
 
     if (error) {
-      throw new Error('Could not verify your items. Please check your connection and try again.');
+      throw new Error(t('checkout.verify_error', 'Could not verify your items. Please check your connection and try again.'));
     }
 
     const freshMap = new Map((freshProducts || []).map(p => [p.id, p]));
@@ -822,7 +840,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
   //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
     if (cart.length === 0) {
-      notify('Empty Cart', 'Add items to your cart first');
+      notify(t('checkout.empty_cart_title', 'Empty Cart'), t('checkout.empty_cart_body', 'Add items to your cart first'));
       return;
     }
 
@@ -831,7 +849,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     // chosen can slip into the past (or past closing) by the time the
     // order actually submits, e.g. sitting on this screen near closing.
     if (pickupTime.getHours() < MARKET_OPEN_HOUR || pickupTime.getHours() >= MARKET_CLOSE_HOUR || pickupTime < new Date()) {
-      notify('Invalid Pickup Time', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.');
+      notify(t('checkout.invalid_pickup_time_title', 'Invalid Pickup Time'), t('checkout.invalid_pickup_time_body', 'Please choose a pickup time between 5:00 AM and 7:00 PM, later than now.'));
       return;
     }
 
@@ -842,8 +860,12 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       if (blockedNames.length > 0) {
         setLoading(false);
         notify(
-          'Some items are no longer available',
-          `${blockedNames.join(', ')} ${blockedNames.length === 1 ? 'is' : 'are'} no longer available. Please remove ${blockedNames.length === 1 ? 'it' : 'them'} from your cart and try again.`
+          t('checkout.items_unavailable_title', 'Some items are no longer available'),
+          t('checkout.items_unavailable_body', '%{names} %{verb} no longer available. Please remove %{pronoun} from your cart and try again.', {
+            names: blockedNames.join(', '),
+            verb: blockedNames.length === 1 ? t('cart.is', 'is') : t('cart.are', 'are'),
+            pronoun: blockedNames.length === 1 ? 'it' : 'them',
+          })
         );
         return;
       }
@@ -851,8 +873,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       if (pricesChanged) {
         setLoading(false);
         notify(
-          'Prices have changed',
-          'One or more items in your cart changed price since you added them. Please review your cart — the updated total is now shown there.'
+          t('checkout.prices_changed_title', 'Prices have changed'),
+          t('checkout.prices_changed_body', 'One or more items in your cart changed price since you added them. Please review your cart — the updated total is now shown there.')
         );
         return;
       }
@@ -937,7 +959,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           isSubmitted: false,
           isProcessing: false,
           isExpired: false,
- timeRemaining: 600, // 10 minutes per vendor
+          timeRemaining: 600, // 10 minutes per vendor
         });
       }
 
@@ -962,7 +984,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       // message) instead of a generic dead-end — this exact spot was the
       // only thing standing between "order failed" and actually knowing
       // why, since react-native-web has no console the customer can see.
-      notify('Error', error?.message || 'Failed to place order. Please try again.');
+      notify(t('common.error', 'Error'), error?.message || t('checkout.place_order_error', 'Failed to place order. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -981,21 +1003,21 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Back Button */}
       <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
-        <Ionicons name="arrow-back" size={24} color={COLORS.text.dark} />
-        <Text style={styles.backText}>Back to Cart</Text>
+        <Ionicons name="arrow-back" size={24} color={COLORS.text.primary || COLORS.text.dark} />
+        <Text style={styles.backText}>{t('checkout.back_to_cart', 'Back to Cart')}</Text>
       </TouchableOpacity>
 
       {/* Order Summary */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order Summary</Text>
+        <Text style={styles.sectionTitle}>{t('checkout.order_summary', 'Order Summary')}</Text>
         {Object.entries(groupedOrders).length === 0 ? (
-          <Text style={styles.emptyOrderText}>No items in order</Text>
+          <Text style={styles.emptyOrderText}>{t('checkout.empty_order', 'No items in order')}</Text>
         ) : (
           Object.entries(groupedOrders).map(([stallId, data]) => (
             <View key={stallId} style={styles.stallSection}>
               <View style={styles.stallHeader}>
                 <Ionicons name="storefront" size={18} color={COLORS.primary} />
-                <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
+                <Text style={styles.stallName}>{data.stall?.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
                 <Text style={styles.stallNumber}>#{data.stall?.stall_number}</Text>
               </View>
               {data.items.map((item, index) => (
@@ -1005,21 +1027,21 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                 </View>
               ))}
               <View style={styles.stallTotal}>
-                <Text style={styles.stallTotalLabel}>Stall Total</Text>
+                <Text style={styles.stallTotalLabel}>{t('checkout.stall_total', 'Stall Total')}</Text>
                 <Text style={styles.stallTotalAmount}>₱{data.total.toFixed(2)}</Text>
               </View>
             </View>
           ))
         )}
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalLabel}>{t('common.total', 'Total')}</Text>
           <Text style={styles.totalAmount}>₱{cartTotal.toFixed(2)}</Text>
         </View>
       </View>
 
       {/* Pickup Time */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Pickup Time</Text>
+        <Text style={styles.sectionTitle}>{t('checkout.pickup_schedule', 'Pickup Time')}</Text>
         {Platform.OS === 'web' ? (
           <View style={styles.pickupRow}>
             <View style={styles.pickupButton}>
@@ -1064,7 +1086,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
         )}
         <View style={styles.pickupNote}>
           <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.pickupNoteText}>Please arrive within 15 minutes of your selected time</Text>
+          <Text style={styles.pickupNoteText}>{t('checkout.arrive_early', 'Please arrive within 15 minutes of your selected time')}</Text>
         </View>
       </View>
 
@@ -1077,8 +1099,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       {/* Payment Method - GCash Only */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Payment Method</Text>
-        <Text style={styles.sectionSubtitle}>Pay securely using GCash</Text>
+        <Text style={styles.sectionTitle}>{t('checkout.payment_method', 'Payment Method')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('checkout.pay_securely_gcash', 'Pay securely using GCash')}</Text>
         
         <View style={styles.gcashPaymentCard}>
           <View style={styles.gcashPaymentRow}>
@@ -1087,8 +1109,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                 <Ionicons name="wallet-outline" size={24} color="#FFFFFF" />
               </View>
               <View style={styles.gcashPaymentInfo}>
-                <Text style={styles.gcashPaymentName}>GCash</Text>
-                <Text style={styles.gcashPaymentDesc}>Pay securely using GCash</Text>
+                <Text style={styles.gcashPaymentName}>{t('checkout.gcash', 'GCash')}</Text>
+                <Text style={styles.gcashPaymentDesc}>{t('checkout.pay_securely_gcash', 'Pay securely using GCash')}</Text>
               </View>
             </View>
             <View style={styles.gcashPaymentCheck}>
@@ -1097,7 +1119,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           </View>
           <View style={styles.gcashPaymentFooter}>
             <Ionicons name="shield-checkmark-outline" size={12} color={COLORS.text.light} />
-            <Text style={styles.gcashPaymentFooterText}>Secured by GCash</Text>
+            <Text style={styles.gcashPaymentFooterText}>{t('checkout.secured_gcash', 'Secured by GCash')}</Text>
           </View>
         </View>
         
@@ -1105,7 +1127,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
           <View style={styles.vendorCountInfo}>
             <Ionicons name="information-circle-outline" size={16} color={COLORS.text.light} />
             <Text style={styles.vendorCountText}>
-              You are ordering from {Object.keys(groupedOrders).length} vendors. You will need to pay each vendor separately via GCash.
+              {t('checkout.multi_vendor_info', 'You are ordering from %{count} vendors. You will need to pay each vendor separately via GCash.', { count: Object.keys(groupedOrders).length })}
             </Text>
           </View>
         )}
@@ -1113,10 +1135,10 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
       {/* Special Instructions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Special Instructions</Text>
+        <Text style={styles.sectionTitle}>{t('checkout.special_instructions', 'Special Instructions')}</Text>
         <TextInput
           style={styles.instructionsInput}
-          placeholder="e.g., Please pack items carefully"
+          placeholder={t('checkout.instructions_placeholder', 'Special instructions for the seller...')}
           placeholderTextColor={COLORS.text.lighter}
           value={specialInstructions}
           onChangeText={setSpecialInstructions}
@@ -1145,8 +1167,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
             <>
               <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
               <Text style={styles.placeOrderText}>
-                Place Order & Pay via GCash
-                {Object.keys(groupedOrders).length > 1 && ` (${Object.keys(groupedOrders).length} vendors)`}
+                {t('checkout.place_order_gcash', 'Place Order & Pay via GCash')}
+                {Object.keys(groupedOrders).length > 1 && ' ' + t('checkout.vendors_count', '(%{count} vendors)', { count: Object.keys(groupedOrders).length })}
               </Text>
             </>
           )}
@@ -1156,8 +1178,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       <View style={styles.infoBox}>
         <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
         <Text style={styles.infoText}>
-          After placing your order, you will have 10 minutes to complete your GCash payment{Object.keys(groupedOrders).length > 1 ? 's' : ''}. 
-          {Object.keys(groupedOrders).length > 1 && ' Each vendor must be paid separately.'}
+          {t('checkout.info_payment_window', 'After placing your order, you will have 10 minutes to complete your GCash payment. Each vendor must be paid separately.')}
         </Text>
       </View>
 
@@ -1190,8 +1211,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {totalVendors > 1 && (
                 <View style={styles.gcashProgressContainer}>
                   <Text style={styles.gcashProgressText}>
-                    Vendor {currentVendorIndex + 1} of {totalVendors}
-                    {remainingVendors > 1 && ` • ${remainingVendors} remaining`}
+                    {t('checkout.vendor_progress', 'Vendor %{current} of %{total}', { current: currentVendorIndex + 1, total: totalVendors })}
+                    {remainingVendors > 1 && ' • ' + t('checkout.vendors_remaining', '%{count} remaining', { count: remainingVendors })}
                   </Text>
                   <View style={styles.gcashProgressBar}>
                     <View style={[styles.gcashProgressFill, { 
@@ -1205,11 +1226,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                 <View style={styles.gcashModalHeaderIcon}>
                   <Ionicons name="wallet" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={styles.gcashModalTitle}>GCash Payment</Text>
+                <Text style={styles.gcashModalTitle}>{t('checkout.gcash_payment', 'GCash Payment')}</Text>
                 {totalVendors > 1 ? (
-                  <Text style={styles.gcashModalSubtitle}>Pay {currentPayment?.stallName}</Text>
+                  <Text style={styles.gcashModalSubtitle}>{t('checkout.pay_stall', 'Pay %{stall}', { stall: currentPayment?.stallName })}</Text>
                 ) : (
-                  <Text style={styles.gcashModalSubtitle}>Complete your payment within 10 minutes</Text>
+                  <Text style={styles.gcashModalSubtitle}>{t('checkout.gcash_timer_hint', 'Complete your payment within 10 minutes or your order will be cancelled.')}</Text>
                 )}
               </View>
 
@@ -1224,7 +1245,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                     size={22} 
                     color={currentPayment.timeRemaining <= 60 ? '#EF4444' : COLORS.primary} 
                   />
-                  <Text style={styles.gcashTimerLabel}>Time Remaining</Text>
+                  <Text style={styles.gcashTimerLabel}>{t('checkout.time_remaining', 'Time Remaining')}</Text>
                   <Text style={[
                     styles.gcashTimerValue,
                     currentPayment.timeRemaining <= 60 && styles.gcashTimerValueUrgent
@@ -1237,7 +1258,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {/* Vendor QR Code */}
               {currentPayment && !currentPayment.isExpired && (
                 <View style={styles.gcashQRContainer}>
-                  <Text style={styles.gcashQRTitle}>Scan to Pay</Text>
+                  <Text style={styles.gcashQRTitle}>{t('checkout.scan_to_pay', 'Scan to Pay')}</Text>
                   <View style={styles.gcashQRBox}>
                     {currentPayment.gcashQrUrl ? (
                       <Image source={{ uri: currentPayment.gcashQrUrl }} style={styles.gcashQRImage} resizeMode="contain" />
@@ -1246,22 +1267,22 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                         {currentPayment.gcashNumber ? (
                           <>
                             <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
-                            <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
+                            <Text style={styles.gcashQRPlaceholderText}>{t('checkout.vendor_qr_code', 'Vendor QR Code')}</Text>
                             <Text style={styles.gcashQRPlaceholderSubtext}>GCash: {currentPayment.gcashNumber}</Text>
                           </>
                         ) : (
                           <>
                             <Ionicons name="warning-outline" size={48} color={COLORS.error} />
-                            <Text style={styles.gcashQRPlaceholderText}>No GCash number on file</Text>
-                            <Text style={styles.gcashQRPlaceholderSubtext}>This vendor hasn't set up GCash payment yet. Please confirm their payment details directly before sending money.</Text>
+                            <Text style={styles.gcashQRPlaceholderText}>{t('checkout.no_gcash_number', 'No GCash number on file')}</Text>
+                            <Text style={styles.gcashQRPlaceholderSubtext}>{t('checkout.no_gcash_desc', "This vendor hasn't set up GCash payment yet. Please confirm their payment details directly before sending money.")}</Text>
                           </>
                         )}
                       </View>
                     )}
                   </View>
                   <Text style={styles.gcashQRVendor}>{currentPayment.stallName}</Text>
-                  <Text style={styles.gcashQRPrice}>Amount: ₱{currentPayment.total.toFixed(2)}</Text>
-                  <Text style={styles.gcashQRHint}>Open GCash, scan QR, send exact amount</Text>
+                  <Text style={styles.gcashQRPrice}>{t('checkout.amount_label', 'Amount: ₱%{amount}', { amount: currentPayment.total.toFixed(2) })}</Text>
+                  <Text style={styles.gcashQRHint}>{t('checkout.open_gcash_hint', 'Open GCash, scan QR, send exact amount')}</Text>
                 </View>
               )}
 
@@ -1269,11 +1290,11 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && !currentPayment.isPaid && !currentPayment.isExpired && (
                 <View style={styles.gcashInputSection}>
                   <Text style={styles.gcashInputLabel}>
-                    <Ionicons name="document-text-outline" size={16} color={COLORS.text.dark} /> Reference Number
+                    <Ionicons name="document-text-outline" size={16} color={COLORS.text.primary || COLORS.text.dark} /> {t('checkout.gcash_reference', 'GCash Reference Number')}
                   </Text>
                   <TextInput
                     style={styles.gcashInput}
-                    placeholder="Enter 13-digit GCash reference number"
+                    placeholder={t('checkout.gcash_ref_placeholder', 'e.g. 1234 5678 9012')}
                     placeholderTextColor={COLORS.text.lighter}
                     value={currentPayment.referenceNumber || ''}
                     onChangeText={(text) => {
@@ -1287,7 +1308,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                     maxLength={13}
                   />
                   <Text style={styles.gcashInputHint}>
-                    GCash reference numbers are exactly 13 digits
+                    {t('checkout.gcash_ref_hint', 'You can find this in your GCash app under Transaction History.')}
                   </Text>
                 </View>
               )}
@@ -1296,7 +1317,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && !currentPayment.isPaid && !currentPayment.isExpired && (
                 <View style={styles.gcashReceiptSection}>
                   <Text style={styles.gcashInputLabel}>
-                    <Ionicons name="camera-outline" size={16} color={COLORS.text.dark} /> Payment Receipt
+                    <Ionicons name="camera-outline" size={16} color={COLORS.text.primary || COLORS.text.dark} /> {t('checkout.payment_receipt', 'Payment Receipt')}
                   </Text>
                   <TouchableOpacity 
                     style={styles.gcashReceiptButton} 
@@ -1308,16 +1329,16 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       <View style={styles.gcashReceiptPreviewContainer}>
                         <Image source={{ uri: currentPayment.receiptUri }} style={styles.gcashReceiptPreview} />
                         <Text style={styles.gcashReceiptChangeText}>
-                          <Ionicons name="camera-outline" size={14} /> Tap to retake
+                          <Ionicons name="camera-outline" size={14} /> {t('checkout.tap_to_retake', 'Tap to retake')}
                         </Text>
                       </View>
                     ) : (
                       <View style={styles.gcashReceiptPlaceholder}>
                         <Ionicons name="camera-outline" size={36} color={COLORS.gcash} />
                         <Text style={styles.gcashReceiptText}>
-                          {gcashReceiptUploading ? 'Uploading...' : 'Take Photo of Receipt'}
+                          {gcashReceiptUploading ? t('common.loading', 'Uploading...') : t('checkout.take_photo_receipt', 'Take Photo of Receipt')}
                         </Text>
-                        <Text style={styles.gcashReceiptHint}>Photograph your GCash receipt now</Text>
+                        <Text style={styles.gcashReceiptHint}>{t('checkout.photo_receipt_hint', 'Photograph your GCash receipt now')}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -1328,7 +1349,7 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                     activeOpacity={0.7}
                   >
                     <Ionicons name="images-outline" size={16} color={COLORS.text.light} />
-                    <Text style={styles.gcashReceiptSecondaryText}>Choose from gallery instead</Text>
+                    <Text style={styles.gcashReceiptSecondaryText}>{t('checkout.choose_from_gallery', 'Choose from gallery instead')}</Text>
                   </TouchableOpacity>
                   {gcashScanStatus && (
                     <View style={styles.gcashScanStatusRow}>
@@ -1349,10 +1370,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && currentPayment.isExpired && (
                 <View style={styles.gcashExpiredContainer}>
                   <Ionicons name="close-circle" size={48} color="#EF4444" />
-                  <Text style={styles.gcashExpiredTitle}>Payment Expired</Text>
+                  <Text style={styles.gcashExpiredTitle}>{t('checkout.payment_expired_title', 'Payment Time Expired')}</Text>
                   <Text style={styles.gcashExpiredText}>
-                    Your payment window for {currentPayment.stallName} has expired.
-                    This order has been cancelled.
+                    {t('checkout.payment_expired_desc', 'Your payment window for %{stall} has expired. This order has been cancelled.', { stall: currentPayment.stallName })}
                   </Text>
                 </View>
               )}
@@ -1377,18 +1397,18 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                     {currentPayment.isProcessing ? (
                       <>
                         <ActivityIndicator color="#FFFFFF" />
-                        <Text style={styles.gcashSubmitText}>Verifying Payment…</Text>
+                        <Text style={styles.gcashSubmitText}>{t('checkout.verifying_payment', 'Verifying Payment…')}</Text>
                       </>
                     ) : currentPayment.isPaid ? (
                       <>
                         <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.gcashSubmitText}>Payment Completed</Text>
+                        <Text style={styles.gcashSubmitText}>{t('checkout.payment_completed', 'Payment Completed')}</Text>
                       </>
                     ) : (
                       <>
                         <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
                         <Text style={styles.gcashSubmitText}>
-                          {totalVendors > 1 ? `Pay ${currentPayment.stallName}` : 'Confirm Payment'}
+                          {totalVendors > 1 ? t('checkout.pay_stall', 'Pay %{stall}', { stall: currentPayment.stallName }) : t('checkout.confirm_payment', 'Confirm Payment')}
                         </Text>
                       </>
                     )}
@@ -1400,9 +1420,9 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
               {currentPayment && currentPayment.isPaid && (
                 <View style={styles.gcashCompletedContainer}>
                   <Ionicons name="checkmark-circle" size={48} color={COLORS.success} />
-                  <Text style={styles.gcashCompletedText}>Payment Submitted</Text>
+                  <Text style={styles.gcashCompletedText}>{t('checkout.payment_submitted', 'Payment Submitted!')}</Text>
                   <Text style={styles.gcashCompletedSubtext}>
-                    {currentPayment.stallName} will verify your payment shortly
+                    {t('checkout.vendor_verify_shortly', '%{stall} will verify your payment shortly', { stall: currentPayment.stallName })}
                   </Text>
                 </View>
               )}
@@ -1414,14 +1434,14 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                   onPress={() => skipToNextVendor(currentVendorIndex)} 
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.gcashSkipText}>Skip to next vendor</Text>
+                  <Text style={styles.gcashSkipText}>{t('checkout.skip_next_vendor', 'Skip to next vendor')}</Text>
                 </TouchableOpacity>
               )}
 
               {/* Payment Progress Summary */}
               {totalVendors > 1 && (
                 <View style={styles.gcashStatusSummary}>
-                  <Text style={styles.gcashStatusSummaryTitle}>Payment Progress</Text>
+                  <Text style={styles.gcashStatusSummaryTitle}>{t('checkout.payment_progress', 'Payment Progress')}</Text>
                   {gcashPayments.map((p, idx) => (
                     <View key={idx} style={styles.gcashStatusItem}>
                       <View style={styles.gcashStatusItemLeft}>
@@ -1448,8 +1468,8 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
                       </View>
                       <Text style={styles.gcashStatusItemAmount}>
                         ₱{p.total.toFixed(2)}
-                        {p.isPaid && ' Paid'}
-                        {p.isExpired && ' Expired'}
+                        {p.isPaid && ' ' + t('common.paid', 'Paid')}
+                        {p.isExpired && ' ' + t('checkout.expired', 'Expired')}
                       </Text>
                     </View>
                   ))}
@@ -1476,7 +1496,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   backText: {
     fontSize: 16,
-    color: COLORS.text.medium,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginLeft: 8,
   },
   section: {
@@ -1493,7 +1513,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginBottom: 12,
   },
   sectionSubtitle: {
@@ -1520,7 +1540,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   stallName: {
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     flex: 1,
     marginLeft: 6,
   },
@@ -1571,7 +1591,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   totalLabel: {
     fontSize: 17,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
   },
   totalAmount: {
     fontSize: 22,
@@ -1586,7 +1606,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceSecondary || COLORS.background,
     borderRadius: RADIUS.md,
     padding: 12,
     borderWidth: 1,
@@ -1596,7 +1616,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   pickupText: {
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
   },
   pickupNote: {
     flexDirection: 'row',
@@ -1644,7 +1664,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashPaymentName: {
     fontSize: 15,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
   },
   gcashPaymentDesc: {
     fontSize: 12,
@@ -1692,9 +1712,9 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: 12,
     fontSize: 14,
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     minHeight: 70,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceSecondary || COLORS.background,
     textAlignVertical: 'top',
   },
   placeOrderButton: {
@@ -1812,7 +1832,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashModalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
   },
   gcashModalSubtitle: {
     fontSize: 13,
@@ -1853,13 +1873,13 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashQRTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginBottom: SPACING.sm,
   },
   gcashQRBox: {
     width: 160,
     height: 160,
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: RADIUS.md,
     borderWidth: 2,
     borderColor: COLORS.borderLight,
@@ -1887,7 +1907,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashQRVendor: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginTop: SPACING.sm,
   },
   gcashQRPrice: {
@@ -1908,7 +1928,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashInputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginBottom: SPACING.sm,
   },
   gcashInput: {
@@ -1917,8 +1937,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     fontSize: 15,
-    color: COLORS.text.dark,
-    backgroundColor: COLORS.background,
+    color: COLORS.text.primary || COLORS.text.dark,
+    backgroundColor: COLORS.surfaceSecondary || COLORS.background,
   },
   gcashReceiptSection: {
     marginBottom: SPACING.md,
@@ -1928,7 +1948,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceSecondary || COLORS.background,
   },
   gcashReceiptPlaceholder: {
     padding: SPACING.xl,
@@ -2047,7 +2067,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashStatusSummaryTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
     marginBottom: SPACING.sm,
   },
   gcashStatusItem: {
@@ -2078,7 +2098,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   gcashStatusItemAmount: {
     fontSize: 12,
     fontWeight: '500',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary || COLORS.text.dark,
   },
   gcashExpiredContainer: {
     alignItems: 'center',

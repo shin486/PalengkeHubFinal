@@ -205,7 +205,7 @@ const StarRating = ({ rating, size = 12 }) => {
 };
 
 // Price History Chart Component (Recharts on web, fallback bar chart on native)
-const PriceHistoryChart = ({ data, styles, COLORS }) => {
+const PriceHistoryChart = ({ data, styles, COLORS, t }) => {
   if (!data || !Array.isArray(data) || data.length === 0) return null;
 
   const chartData = data.map(h => ({
@@ -219,7 +219,7 @@ const PriceHistoryChart = ({ data, styles, COLORS }) => {
     try {
       return (
         <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>Price Trend (Last 30 Days)</Text>
+          <Text style={styles.chartTitle}>{t ? t('products.price_trend_30d', 'Price Trend (Last 30 Days)') : 'Price Trend (Last 30 Days)'}</Text>
           <View style={{ width: '100%', height: 200 }}>
             <RechartsResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
@@ -268,7 +268,7 @@ const PriceHistoryChart = ({ data, styles, COLORS }) => {
 
   return (
     <View style={styles.chartContainer}>
-      <Text style={styles.chartTitle}>Price Trend (Last 30 Days)</Text>
+      <Text style={styles.chartTitle}>{t ? t('products.price_trend_30d', 'Price Trend (Last 30 Days)') : 'Price Trend (Last 30 Days)'}</Text>
       <View style={styles.chartBars}>
         {chartData.slice(0, 8).map((point, index) => {
           const height = ((point.price - minPrice) / priceRange) * 100;
@@ -282,9 +282,9 @@ const PriceHistoryChart = ({ data, styles, COLORS }) => {
         })}
       </View>
       <View style={styles.chartInfo}>
-        <Text style={styles.chartInfoText}>Min: ₱{minPrice.toFixed(2)}</Text>
-        <Text style={styles.chartInfoText}>Max: ₱{maxPrice.toFixed(2)}</Text>
-        <Text style={styles.chartInfoText}>Avg: ₱{(prices.reduce((sum, p) => sum + p, 0) / prices.length).toFixed(2)}</Text>
+        <Text style={styles.chartInfoText}>{t ? t('products.min', 'Min') : 'Min'}: ₱{minPrice.toFixed(2)}</Text>
+        <Text style={styles.chartInfoText}>{t ? t('products.max', 'Max') : 'Max'}: ₱{maxPrice.toFixed(2)}</Text>
+        <Text style={styles.chartInfoText}>{t ? t('products.avg', 'Avg') : 'Avg'}: ₱{(prices.reduce((sum, p) => sum + p, 0) / prices.length).toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -533,7 +533,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
     } catch (error) {
       console.error('Error fetching product:', error);
-      Alert.alert('Error', 'Failed to load product details');
+      Alert.alert(t('common.error', 'Error'), t('products.failed_load', 'Failed to load product details'));
     } finally {
       setLoading(false);
     }
@@ -562,8 +562,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
   };
 
   const getUnitDisplayText = (unit) => {
-    const unitInfo = UNIT_CONFIG[unit];
-    return unitInfo ? unitInfo.label : `Per ${unit}`;
+    return t(`units.${unit}`, UNIT_CONFIG[unit]?.label || `Per ${unit}`);
   };
 
   const getUnitSuffix = (unit) => {
@@ -576,19 +575,19 @@ export default function ProductDetailsScreen({ route, navigation }) {
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to add items to cart')) {
+        if (window.confirm(`${t('auth.login_required', 'Login Required')}\n\n${t('auth.login_to_add_cart', 'Please login to add items to cart')}`)) {
           if (setIsGuest) setIsGuest(false);
           else navigation.popToTop();
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to add items to cart',
+        t('auth.login_required', 'Login Required'),
+        t('auth.login_to_add_cart', 'Please login to add items to cart'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
           {
-            text: 'Login',
+            text: t('auth.login', 'Login'),
             onPress: () => {
               if (setIsGuest) setIsGuest(false);
               else navigation.popToTop();
@@ -821,18 +820,18 @@ export default function ProductDetailsScreen({ route, navigation }) {
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm('Login Required\n\nPlease login to report an issue') && setIsGuest) {
+        if (window.confirm(`${t('auth.login_required', 'Login Required')}\n\nPlease login to report an issue`) && setIsGuest) {
           setIsGuest(false);
         }
         return;
       }
       Alert.alert(
-        'Login Required',
-        'Please login to report an issue',
+        t('auth.login_required', 'Login Required'),
+        t('auth.sign_in_to_continue', 'Please login to report an issue'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
           {
-            text: 'Login',
+            text: t('auth.login', 'Login'),
             onPress: () => {
               if (setIsGuest) setIsGuest(false);
             }
@@ -1201,14 +1200,16 @@ export default function ProductDetailsScreen({ route, navigation }) {
               <View style={styles.ratingContainer}>
                 <StarRating rating={displayRating} size={12} />
                 <Text style={styles.stallRatingText}>{displayRating.toFixed(1)}</Text>
-                <Text style={styles.stallRatingCount}>({ratingCount} reviews)</Text>
+                <Text style={styles.stallRatingCount}>
+                  {t('products.reviews_count', '(%{count} reviews)', { count: ratingCount })}
+                </Text>
               </View>
             </View>
 
             <Text style={styles.stallName}>{stall.stall_name || 'Market Stall'}</Text>
             <Text style={styles.stallSectionText}>{stall.section}</Text>
 
-            <Text style={styles.viewStallLink}>Tingnan ang Stall →</Text>
+            <Text style={styles.viewStallLink}>{t('products.view_stall_arrow', 'Tingnan ang Stall →')}</Text>
           </View>
         </TouchableOpacity>
       ) : null}
@@ -1216,7 +1217,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
       {/* Detalye: unit, quantity, secondary actions, description */}
       {availableUnits.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Unit</Text>
+          <Text style={styles.sectionTitle}>{t('products.select_unit', 'Select Unit')}</Text>
           <View style={styles.unitsContainer}>
             {availableUnits.map((unit) => {
               const originalPrice = getUnitOriginalPrice(unit);
@@ -1257,7 +1258,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quantity</Text>
+        <Text style={styles.sectionTitle}>{t('products.quantity', 'Quantity')}</Text>
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             style={styles.quantityButton}
@@ -1282,7 +1283,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <View style={styles.haggleBanner}>
             <Ionicons name="pricetag" size={16} color={COLORS.success} />
             <Text style={styles.haggleBannerText}>
-              Your haggled price: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)} — applies to your next order only
+              {t('products.your_haggled_price', 'Your haggled price: ₱%{price} / %{unit} — applies to your next order only', {
+                price: activeHaggle.current_price.toFixed(2),
+                unit: getUnitDisplayText(selectedUnit),
+              })}
             </Text>
           </View>
         )}
@@ -1290,10 +1294,13 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <View style={styles.haggleBanner}>
             <Ionicons name="time-outline" size={16} color={COLORS.text.tertiary} />
             <Text style={styles.haggleBannerText}>
-              Offer sent: ₱{activeHaggle.current_price.toFixed(2)} / {getUnitDisplayText(selectedUnit)} — waiting for the vendor
+              {t('products.offer_sent_waiting', 'Offer sent: ₱%{price} / %{unit} — waiting for the vendor', {
+                price: activeHaggle.current_price.toFixed(2),
+                unit: getUnitDisplayText(selectedUnit),
+              })}
             </Text>
             <TouchableOpacity onPress={withdrawOffer} disabled={withdrawingHaggle} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.haggleWithdrawText}>{withdrawingHaggle ? '...' : 'Withdraw'}</Text>
+              <Text style={styles.haggleWithdrawText}>{withdrawingHaggle ? '...' : t('products.withdraw', 'Withdraw')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1301,7 +1308,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
           <View style={[styles.haggleBanner, { backgroundColor: COLORS.warningLight || COLORS.inputBg }]}>
             <Ionicons name="swap-horizontal" size={16} color={COLORS.warning || COLORS.text.primary} />
             <Text style={styles.haggleBannerText}>
-              Vendor countered: <Text style={{ fontFamily: 'Nunito_800ExtraBold', fontWeight: '800' }}>₱{activeHaggle.current_price.toFixed(2)}</Text> / {getUnitDisplayText(selectedUnit)}
+              {t('products.vendor_countered', 'Vendor countered: ₱%{price} / %{unit}', {
+                price: activeHaggle.current_price.toFixed(2),
+                unit: getUnitDisplayText(selectedUnit),
+              })}
             </Text>
           </View>
         )}
@@ -1320,7 +1330,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
               disabled={!product?.is_available || isCustomerTurn}
               style={{ flex: 1 }}
             >
-              {isVendorTurn ? 'Counter Offer' : isCustomerTurn ? 'Offer Pending' : 'Make an Offer'}
+              {isVendorTurn ? t('products.counter_offer', 'Counter Offer') : isCustomerTurn ? t('products.offer_sent', 'Offer Pending') : t('products.make_offer', 'Make an Offer')}
             </Button>
           </View>
         )}
@@ -1329,16 +1339,18 @@ export default function ProductDetailsScreen({ route, navigation }) {
       {/* ── Presyo Check ── */}
       <View style={styles.presyoSection}>
         <View style={styles.presyoHeaderRow}>
-          <Text style={styles.presyoHeading}>Presyo Check</Text>
+          <Text style={styles.presyoHeading}>{t('home.presyo_check', 'Presyo Check')}</Text>
           {marketAnalytics && marketAnalytics.totalVendors > 0 && (
-            <Badge tone="brand">{marketAnalytics.totalVendors} stall{marketAnalytics.totalVendors > 1 ? 's' : ''}</Badge>
+            <Badge tone="brand">
+              {t('home.stall_count', '%{count} na stalls', { count: marketAnalytics.totalVendors })}
+            </Badge>
           )}
         </View>
 
         {marketLoading ? (
           <View style={styles.presyoLoading}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.presyoLoadingText}>Kinukuha ang presyo ng ibang stall...</Text>
+            <Text style={styles.presyoLoadingText}>{t('products.loading_comparison', 'Kinukuha ang presyo ng ibang stall...')}</Text>
           </View>
         ) : hasComparison ? (
           <>
@@ -1442,12 +1454,14 @@ export default function ProductDetailsScreen({ route, navigation }) {
             </View>
 
             {priceHistory.length > 0 && (
-              <PriceHistoryChart data={priceHistory} styles={styles} COLORS={COLORS} />
+              <PriceHistoryChart data={priceHistory} styles={styles} COLORS={COLORS} t={t} />
             )}
 
             {relatedProducts.length > 0 && (
               <View style={styles.subSection}>
-                <Text style={styles.subSectionTitle}>More from {stall?.stall_name || 'this stall'}</Text>
+                <Text style={styles.subSectionTitle}>
+                  {t('products.more_from_stall_name', 'More from %{stall}', { stall: stall?.stall_name || 'this stall' })}
+                </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: SPACING.md }}>
                   {relatedProducts.map((item) => (
                     <TouchableOpacity
@@ -1473,7 +1487,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
             {(marketAnalytics.belowAverage.length > 0 || marketAnalytics.outdated.length > 0 || marketAnalytics.unusual.length > 0) && (
               <View style={styles.subSection}>
-                <Text style={styles.subSectionTitle}>Presyo Insights</Text>
+                <Text style={styles.subSectionTitle}>{t('products.price_insights', 'Presyo Insights')}</Text>
 
                 {marketAnalytics.belowAverage.length > 0 && (
                   <View style={styles.insightItem}>
@@ -1530,12 +1544,12 @@ export default function ProductDetailsScreen({ route, navigation }) {
         ) : (
           <View style={styles.presyoEmpty}>
             <MaterialIcons name="info-outline" size={28} color={COLORS.text.quaternary} />
-            <Text style={styles.presyoEmptyHeading}>Isang stall pa lang ang may nito</Text>
+            <Text style={styles.presyoEmptyHeading}>{t('products.single_stall_heading', 'Isang stall pa lang ang may nito')}</Text>
             <Text style={styles.presyoEmptyBody}>
-              Wala pang maihahambing na presyo. Titingnan namin ulit bukas.
+              {t('products.single_stall_body', 'Wala pang maihahambing na presyo. Titingnan namin ulit bukas.')}
             </Text>
             <Button variant="outline" size="sm" onPress={() => navigation.goBack()} style={{ marginTop: SPACING.md }}>
-              Tingnan ang ibang produkto
+              {t('products.browse_other_products', 'Tingnan ang ibang produkto')}
             </Button>
           </View>
         )}
@@ -1543,7 +1557,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
 
       {product.description ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Detalye</Text>
+          <Text style={styles.sectionTitle}>{t('products.details', 'Detalye')}</Text>
           <Text style={styles.productDescription}>{product.description}</Text>
         </View>
       ) : null}
@@ -1555,10 +1569,10 @@ export default function ProductDetailsScreen({ route, navigation }) {
           onPress={handleReportProduct}
         >
           <Ionicons name="ban-outline" size={18} color={COLORS.primary} />
-          <Text style={styles.reportButtonText}>Report this Product</Text>
+          <Text style={styles.reportButtonText}>{t('products.report_product', 'Report this Product')}</Text>
         </TouchableOpacity>
         <Text style={styles.reportNote}>
-          Found an issue with this product? Let us know so we can investigate.
+          {t('products.report_note', 'Found an issue with this product? Let us know so we can investigate.')}
         </Text>
       </View>
 
@@ -1570,7 +1584,9 @@ export default function ProductDetailsScreen({ route, navigation }) {
           screens without clipping their labels. */}
       <View style={styles.stickyBar}>
         <View style={styles.stickyTotalBlock}>
-          <Text style={styles.stickyTotalLabel}>Total ({quantity} x {unitSuffix})</Text>
+          <Text style={styles.stickyTotalLabel}>
+            {t('products.total_with_qty', 'Total (%{qty} x %{unit})', { qty: quantity, unit: unitSuffix })}
+          </Text>
           <Text style={styles.stickyTotalAmount}>₱{totalPrice.toFixed(2)}</Text>
         </View>
         <View style={styles.stickyButtonRow}>
@@ -1582,7 +1598,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             disabled={!product?.is_available}
             style={styles.stickyCta}
           >
-            {product?.is_available ? t('cart.proceed_checkout') : 'Unavailable'}
+            {product?.is_available ? t('cart.proceed_checkout', 'Proceed to Checkout') : t('products.out_of_stock', 'Unavailable')}
           </Button>
           <Button
             variant="primary"
@@ -1592,7 +1608,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
             disabled={!product?.is_available}
             style={styles.stickyCta}
           >
-            {product?.is_available ? 'Idagdag sa Kart' : t('products.out_of_stock')}
+            {product?.is_available ? t('product_card.add_to_cart', 'Idagdag sa Kart') : t('products.out_of_stock', 'Out of Stock')}
           </Button>
         </View>
       </View>
@@ -1607,14 +1623,16 @@ export default function ProductDetailsScreen({ route, navigation }) {
         <View style={styles.offerOverlay}>
           <View style={[styles.offerSheet, { backgroundColor: COLORS.surface }]}>
             <View style={styles.offerHandle} />
-            <Text style={styles.offerTitle}>{isVendorTurn ? 'Counter Their Offer 🤝' : 'Make an Offer 🤝'}</Text>
+            <Text style={styles.offerTitle}>
+              {isVendorTurn ? t('products.counter_offer', 'Counter Their Offer 🤝') : t('products.make_offer', 'Make an Offer 🤝')}
+            </Text>
             <Text style={styles.offerSubtitle}>
               {product?.name} · {isVendorTurn
                 ? `Vendor's counter: ₱${activeHaggle.current_price.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`
                 : `Listed at ₱${currentPrice.toFixed(2)} / ${getUnitDisplayText(selectedUnit)}`}
             </Text>
 
-            <Text style={styles.offerLabel}>Your offer per unit</Text>
+            <Text style={styles.offerLabel}>{t('products.your_offer_unit', 'Your offer per unit')}</Text>
             <View style={styles.offerInputRow}>
               <Text style={styles.offerCurrency}>₱</Text>
               <TextInput
@@ -1646,7 +1664,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
               ) : (
                 <>
                   <Ionicons name="send" size={16} color={COLORS.onPrimary} />
-                  <Text style={styles.offerSubmitText}>Send Offer</Text>
+                  <Text style={styles.offerSubmitText}>{t('products.send_offer', 'Send Offer')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -2102,7 +2120,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   stickyBar: {
     backgroundColor: COLORS.card,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: Platform.OS === 'ios' ? 24 : SPACING.md,
     gap: SPACING.sm,
     borderTopWidth: LAYOUT.borderWidth,
     borderTopColor: COLORS.border,

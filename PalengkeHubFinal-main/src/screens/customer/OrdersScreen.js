@@ -175,13 +175,13 @@ export default function OrdersScreen({ navigation }) {
 
   const openMapsDirections = (stall) => {
     if (!stall || !stall.section) {
-      Alert.alert('Error', 'Stall location not available');
+      notify(t('common.error'), t('orders.stall_location_unavailable'));
       return;
     }
     const coords = getStallCoordinates(stall.section, stall.stall_number);
     const url = `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}&travelmode=walking`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open maps');
+      notify(t('common.error'), t('orders.could_not_open_maps'));
     });
   };
 
@@ -225,19 +225,19 @@ export default function OrdersScreen({ navigation }) {
   const handlePayNow = (order) => {
     // Check if order is already paid
     if (order.payment_status === 'paid') {
-      Alert.alert('Already Paid', 'This order has already been paid.');
+      notify(t('orders.already_paid_title'), t('orders.already_paid_body'));
       return;
     }
     
     // Check if order is expired
     if (order.payment_status === 'expired' || order.status === 'cancelled') {
-      Alert.alert('Order Expired', 'This order is no longer available for payment.');
+      notify(t('orders.order_expired_title'), t('orders.order_expired_body'));
       return;
     }
 
     // Payment already submitted — vendor verification pending or completed
     if (order.payment_status === 'awaiting_verification' || order.payment_status === 'verified') {
-      Alert.alert('Payment Submitted', 'This payment is already under vendor review. You will be notified once it is verified.');
+      notify(t('orders.payment_under_review_title'), t('orders.payment_under_review_body'));
       return;
     }
     
@@ -276,11 +276,11 @@ export default function OrdersScreen({ navigation }) {
       if (error) console.error('Error cancelling order:', error);
       
       setPayNowModalVisible(false);
-      Alert.alert(
-        '⏰ Payment Time Expired',
-        'Your payment window of 10 minutes has expired. This order has been cancelled.',
-        [{ text: 'OK', onPress: () => refreshOrders() }]
+      notify(
+        t('orders.payment_expired_title'),
+        t('orders.payment_expired_body')
       );
+      await refreshOrders();
     } catch (error) {
       console.error('Pay Now timeout error:', error);
     }
@@ -304,7 +304,7 @@ export default function OrdersScreen({ navigation }) {
       // Web fallback: browser camera picker.
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Camera access is needed to photograph your receipt. You can choose an image from your gallery instead.');
+        notify(t('checkout.camera_permission_title'), t('checkout.camera_permission_body'));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -342,7 +342,7 @@ export default function OrdersScreen({ navigation }) {
 
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please allow photo library access to upload your GCash receipt.');
+        notify(t('checkout.gallery_permission_title'), t('checkout.gallery_permission_body'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -356,7 +356,7 @@ export default function OrdersScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error picking receipt:', error);
-      Alert.alert('Error', 'Failed to select receipt image.');
+      notify(t('common.error'), t('checkout.receipt_select_error'));
     }
   };
 
@@ -411,7 +411,7 @@ export default function OrdersScreen({ navigation }) {
       return await imageToCompressedDataUri(uri);
     } catch (error) {
       console.error('Error uploading receipt:', error);
-      Alert.alert('Upload Error', 'Failed to upload receipt. Please try again.');
+      notify(t('checkout.upload_error_title'), t('checkout.upload_error_body'));
       return null;
     } finally {
       setPayNowReceiptUploading(false);
@@ -424,18 +424,18 @@ export default function OrdersScreen({ navigation }) {
   const handlePayNowSubmit = async () => {
     const referenceDigits = normalizeReference(payNowReferenceNumber);
     if (!isValidGcashReference(referenceDigits)) {
-      Alert.alert('Invalid Reference Number', 'GCash reference numbers are exactly 13 digits. Please check the reference number on your GCash receipt.');
+      notify(t('checkout.invalid_reference_title'), t('checkout.invalid_reference_body'));
       return;
     }
     if (!payNowReceiptUri) {
-      Alert.alert('Missing Receipt', 'Please take a photo of your GCash receipt.');
+      notify(t('checkout.missing_receipt_title'), t('checkout.missing_receipt_body'));
       return;
     }
     if (payNowSubmitting) return;
 
     setPayNowSubmitting(true);
     setPayNowScanError(null);
- setPayNowScanStatus(' Scanning receipt…');
+    setPayNowScanStatus(` ${t('checkout.scanning_receipt')}`);
     try {
       // 1) Scan the receipt with OCR. A receipt we cannot read is not accepted.
       let scan = null;
@@ -443,10 +443,10 @@ export default function OrdersScreen({ navigation }) {
         scan = await scanReceipt(payNowReceiptUri);
       } catch (scanError) {
         console.error('Receipt scan failed:', scanError);
-        setPayNowScanError('We could not scan your receipt. Please check your internet connection and try again, or retake a clearer photo.');
-        Alert.alert(
-          'Receipt Scan Unavailable',
-          'We could not scan your receipt. Please check your internet connection and try again.\n\nIf the problem continues, retake a clearer photo of the receipt.'
+        setPayNowScanError(t('checkout.receipt_scan_unavailable_body'));
+        notify(
+          t('checkout.receipt_scan_unavailable_title'),
+          t('checkout.receipt_scan_unavailable_body')
         );
         return;
       }
@@ -502,7 +502,7 @@ export default function OrdersScreen({ navigation }) {
       }
 
       if (softIssue) {
-        const confirmBody = `${softIssue.body}\n\nVendors verify every payment manually — you can submit now and your vendor will confirm it.`;
+        const confirmBody = `${softIssue.body}\n\n${t('checkout.vendor_verify_suffix')}`;
         // react-native-web does NOT implement Alert.alert — its button
         // callbacks never fire on web, so the Promise below would hang
         // forever. window.confirm() is synchronous, so no Promise needed.
@@ -513,15 +513,15 @@ export default function OrdersScreen({ navigation }) {
               softIssue.title,
               confirmBody,
               [
-                { text: 'Fix It', style: 'cancel', onPress: () => resolve(false) },
-                { text: 'Submit Anyway', onPress: () => resolve(true) },
+                { text: t('checkout.fix_it'), style: 'cancel', onPress: () => resolve(false) },
+                { text: t('checkout.submit_anyway'), onPress: () => resolve(true) },
               ]
             );
           });
         if (!proceed) return;
       }
 
- setPayNowScanStatus(' Checking for duplicates…');
+      setPayNowScanStatus(` ${t('checkout.checking_duplicates')}`);
 
       // 3) The same GCash reference cannot be used on another order.
       const { data: duplicateRef } = await supabase
@@ -531,10 +531,10 @@ export default function OrdersScreen({ navigation }) {
         .neq('id', payNowOrder.id)
         .maybeSingle();
       if (duplicateRef) {
-        setPayNowScanError('This GCash reference number was already used on another order. Every payment must have a unique reference number.');
-        Alert.alert(
-          'Reference Already Used',
-          'This GCash reference number was already used on another order. Every payment must have a unique reference number.'
+        setPayNowScanError(t('checkout.duplicate_reference_body'));
+        notify(
+          t('checkout.duplicate_reference_title'),
+          t('checkout.duplicate_reference_body')
         );
         return;
       }
@@ -550,10 +550,10 @@ export default function OrdersScreen({ navigation }) {
             .neq('id', payNowOrder.id)
             .maybeSingle();
           if (duplicateImage) {
-            setPayNowScanError('This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.');
-            Alert.alert(
-              'Duplicate Receipt Detected',
-              'This exact receipt image was already uploaded for another order. Please upload a fresh receipt for this payment.'
+            setPayNowScanError(t('checkout.duplicate_receipt_body'));
+            notify(
+              t('checkout.duplicate_receipt_title'),
+              t('checkout.duplicate_receipt_body')
             );
             return;
           }
@@ -562,10 +562,10 @@ export default function OrdersScreen({ navigation }) {
         }
       }
 
- setPayNowScanStatus(' Uploading receipt…');
+      setPayNowScanStatus(` ${t('checkout.uploading_receipt')}`);
       const receiptUrl = await uploadPayNowReceipt(payNowReceiptUri);
       if (!receiptUrl) {
-        setPayNowScanError('Failed to upload your receipt. Please try again.');
+        setPayNowScanError(t('checkout.upload_error_body'));
         return;
       }
       
@@ -606,19 +606,16 @@ export default function OrdersScreen({ navigation }) {
       if (payNowTimerRef.current) clearInterval(payNowTimerRef.current);
       
       setPayNowModalVisible(false);
-      Alert.alert(
- ' Payment Submitted!',
-        'Your payment has been submitted and is now waiting for the vendor to verify it against their own GCash records. You will be notified once it is approved.',
-        [
-          { text: 'View Orders', onPress: () => refreshOrders() }
-        ]
+      notify(
+        t('orders.payment_under_review_title'),
+        t('orders.payment_under_review_body')
       );
       await refreshOrders();
       
     } catch (error) {
       console.error('Error submitting payment:', error);
-      setPayNowScanError('Failed to submit payment. Please try again.');
-      Alert.alert('Error', 'Failed to submit payment. Please try again.');
+      setPayNowScanError(t('checkout.submit_payment_error'));
+      notify(t('common.error'), t('checkout.submit_payment_error'));
     } finally {
       setPayNowSubmitting(false);
       setPayNowScanStatus(null);
@@ -628,7 +625,7 @@ export default function OrdersScreen({ navigation }) {
   // ORDER AGAIN
   const handleOrderAgain = async (order) => {
     if (!user) {
-      Alert.alert('Login Required', 'Please login to add items to cart');
+      notify(t('auth.login_required'), t('orders.login_required_cart'));
       return;
     }
 
@@ -647,31 +644,32 @@ export default function OrdersScreen({ navigation }) {
         await addToCart(productData, stall?.id, stall, item.quantity);
       }
 
+      const addedMsg = t('orders.items_added_to_cart', { count: items.length, defaultValue: `${items.length} item(s) have been added to your cart.` });
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm(`${items.length} item(s) have been added to your cart.\n\nOK = View Cart, Cancel = Continue Shopping`)) {
+        if (window.confirm(`${addedMsg}\n\nOK = ${t('cart.view_cart', 'View Cart')}, Cancel = ${t('checkout.continue_shopping', 'Continue Shopping')}`)) {
           navigation.navigate('Cart');
         }
       } else {
         Alert.alert(
-          'Order Again',
-          `${items.length} item(s) have been added to your cart.`,
+          t('orders.order_again', 'Order Again'),
+          addedMsg,
           [
-            { text: 'Continue Shopping', style: 'cancel' },
-            { text: 'View Cart', onPress: () => navigation.navigate('Cart') }
+            { text: t('checkout.continue_shopping', 'Continue Shopping'), style: 'cancel' },
+            { text: t('cart.view_cart', 'View Cart'), onPress: () => navigation.navigate('Cart') }
           ]
         );
       }
     } catch (error) {
       console.error('Error adding items to cart:', error);
-      Alert.alert('Error', 'Failed to add items to cart. Please try again.');
+      notify(t('common.error'), t('orders.cart_add_error'));
     }
   };
 
   // RATE VENDOR
   const handleRateVendor = (order) => {
     if (ratedOrderIds.has(order.id)) {
-      Alert.alert('Already Rated', 'You already rated this order.');
+      notify(t('orders.already_rated_title'), t('orders.already_rated_body'));
       return;
     }
     setSelectedOrder(order);
@@ -698,7 +696,7 @@ export default function OrdersScreen({ navigation }) {
 
   const submitReportIssue = async () => {
     if (!reportIssueMessage.trim()) {
-      notify('Error', 'Please describe the issue');
+      notify(t('common.error'), t('orders.describe_issue'));
       return;
     }
 
@@ -716,13 +714,13 @@ export default function OrdersScreen({ navigation }) {
 
       if (error) throw error;
 
-      notify('Report Submitted', 'Thanks for letting us know — our team will look into this.');
+      notify(t('orders.report_submitted_title'), t('orders.report_submitted_body'));
       setReportIssueModalVisible(false);
       setReportIssueOrder(null);
       setReportIssueMessage('');
     } catch (error) {
       console.error('Error submitting report:', error);
-      notify('Error', 'Failed to submit report. Please try again.');
+      notify(t('common.error'), t('common.try_again'));
     } finally {
       setSubmittingReportIssue(false);
     }
@@ -730,7 +728,7 @@ export default function OrdersScreen({ navigation }) {
 
   const submitRating = async () => {
     if (selectedRating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+      notify(t('common.error'), t('orders.select_rating'));
       return;
     }
 
@@ -746,7 +744,7 @@ export default function OrdersScreen({ navigation }) {
         .eq('consumer_id', user.id)
         .maybeSingle();
       if (existing) {
-        Alert.alert('Already Rated', 'You already rated this order.');
+        notify(t('orders.already_rated_title'), t('orders.already_rated_body'));
         setRatedOrderIds(prev => new Set(prev).add(selectedOrder.id));
         setRatingModalVisible(false);
         return;
@@ -767,7 +765,7 @@ export default function OrdersScreen({ navigation }) {
       if (error) throw error;
 
       setRatedOrderIds(prev => new Set(prev).add(selectedOrder.id));
-      Alert.alert('Thank You!', 'Your rating has been submitted successfully.');
+      notify(t('reviews.thank_you'), t('reviews.rating_submitted'));
       setRatingModalVisible(false);
       setSelectedOrder(null);
       setSelectedRating(0);
@@ -775,7 +773,7 @@ export default function OrdersScreen({ navigation }) {
 
     } catch (error) {
       console.error('Error submitting rating:', error);
-      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+      notify(t('common.error'), t('orders.submit_rating_error'));
     } finally {
       setSubmittingRating(false);
     }
@@ -793,27 +791,27 @@ export default function OrdersScreen({ navigation }) {
 
         if (error) throw error;
         await refreshOrders();
-        Alert.alert('Removed', 'Order has been removed from your history');
+        notify(t('orders.order_removed_title'), t('orders.order_removed_body'));
       } catch (error) {
         console.error('Delete error:', error);
-        Alert.alert('Error', 'Could not remove order');
+        notify(t('common.error'), t('orders.remove_order_error'));
       }
     };
 
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm('Do you want to permanently remove this order from your history?')) {
+      if (window.confirm(t('orders.remove_order_confirm'))) {
         await doDelete();
       }
       return;
     }
 
     Alert.alert(
-      'Remove Order',
-      'Do you want to permanently remove this order from your history?',
+      t('orders.remove_order'),
+      t('orders.remove_order_confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: doDelete },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.delete'), style: 'destructive', onPress: doDelete },
       ]
     );
   };
@@ -834,27 +832,27 @@ export default function OrdersScreen({ navigation }) {
 
         if (error) throw error;
         await refreshOrders();
-        Alert.alert('Cleared', 'All history orders have been removed');
+        notify(t('orders.history_cleared_title'), t('orders.history_cleared_body'));
       } catch (error) {
         console.error('Clear all error:', error);
-        Alert.alert('Error', 'Could not clear history');
+        notify(t('common.error'), t('orders.clear_history_error'));
       }
     };
 
     // react-native-web does NOT implement Alert.alert — use window.confirm on web
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to remove ALL completed/cancelled orders? This cannot be undone.')) {
+      if (window.confirm(t('orders.clear_history_confirm'))) {
         await doClear();
       }
       return;
     }
 
     Alert.alert(
-      'Clear All History',
-      'Are you sure you want to remove ALL completed/cancelled orders? This cannot be undone.',
+      t('orders.clear_history'),
+      t('orders.clear_history_confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: doClear },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('orders.clear_history'), style: 'destructive', onPress: doClear },
       ]
     );
   };
@@ -926,14 +924,14 @@ export default function OrdersScreen({ navigation }) {
       });
 
       await refreshOrders();
-      Alert.alert('Order Cancelled', 'Your order has been cancelled. The vendor has been notified.');
+      notify(t('orders.order_cancelled_title'), t('orders.order_cancelled_body'));
       setCancelModalVisible(false);
       setOrderToCancel(null);
       setCancelReasonId(null);
       setCancelCustomMessage('');
     } catch (error) {
       console.error('Cancel error:', error);
-      Alert.alert('Error', 'Could not cancel order. Please try again.');
+      notify(t('common.error'), t('orders.cancel_order_error'));
     } finally {
       setCancelling(false);
     }
@@ -979,14 +977,14 @@ export default function OrdersScreen({ navigation }) {
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
- message: ` I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+          message: ` I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
           is_read: false,
         });
         
         await supabase
           .from('conversations')
           .update({
- last_message: ` Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
+            last_message: ` Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
             last_message_time: new Date(),
             vendor_unread_count: 1,
           })
@@ -994,11 +992,19 @@ export default function OrdersScreen({ navigation }) {
       }
       
       await refreshOrders();
-      Alert.alert('Order Updated', `Order updated to ${proposalData.proposed_quantity} ${proposalData.proposed_unit} of ${proposalData.item_name}`);
+      notify(
+        t('orders.order_updated_title'),
+        t('orders.order_updated_body', {
+          quantity: proposalData.proposed_quantity,
+          unit: proposalData.proposed_unit,
+          name: proposalData.item_name,
+          defaultValue: `Order updated to ${proposalData.proposed_quantity} ${proposalData.proposed_unit} of ${proposalData.item_name}`
+        })
+      );
       
     } catch (error) {
       console.error('Accept proposal error:', error);
-      Alert.alert('Error', 'Failed to accept proposal');
+      notify(t('common.error'), t('orders.proposal_accept_error'));
     }
   };
 
@@ -1016,14 +1022,14 @@ export default function OrdersScreen({ navigation }) {
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
- message: ` I do not accept the proposal. Please fulfill the original order or cancel.`,
+          message: ` I do not accept the proposal. Please fulfill the original order or cancel.`,
           is_read: false,
         });
         
         await supabase
           .from('conversations')
           .update({
- last_message: ` Customer rejected the proposal. Please fulfill original order.`,
+            last_message: ` Customer rejected the proposal. Please fulfill original order.`,
             last_message_time: new Date(),
             vendor_unread_count: 1,
           })
@@ -1036,11 +1042,11 @@ export default function OrdersScreen({ navigation }) {
         .eq('id', order.id);
       
       await refreshOrders();
-      Alert.alert('Proposal Rejected', 'The vendor has been notified of your decision');
+      notify(t('orders.proposal_rejected_title'), t('orders.proposal_rejected_body'));
       
     } catch (error) {
       console.error('Reject proposal error:', error);
-      Alert.alert('Error', 'Failed to reject proposal');
+      notify(t('common.error'), t('orders.proposal_reject_error'));
     }
   };
 
@@ -1137,13 +1143,13 @@ export default function OrdersScreen({ navigation }) {
         <View style={styles.orderHeader}>
           <View>
             <Text style={styles.orderNumber}>
-              Order #{order.order_number?.slice(-8) || order.id?.toString().slice(-8) || 'N/A'}
+              {t('orders.order_number')}{order.order_number?.slice(-8) || order.id?.toString().slice(-8) || 'N/A'}
             </Text>
             <Text style={styles.orderDate}>{formatDate(order.created_at)}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-              <Text style={styles.statusText}>{order.status?.toUpperCase() || 'PENDING'}</Text>
+              <Text style={styles.statusText}>{t('order_status.' + order.status, order.status?.toUpperCase() || 'PENDING')}</Text>
             </View>
             {isCompleted && (
               <TouchableOpacity
@@ -1164,10 +1170,10 @@ export default function OrdersScreen({ navigation }) {
           <View style={styles.payNowContainer}>
             <View style={styles.payNowHeader}>
               <Ionicons name="hourglass-outline" size={18} color={COLORS.warning} />
-              <Text style={styles.payNowHeaderText}>Payment Under Review</Text>
+              <Text style={styles.payNowHeaderText}>{t('orders.payment_under_review_title')}</Text>
             </View>
             <Text style={styles.payNowHint}>
-              Your payment was submitted and is waiting for the vendor to verify it.
+              {t('orders.payment_under_review_hint')}
             </Text>
           </View>
         )}
@@ -1177,12 +1183,12 @@ export default function OrdersScreen({ navigation }) {
           <View style={styles.payNowContainer}>
             <View style={styles.payNowHeader}>
               <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-              <Text style={styles.payNowHeaderText}>Payment Rejected</Text>
+              <Text style={styles.payNowHeaderText}>{t('orders.payment_rejected_title')}</Text>
             </View>
             <Text style={styles.payNowHint}>
               {order.payment_rejection_reason
-                ? `${order.payment_rejection_reason} Please pay again below.`
-                : 'Your payment was rejected. Please pay again below.'}
+                ? `${order.payment_rejection_reason} ${t('orders.pay_again_below')}`
+                : t('orders.payment_rejected_hint')}
             </Text>
           </View>
         )}
@@ -1192,12 +1198,12 @@ export default function OrdersScreen({ navigation }) {
           <View style={styles.payNowContainer}>
             <View style={styles.payNowHeader}>
               <Ionicons name="alert-circle" size={18} color={COLORS.error} />
-              <Text style={styles.payNowHeaderText}>Cancelled After Payment</Text>
+              <Text style={styles.payNowHeaderText}>{t('orders.cancelled_after_payment_title')}</Text>
             </View>
             <Text style={styles.payNowHint}>
               {order.cancel_reason
-                ? `This order was cancelled after you already paid. Reason: ${order.cancel_reason}`
-                : 'This order was cancelled after you already paid.'} If you haven't been refunded, you can file a dispute below.
+                ? `${t('orders.cancelled_after_paid_reason', { reason: order.cancel_reason })} ${t('orders.dispute_hint')}`
+                : `${t('orders.cancelled_after_paid')} ${t('orders.dispute_hint')}`}
             </Text>
             <TouchableOpacity
               style={styles.disputeButton}
@@ -1206,7 +1212,7 @@ export default function OrdersScreen({ navigation }) {
                 `This order was cancelled after I already paid (Order #${order.order_number?.slice(-8) || order.id}). I'm requesting a refund.`
               )}
             >
-              <Text style={styles.disputeButtonText}>File a Dispute</Text>
+              <Text style={styles.disputeButtonText}>{t('orders.file_dispute')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1216,7 +1222,7 @@ export default function OrdersScreen({ navigation }) {
           <View style={styles.payNowContainer}>
             <View style={styles.payNowHeader}>
               <Ionicons name="alert-circle" size={18} color={COLORS.warning} />
-              <Text style={styles.payNowHeaderText}>Payment Pending</Text>
+              <Text style={styles.payNowHeaderText}>{t('orders.payment_pending_title')}</Text>
             </View>
             <TouchableOpacity 
               style={styles.payNowButton}
@@ -1230,11 +1236,11 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.payNowGradient}
               >
                 <Ionicons name="wallet-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.payNowText}>Pay Now</Text>
+                <Text style={styles.payNowText}>{t('orders.pay_now')}</Text>
               </LinearGradient>
             </TouchableOpacity>
             <Text style={styles.payNowHint}>
-              Complete your GCash payment within 10 minutes
+              {t('orders.pay_now_hint')}
             </Text>
           </View>
         )}
@@ -1243,19 +1249,18 @@ export default function OrdersScreen({ navigation }) {
         {hasPendingProposal && proposalData && (
           <View style={styles.proposalContainer}>
             <View style={styles.proposalBanner}>
-              <Text style={styles.proposalTitle}> Vendor Proposed a Change</Text>
+              <Text style={styles.proposalTitle}>{t('orders.proposal_title')}</Text>
               <Text style={styles.proposalText}>
                 {proposalData.item_name}:
               </Text>
               <Text style={styles.proposalText}>
-                Original: {proposalData.original_quantity} {proposalData.original_unit}
+                {t('orders.original_label')}: {proposalData.original_quantity} {proposalData.original_unit}
               </Text>
               <Text style={styles.proposalText}>
-                Proposed: {proposalData.proposed_quantity} {proposalData.proposed_unit}
+                {t('orders.proposed_label')}: {proposalData.proposed_quantity} {proposalData.proposed_unit}
               </Text>
               <Text style={styles.proposalPrice}>
-                New total: ₱{proposalData.proposed_price.toFixed(2)} 
-                (was ₱{proposalData.original_price.toFixed(2)})
+                {t('orders.new_total')}: ₱{proposalData.proposed_price.toFixed(2)} ({t('orders.was_price')} ₱{proposalData.original_price.toFixed(2)})
               </Text>
             </View>
             <View style={styles.proposalButtons}>
@@ -1263,7 +1268,7 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.rejectProposalBtn}
                 onPress={() => handleRejectProposal(order, proposalData)}
               >
-                <Text style={styles.rejectProposalBtnText}> Reject</Text>
+                <Text style={styles.rejectProposalBtnText}>{t('orders.reject')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -1274,7 +1279,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#10B981', '#059669']}
                   style={styles.acceptProposalGradient}
                 >
-                  <Text style={styles.acceptProposalBtnText}> Accept</Text>
+                  <Text style={styles.acceptProposalBtnText}>{t('orders.accept')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1283,9 +1288,9 @@ export default function OrdersScreen({ navigation }) {
 
         <View style={styles.stallInfo}>
           <Text style={styles.stallName}>
- {stall.stall_name || 'Market Stall'} {stall.stall_number !== 'N/A' ? `(#${stall.stall_number})` : ''}
+            {stall.stall_name || t('stalls.vendor_fallback')} {stall.stall_number !== 'N/A' ? `(#${stall.stall_number})` : ''}
           </Text>
-          <Text style={styles.stallSection}>{stall.section || 'Unknown Section'}</Text>
+          <Text style={styles.stallSection}>{stall.section ? t('market_sections.' + stall.section, stall.section) : t('common.not_available')}</Text>
         </View>
 
         <View style={styles.itemsContainer}>
@@ -1300,19 +1305,19 @@ export default function OrdersScreen({ navigation }) {
         </View>
 
         <View style={styles.pickupContainer}>
-          <Text style={styles.pickupLabel}>⏰ Pickup Time:</Text>
+          <Text style={styles.pickupLabel}>⏰ {t('orders.pickup_time')}:</Text>
           <Text style={styles.pickupTime}>{formatPickupTime(order.pickup_time)}</Text>
         </View>
 
         {order.special_instructions && (
           <View style={styles.instructionsContainer}>
-            <Text style={styles.instructionsLabel}> Instructions:</Text>
+            <Text style={styles.instructionsLabel}>📝 {t('checkout.special_instructions')}:</Text>
             <Text style={styles.instructionsText}>{order.special_instructions}</Text>
           </View>
         )}
 
         <View style={styles.orderFooter}>
-          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalLabel}>{t('orders.total_label')}</Text>
           <Text style={styles.totalAmount}>₱{order.total_amount}</Text>
         </View>
 
@@ -1329,7 +1334,7 @@ export default function OrdersScreen({ navigation }) {
               colors={['#EF4444', '#DC2626']}
               style={styles.cancelGradient}
             >
-              <Text style={styles.cancelButtonText}>Cancel Order</Text>
+              <Text style={styles.cancelButtonText}>{t('orders.cancel_order')}</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -1344,13 +1349,13 @@ export default function OrdersScreen({ navigation }) {
                 colors={['#10B981', '#059669']}
                 style={styles.actionButtonGradient}
               >
-                <Text style={styles.actionButtonText}> Order Again</Text>
+                <Text style={styles.actionButtonText}>{t('orders.order_again')}</Text>
               </LinearGradient>
             </TouchableOpacity>
             
             {ratedOrderIds.has(order.id) ? (
               <View style={[styles.rateButton, styles.ratedBadge]}>
-                <Text style={styles.ratedBadgeText}> Rated</Text>
+                <Text style={styles.ratedBadgeText}>{t('orders.rated')}</Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -1361,7 +1366,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#F59E0B', '#D97706']}
                   style={styles.actionButtonGradient}
                 >
-                  <Text style={styles.actionButtonText}> Rate Vendor</Text>
+                  <Text style={styles.actionButtonText}>{t('orders.rate_vendor')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -1375,7 +1380,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#6B7280', '#4B5563']}
                   style={styles.actionButtonGradient}
                 >
-                  <Text style={styles.actionButtonText}>Report an Issue</Text>
+                  <Text style={styles.actionButtonText}>{t('orders.report_an_issue')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -1393,7 +1398,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={['#4CAF50', '#45A049']}
                   style={styles.mapGradient}
                 >
-                  <Text style={styles.mapButtonText}> View Map</Text>
+                  <Text style={styles.mapButtonText}>{t('checkout.view_map')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
               
@@ -1405,7 +1410,7 @@ export default function OrdersScreen({ navigation }) {
                   colors={[COLORS.primary, COLORS.primaryLight]}
                   style={styles.mapGradient}
                 >
-                  <Text style={styles.mapButtonText}> Get Directions</Text>
+                  <Text style={styles.mapButtonText}>{t('checkout.get_directions')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1470,9 +1475,9 @@ export default function OrdersScreen({ navigation }) {
     return (
       <View style={styles.guestContainer}>
         <Ionicons name="clipboard-outline" size={18} />
-        <Text style={styles.guestTitle}>Sign in to view orders</Text>
+        <Text style={styles.guestTitle}>{t('auth.sign_in_to_continue')}</Text>
         <Text style={styles.guestText}>
-          Create an account to track your orders and order history
+          {t('auth.track_orders_prompt')}
         </Text>
         <TouchableOpacity 
           style={styles.signInButton}
@@ -1482,7 +1487,7 @@ export default function OrdersScreen({ navigation }) {
             colors={[COLORS.primary, COLORS.primaryLight]}
             style={styles.signInGradient}
           >
-            <Text style={styles.signInButtonText}>Sign In</Text>
+            <Text style={styles.signInButtonText}>{t('auth.sign_in')}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -1501,13 +1506,13 @@ export default function OrdersScreen({ navigation }) {
     return (
       <View style={styles.centerContainer}>
         <Text style={{ color: COLORS.text.secondary || '#6B7280', fontSize: 15, marginBottom: 16 }}>
-          Failed to load your orders
+          {t('orders.failed_to_load')}
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
           onPress={refreshOrders}
         >
-          <Text style={{ color: '#fff', fontWeight: '600' }}>Try Again</Text>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>{t('common.try_again')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1517,7 +1522,7 @@ export default function OrdersScreen({ navigation }) {
     <View style={styles.container}>
       {newOrderAlert && activeTab === 'active' && (
         <View style={styles.newOrderAlert}>
-          <Text style={styles.newOrderAlertText}> New order placed! Check your order status below.</Text>
+          <Text style={styles.newOrderAlertText}>🔔 {t('orders.new_order_placed_alert')}</Text>
         </View>
       )}
 
@@ -1586,16 +1591,16 @@ export default function OrdersScreen({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              {selectedStall?.stall_name || 'Stall Location'}
+              {selectedStall?.stall_name || t('stalls.vendor_fallback')}
             </Text>
             <Text style={styles.modalSubtitle}>
-              Stall #{selectedStall?.stall_number} - {selectedStall?.section}
+              {t('stalls.stall_number')} #{selectedStall?.stall_number} - {selectedStall?.section ? t('market_sections.' + selectedStall.section, selectedStall.section) : ''}
             </Text>
             <TouchableOpacity 
               style={styles.modalCloseButton}
               onPress={() => setMapModalVisible(false)}
             >
-              <Text style={styles.modalCloseText}> Close</Text>
+              <Text style={styles.modalCloseText}> {t('common.close')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -1623,7 +1628,7 @@ export default function OrdersScreen({ navigation }) {
                 colors={[COLORS.primary, COLORS.primaryLight]}
                 style={styles.modalDirectionsGradient}
               >
-                <Text style={styles.modalDirectionsText}> Get Directions</Text>
+                <Text style={styles.modalDirectionsText}> {t('checkout.get_directions')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -1639,9 +1644,9 @@ export default function OrdersScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.ratingModalContainer}>
-            <Text style={styles.ratingModalTitle}>Rate Your Experience</Text>
+            <Text style={styles.ratingModalTitle}>{t('reviews.title')}</Text>
             <Text style={styles.ratingModalSubtitle}>
-              {selectedOrder?.stall?.stall_name || 'Vendor'}
+              {selectedOrder?.stall?.stall_name || t('stalls.vendor_fallback')}
             </Text>
             
             <View style={styles.starsContainer}>
@@ -1650,7 +1655,7 @@ export default function OrdersScreen({ navigation }) {
             
             <TextInput
               style={styles.ratingCommentInput}
-              placeholder="Share your experience (optional)"
+              placeholder={t('reviews.share_experience')}
               placeholderTextColor={COLORS.text.lighter}
               value={ratingComment}
               onChangeText={setRatingComment}
@@ -1663,7 +1668,7 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.ratingModalCancel}
                 onPress={() => setRatingModalVisible(false)}
               >
-                <Text style={styles.ratingModalCancelText}>Cancel</Text>
+                <Text style={styles.ratingModalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -1676,7 +1681,7 @@ export default function OrdersScreen({ navigation }) {
                   style={styles.ratingModalSubmitGradient}
                 >
                   <Text style={styles.ratingModalSubmitText}>
-                    {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                    {submittingRating ? t('reviews.submitting') : t('reviews.submit_rating')}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -1694,14 +1699,14 @@ export default function OrdersScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.ratingModalContainer}>
-            <Text style={styles.ratingModalTitle}>Report an Issue</Text>
+            <Text style={styles.ratingModalTitle}>{t('orders.report_an_issue')}</Text>
             <Text style={styles.ratingModalSubtitle}>
-              {reportIssueOrder?.stall?.stall_name || 'Vendor'} • Order #{reportIssueOrder?.order_number?.slice(-8) || reportIssueOrder?.id}
+              {reportIssueOrder?.stall?.stall_name || t('stalls.vendor_fallback')} • {t('orders.order_number')}{reportIssueOrder?.order_number?.slice(-8) || reportIssueOrder?.id}
             </Text>
 
             <TextInput
               style={styles.ratingCommentInput}
-              placeholder="What went wrong? (missing items, wrong order, etc.)"
+              placeholder={t('orders.report_issue_placeholder')}
               placeholderTextColor={COLORS.text.lighter}
               value={reportIssueMessage}
               onChangeText={setReportIssueMessage}
@@ -1714,7 +1719,7 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.ratingModalCancel}
                 onPress={() => setReportIssueModalVisible(false)}
               >
-                <Text style={styles.ratingModalCancelText}>Cancel</Text>
+                <Text style={styles.ratingModalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1727,7 +1732,7 @@ export default function OrdersScreen({ navigation }) {
                   style={styles.ratingModalSubmitGradient}
                 >
                   <Text style={styles.ratingModalSubmitText}>
-                    {submittingReportIssue ? 'Submitting...' : 'Submit Report'}
+                    {submittingReportIssue ? t('common.submitting') : t('orders.submit_report')}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -1745,9 +1750,9 @@ export default function OrdersScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.ratingModalContainer}>
-            <Text style={styles.ratingModalTitle}>Cancel Order</Text>
+            <Text style={styles.ratingModalTitle}>{t('orders.cancel_modal_title')}</Text>
             <Text style={styles.ratingModalSubtitle}>
-              Why are you cancelling this order?
+              {t('orders.cancel_modal_subtitle')}
             </Text>
 
             <ScrollView style={{ maxHeight: 300, width: '100%' }}>
@@ -1764,14 +1769,14 @@ export default function OrdersScreen({ navigation }) {
                     styles.reasonText,
                     cancelReasonId === reason.id && styles.reasonTextSelected,
                   ]}>
-                    {reason.label}
+                    {t('orders.cancel_reasons.' + reason.id, reason.label)}
                   </Text>
                 </TouchableOpacity>
               ))}
               {cancelReasonId === 'other' && (
                 <TextInput
                   style={styles.customInput}
-                  placeholder="Type your reason..."
+                  placeholder={t('orders.cancel_reason_placeholder')}
                   placeholderTextColor={COLORS.text.lighter}
                   value={cancelCustomMessage}
                   onChangeText={setCancelCustomMessage}
@@ -1791,7 +1796,7 @@ export default function OrdersScreen({ navigation }) {
                   setCancelCustomMessage('');
                 }}
               >
-                <Text style={styles.ratingModalCancelText}>Go Back</Text>
+                <Text style={styles.ratingModalCancelText}>{t('orders.go_back')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1804,7 +1809,7 @@ export default function OrdersScreen({ navigation }) {
                   style={styles.ratingModalSubmitGradient}
                 >
                   <Text style={styles.ratingModalSubmitText}>
-                    {cancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                    {cancelling ? t('orders.cancelling') : t('orders.confirm_cancel')}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -1841,9 +1846,9 @@ export default function OrdersScreen({ navigation }) {
                 <View style={styles.gcashModalHeaderIcon}>
                   <Ionicons name="wallet" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={styles.gcashModalTitle}>GCash Payment</Text>
+                <Text style={styles.gcashModalTitle}>{t('checkout.gcash_payment')}</Text>
                 <Text style={styles.gcashModalSubtitle}>
-                  Pay for Order #{payNowOrder?.order_number?.slice(-8)}
+                  {t('orders.pay_for_order', { number: payNowOrder?.order_number?.slice(-8) || '—', defaultValue: `Pay for Order #${payNowOrder?.order_number?.slice(-8)}` })}
                 </Text>
               </View>
 
@@ -1857,7 +1862,7 @@ export default function OrdersScreen({ navigation }) {
                   size={22} 
                   color={payNowCountdown <= 60 ? '#EF4444' : COLORS.primary} 
                 />
-                <Text style={styles.gcashTimerLabel}>Time Remaining</Text>
+                <Text style={styles.gcashTimerLabel}>{t('checkout.time_remaining')}</Text>
                 <Text style={[
                   styles.gcashTimerValue,
                   payNowCountdown <= 60 && styles.gcashTimerValueUrgent
@@ -1870,10 +1875,10 @@ export default function OrdersScreen({ navigation }) {
               {payNowOrder && (
                 <View style={styles.payNowOrderSummary}>
                   <Text style={styles.payNowOrderVendor}>
-                    {payNowOrder.stall?.stall_name || 'Market Stall'}
+                    {payNowOrder.stall?.stall_name || t('stalls.vendor_fallback')}
                   </Text>
                   <Text style={styles.payNowOrderAmount}>
-                    Amount: ₱{payNowOrder.total_amount?.toFixed(2)}
+                    {t('checkout.amount_label', { amount: payNowOrder.total_amount?.toFixed(2), defaultValue: `Amount: ₱${payNowOrder.total_amount?.toFixed(2)}` })}
                   </Text>
                   <View style={styles.payNowOrderItems}>
                     {payNowOrder.items?.map((item, idx) => (
@@ -1887,7 +1892,7 @@ export default function OrdersScreen({ navigation }) {
 
               {/* QR Code - Vendor's GCash QR */}
               <View style={styles.gcashQRContainer}>
-                <Text style={styles.gcashQRTitle}>Scan to Pay</Text>
+                <Text style={styles.gcashQRTitle}>{t('checkout.scan_to_pay')}</Text>
                 <View style={styles.gcashQRBox}>
                   {payNowOrder?.stall?.gcash_qr_url ? (
                     <Image 
@@ -1898,7 +1903,7 @@ export default function OrdersScreen({ navigation }) {
                   ) : (
                     <View style={styles.gcashQRPlaceholder}>
                       <Ionicons name="qr-code-outline" size={72} color={COLORS.gcash} />
-                      <Text style={styles.gcashQRPlaceholderText}>Vendor QR Code</Text>
+                      <Text style={styles.gcashQRPlaceholderText}>{t('checkout.vendor_qr_code')}</Text>
                       <Text style={styles.gcashQRPlaceholderSubtext}>
                         GCash: {payNowOrder?.stall?.gcash_number || '0917 123 4567'}
                       </Text>
@@ -1906,24 +1911,24 @@ export default function OrdersScreen({ navigation }) {
                   )}
                 </View>
                 <Text style={styles.gcashQRVendor}>
-                  {payNowOrder?.stall?.stall_name || 'Market Stall'}
+                  {payNowOrder?.stall?.stall_name || t('stalls.vendor_fallback')}
                 </Text>
                 <Text style={styles.gcashQRPrice}>
-                  Amount: ₱{payNowOrder?.total_amount?.toFixed(2)}
+                  {t('checkout.amount_label', { amount: payNowOrder?.total_amount?.toFixed(2), defaultValue: `Amount: ₱${payNowOrder?.total_amount?.toFixed(2)}` })}
                 </Text>
                 <Text style={styles.gcashQRHint}>
-                  Open GCash, scan QR, send exact amount
+                  {t('checkout.open_gcash_hint')}
                 </Text>
               </View>
 
               {/* Reference Number Input */}
               <View style={styles.gcashInputSection}>
                 <Text style={styles.gcashInputLabel}>
-                  <Ionicons name="document-text-outline" size={16} color={COLORS.text.dark} /> Reference Number
+                  <Ionicons name="document-text-outline" size={16} color={COLORS.text.dark} /> {t('checkout.gcash_reference')}
                 </Text>
                 <TextInput
                   style={styles.gcashInput}
-                  placeholder="Enter 13-digit GCash reference number"
+                  placeholder={t('checkout.gcash_ref_placeholder')}
                   placeholderTextColor={COLORS.text.lighter}
                   value={payNowReferenceNumber}
                   onChangeText={setPayNowReferenceNumber}
@@ -1931,14 +1936,14 @@ export default function OrdersScreen({ navigation }) {
                   maxLength={13}
                 />
                 <Text style={styles.gcashInputHint}>
-                  GCash reference numbers are exactly 13 digits
+                  {t('checkout.gcash_ref_hint')}
                 </Text>
               </View>
 
               {/* Receipt Upload */}
               <View style={styles.gcashReceiptSection}>
                 <Text style={styles.gcashInputLabel}>
-                  <Ionicons name="camera-outline" size={16} color={COLORS.text.dark} /> Payment Receipt
+                  <Ionicons name="camera-outline" size={16} color={COLORS.text.dark} /> {t('checkout.payment_receipt')}
                 </Text>
                 <TouchableOpacity 
                   style={styles.gcashReceiptButton} 
@@ -1950,16 +1955,16 @@ export default function OrdersScreen({ navigation }) {
                     <View style={styles.gcashReceiptPreviewContainer}>
                       <Image source={{ uri: payNowReceiptUri }} style={styles.gcashReceiptPreview} />
                       <Text style={styles.gcashReceiptChangeText}>
-                        <Ionicons name="camera-outline" size={14} /> Tap to retake
+                        <Ionicons name="camera-outline" size={14} /> {t('checkout.tap_to_retake')}
                       </Text>
                     </View>
                   ) : (
                     <View style={styles.gcashReceiptPlaceholder}>
                       <Ionicons name="camera-outline" size={36} color={COLORS.gcash} />
                       <Text style={styles.gcashReceiptText}>
-                        {payNowReceiptUploading ? 'Uploading...' : 'Take Photo of Receipt'}
+                        {payNowReceiptUploading ? t('checkout.uploading_receipt') : t('checkout.take_photo_receipt')}
                       </Text>
-                      <Text style={styles.gcashReceiptHint}>Photograph your GCash receipt now</Text>
+                      <Text style={styles.gcashReceiptHint}>{t('checkout.photo_receipt_hint')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -1970,7 +1975,7 @@ export default function OrdersScreen({ navigation }) {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="images-outline" size={16} color={COLORS.text.light} />
-                  <Text style={styles.gcashReceiptSecondaryText}>Choose from gallery instead</Text>
+                  <Text style={styles.gcashReceiptSecondaryText}>{t('checkout.choose_from_gallery')}</Text>
                 </TouchableOpacity>
                 {payNowScanStatus && (
                   <View style={styles.gcashScanStatusRow}>
@@ -2005,12 +2010,12 @@ export default function OrdersScreen({ navigation }) {
                   {payNowSubmitting ? (
                     <>
                       <ActivityIndicator color="#FFFFFF" />
-                      <Text style={styles.gcashSubmitText}>Verifying Payment…</Text>
+                      <Text style={styles.gcashSubmitText}>{t('checkout.verifying_payment')}</Text>
                     </>
                   ) : (
                     <>
                       <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.gcashSubmitText}>Confirm Payment</Text>
+                      <Text style={styles.gcashSubmitText}>{t('checkout.confirm_payment')}</Text>
                     </>
                   )}
                 </LinearGradient>

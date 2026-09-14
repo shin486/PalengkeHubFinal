@@ -28,7 +28,7 @@ import { ActiveScreenProvider } from './src/contexts/ActiveScreenContext';
 import { useBiometricLock } from './src/hooks/useBiometricLock';
 import { BiometricLockScreen } from './src/components/BiometricLockScreen';
 import { CartProvider } from './src/contexts/CartContext';
-import { I18nProvider } from './src/contexts/i18nContext';
+import { I18nProvider, useI18n } from './src/contexts/i18nContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { registerPushToken, setupNotificationListeners } from './src/services/notificationService';
 import { Header } from './src/components/Header'; 
@@ -360,6 +360,8 @@ function AppStack({ isGuest }) {
     return cleanup;
   }, []);
 
+  const { t } = useI18n();
+
   // ✅ Updated: All screens that should hide the header
   const getHeaderProps = () => {
     const routeName = activeRouteName;
@@ -388,35 +390,35 @@ function AppStack({ isGuest }) {
     
     switch (routeName) {
       case 'Cart':
-        return { title: 'My PalengKart', subtitle: '' };
+        return { title: t('app_headers.cart_title', 'My PalengKart'), subtitle: '' };
       case 'Orders':
-        return { title: 'My Orders', subtitle: 'Track your orders here' };
+        return { title: t('app_headers.orders_title', 'My Orders'), subtitle: t('app_headers.orders_subtitle', 'Track your orders here') };
       case 'Profile':
-        return { title: 'My Profile', subtitle: 'Manage your account' };
+        return { title: t('app_headers.profile_title', 'My Profile'), subtitle: t('app_headers.profile_subtitle', 'Manage your account') };
       case 'StallsDirectory':
-        return { title: 'Stalls Directory', subtitle: 'Browse all market stalls' };
+        return { title: t('app_headers.stalls_title', 'Stalls Directory'), subtitle: t('app_headers.stalls_subtitle', 'Browse all market stalls'), showBack: true };
       case 'MarketMap':
         // MarketMapScreen used to render its own Header underneath this
         // one — same redundant-header bug as Notifications above, same
         // fix: this global header (with showBack) replaces it.
-        return { title: 'Market Map', subtitle: 'Every pinned stall in one place', showBack: true };
+        return { title: t('app_headers.map_title', 'Market Map'), subtitle: t('app_headers.map_subtitle', 'Every pinned stall in one place'), showBack: true };
       case 'Favorites':
-        return { title: 'Favorites', subtitle: 'Your saved products and stalls' };
+        return { title: t('app_headers.favorites_title', 'Favorites'), subtitle: t('app_headers.favorites_subtitle', 'Your saved products and stalls'), showBack: true };
       case 'StallReviews':
-        return { title: 'Reviews', subtitle: 'What customers are saying', showBack: true };
+        return { title: t('app_headers.reviews_title', 'Reviews'), subtitle: t('app_headers.reviews_subtitle', 'What customers are saying'), showBack: true };
       case 'Notifications':
         // Reached by pushing from the bell icon, not a tab-bar destination
         // like Cart/Orders/Profile above — needs its own way back. The
         // screen used to render its own back+title header underneath this
         // one for exactly that reason, which is the redundant-header bug:
         // this same global header, now with showBack, replaces it.
-        return { title: 'Notifications', subtitle: 'Your alerts', showBack: true };
+        return { title: t('app_headers.notifications_title', 'Notifications'), subtitle: t('app_headers.notifications_subtitle', 'Your alerts'), showBack: true };
       case 'ReportIssue':
-        return { title: 'Report Issue', subtitle: 'Help us improve' };
+        return { title: t('app_headers.report_issue_title', 'Report Issue'), subtitle: t('app_headers.report_issue_subtitle', 'Help us improve'), showBack: true };
       case 'CustomerReports':
-        return { title: 'My Reports', subtitle: 'Track your reports' };
+        return { title: t('app_headers.customer_reports_title', 'My Reports'), subtitle: t('app_headers.customer_reports_subtitle', 'Track your reports'), showBack: true };
       default:
-        return { title: 'PalengkeHub', subtitle: 'Lipa City Public Market' };
+        return { title: t('app_headers.default_title', 'PalengkeHub'), subtitle: t('app_headers.default_subtitle', 'Lipa City Public Market') };
     }
   };
 

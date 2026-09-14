@@ -23,12 +23,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { useChat } from '../../hooks/useChat';
 import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 //  REMOVED: import { Header } from '../../components/Header';
 
 export default function ChatDetailScreen({ navigation, route }) {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { conversationId, stall, vendor, userRole = 'customer' } = route.params;
   const { user } = useAuth();
@@ -63,14 +65,14 @@ export default function ChatDetailScreen({ navigation, route }) {
 
   // Get chat partner info for the header
   const chatPartnerName = userRole === 'admin' 
-    ? vendor?.name || stall?.stall_name || 'Vendor'
+    ? vendor?.name || stall?.stall_name || t('chat.vendor', 'Vendor')
     : stall?.stall_number
-      ? `Stall #${stall.stall_number} - ${stall?.stall_name || 'Vendor'}`
-      : stall?.stall_name || 'Vendor';
+      ? `${t('stalls.stall_number', { number: stall.stall_number })} - ${stall?.stall_name || t('stalls.vendor_fallback', 'Vendor')}`
+      : stall?.stall_name || t('stalls.vendor_fallback', 'Vendor');
 
   const chatPartnerSubtitle = userRole === 'admin'
-    ? `${stall?.stall_number ? `Stall #${stall.stall_number}` : ''}${stall?.section ? ` • ${stall.section}` : ''}`.trim()
-    : stall?.section || 'Conversation';
+    ? `${stall?.stall_number ? t('stalls.stall_number', { number: stall.stall_number }) : ''}${stall?.section ? ` • ${stall.section}` : ''}`.trim()
+    : stall?.section || t('chat.conversation', 'Conversation');
 
   //  Hide the default header and manage route name
   useEffect(() => {
@@ -126,7 +128,7 @@ export default function ChatDetailScreen({ navigation, route }) {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage) return;
     if (!conversationId) {
-      Alert.alert('Send failed', 'Chat conversation is not available.');
+      Alert.alert(t('chat.send_failed', 'Send failed'), t('chat.conversation_unavailable', 'Chat conversation is not available.'));
       return;
     }
 
@@ -135,11 +137,11 @@ export default function ChatDetailScreen({ navigation, route }) {
       if (sent) {
         setMessageText('');
       } else {
-        Alert.alert('Send failed', 'Your message could not be delivered. Please try again.');
+        Alert.alert(t('chat.send_failed', 'Send failed'), t('chat.undelivered_msg', 'Your message could not be delivered. Please try again.'));
       }
     } catch (error) {
       console.error('handleSend error:', error);
-      Alert.alert('Send failed', error?.message || 'Your message could not be delivered. Please try again.');
+      Alert.alert(t('chat.send_failed', 'Send failed'), error?.message || t('chat.undelivered_msg', 'Your message could not be delivered. Please try again.'));
     }
   };
 
@@ -205,7 +207,7 @@ export default function ChatDetailScreen({ navigation, route }) {
     return (
       <View style={styles.container}>
         <View style={styles.centerContainer}>
-          <Text>Loading conversation...</Text>
+          <Text style={{ color: COLORS.text.secondary }}>{t('chat.loading_conversation', 'Loading conversation...')}</Text>
         </View>
       </View>
     );
@@ -275,7 +277,7 @@ export default function ChatDetailScreen({ navigation, route }) {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Type a message..."
+            placeholder={t('chat.chat_placeholder', 'Type a message...')}
             placeholderTextColor={COLORS.text.quaternary}
             value={messageText}
             onChangeText={setMessageText}
@@ -295,9 +297,9 @@ export default function ChatDetailScreen({ navigation, route }) {
               style={styles.imageGradient}
             >
               {uploadingImage ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Ionicons name="camera-outline" size={22} color={COLORS.surface} />
+                <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -312,9 +314,9 @@ export default function ChatDetailScreen({ navigation, route }) {
               style={styles.sendGradient}
             >
               {sending ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Ionicons name="send" size={22} color={COLORS.surface} />
+                <Ionicons name="send" size={22} color="#FFFFFF" />
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -332,7 +334,7 @@ export default function ChatDetailScreen({ navigation, route }) {
             style={styles.modalCloseButton}
             onPress={() => setImageModalVisible(false)}
           >
-            <Ionicons name="close" size={24} color={COLORS.surface} />
+            <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           {selectedImage && (
             <Image 
@@ -493,6 +495,7 @@ const createStyles = (COLORS) => StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     maxHeight: 100,
+    color: COLORS.text.primary,
   },
   imageButton: {
     borderRadius: 25,

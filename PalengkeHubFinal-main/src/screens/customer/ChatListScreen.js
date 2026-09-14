@@ -13,6 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/i18nContext';
 import { chatService } from '../../services/chatService';
 import { Header } from '../../components/Header';
 import { useColors } from '../../contexts/ThemeContext';
@@ -20,6 +21,7 @@ import { useColors } from '../../contexts/ThemeContext';
 export default function ChatListScreen({ navigation }) {
   const { user } = useAuth();
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,10 +59,10 @@ export default function ChatListScreen({ navigation }) {
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     
     if (days > 7) return date.toLocaleDateString();
-    if (days > 0) return `${days}d ago`;
-    if (diff > 3600000) return `${Math.floor(diff / 3600000)}h ago`;
-    if (diff > 60000) return `${Math.floor(diff / 60000)}m ago`;
-    return 'Just now';
+    if (days > 0) return t('chat.time_days_ago', { count: days });
+    if (diff > 3600000) return t('chat.time_hours_ago', { count: Math.floor(diff / 3600000) });
+    if (diff > 60000) return t('chat.time_minutes_ago', { count: Math.floor(diff / 60000) });
+    return t('chat.time_just_now', 'Just now');
   };
 
   const renderConversation = ({ item }) => (
@@ -70,20 +72,21 @@ export default function ChatListScreen({ navigation }) {
         conversationId: item.id,
         stall: item.stall,
       })}
+      activeOpacity={0.7}
     >
       {item.stall?.image_url ? (
         <Image source={{ uri: item.stall.image_url }} style={styles.avatarImage} />
       ) : (
         <View style={styles.avatarContainer}>
-          <Ionicons name="storefront-outline" size={18} color={COLORS.text.tertiary} />
+          <Ionicons name="storefront-outline" size={22} color={COLORS.primary} />
         </View>
       )}
       <View style={styles.conversationInfo}>
         <Text style={styles.stallName}>
-          {item.stall?.stall_name || `Stall #${item.stall?.stall_number}`}
+          {item.stall?.stall_name || (item.stall?.stall_number ? t('stalls.stall_number', { number: item.stall?.stall_number }) : t('stalls.vendor_fallback', 'Market Stall'))}
         </Text>
         <Text style={styles.lastMessage} numberOfLines={1}>
-          {item.last_message || 'Start a conversation'}
+          {item.last_message || t('chat.start_conversation', 'Start a conversation')}
         </Text>
         <Text style={styles.time}>{formatTime(item.last_message_time)}</Text>
       </View>
@@ -97,7 +100,6 @@ export default function ChatListScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
@@ -108,10 +110,12 @@ export default function ChatListScreen({ navigation }) {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubble-outline" size={18} />
-            <Text style={styles.emptyTitle}>No messages yet</Text>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="chatbubble-ellipses-outline" size={44} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>{t('chat.no_messages', 'No messages yet')}</Text>
             <Text style={styles.emptyText}>
-              Message a stall from their profile page
+              {t('chat.empty_subtitle', 'Message a stall from their profile page')}
             </Text>
           </View>
         }
@@ -135,12 +139,14 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   avatarContainer: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: COLORS.accentSoft,
+    backgroundColor: COLORS.primarySurface,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -155,8 +161,8 @@ const createStyles = (COLORS) => StyleSheet.create({
   avatarEmoji: { fontSize: 24 },
   conversationInfo: { flex: 1 },
   stallName: { fontSize: 16, fontWeight: 'bold', color: COLORS.text.primary },
-  lastMessage: { fontSize: 13, color: COLORS.text.tertiary, marginTop: 2 },
-  time: { fontSize: 11, color: COLORS.text.quaternary, marginTop: 2 },
+  lastMessage: { fontSize: 13, color: COLORS.text.secondary, marginTop: 2 },
+  time: { fontSize: 11, color: COLORS.text.tertiary, marginTop: 2 },
   unreadBadge: {
     backgroundColor: COLORS.primary,
     borderRadius: 12,
@@ -166,9 +172,17 @@ const createStyles = (COLORS) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 6,
   },
-  unreadText: { color: COLORS.text.inverse, fontSize: 12, fontWeight: 'bold' },
+  unreadText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
-  emptyIcon: { fontSize: 60, marginBottom: 16 },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primarySurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   emptyTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.text.primary, marginBottom: 8 },
-  emptyText: { fontSize: 14, color: COLORS.text.tertiary, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: COLORS.text.secondary, textAlign: 'center' },
 });

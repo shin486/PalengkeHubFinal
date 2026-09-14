@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 
 const StarRow = ({ rating, size = 14 }) => {
   const full = Math.floor(rating);
@@ -29,6 +30,7 @@ const StarRow = ({ rating, size = 14 }) => {
 
 export default function StallReviewsScreen({ route }) {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { stallId, stallName } = route.params;
 
@@ -94,7 +96,7 @@ export default function StallReviewsScreen({ route }) {
             </Text>
           </View>
           <View>
-            <Text style={styles.customerName}>{item.consumer?.full_name || 'Customer'}</Text>
+            <Text style={styles.customerName}>{item.consumer?.full_name || t('stall_reviews.customer_fallback', 'Customer')}</Text>
             <Text style={styles.reviewDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </View>
         </View>
@@ -112,7 +114,7 @@ export default function StallReviewsScreen({ route }) {
 
       {item.vendor_reply && (
         <View style={styles.replyBlock}>
-          <Text style={styles.replyLabel}>Reply from vendor</Text>
+          <Text style={styles.replyLabel}>{t('stall_reviews.vendor_reply', 'Reply from vendor')}</Text>
           <Text style={styles.replyText}>{item.vendor_reply}</Text>
         </View>
       )}
@@ -123,7 +125,7 @@ export default function StallReviewsScreen({ route }) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading reviews...</Text>
+        <Text style={styles.loadingText}>{t('stall_reviews.loading', 'Loading reviews...')}</Text>
       </View>
     );
   }
@@ -140,7 +142,9 @@ export default function StallReviewsScreen({ route }) {
             <Text style={styles.summaryValue}>{averageRating.toFixed(1)}</Text>
             <StarRow rating={averageRating} size={16} />
             <Text style={styles.summaryLabel}>
-              {totalRatings} review{totalRatings === 1 ? '' : 's'}
+              {totalRatings === 1
+                ? t('stall_reviews.review_singular', '1 review')
+                : t('stall_reviews.review_plural', '%{count} reviews', { count: totalRatings })}
             </Text>
           </View>
           <View style={styles.distributionCard}>
@@ -164,8 +168,8 @@ export default function StallReviewsScreen({ route }) {
         {totalRatings === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="star-outline" size={40} color={COLORS.text.quaternary} />
-            <Text style={styles.emptyTitle}>No reviews yet</Text>
-            <Text style={styles.emptyText}>Reviews left after an order from this stall will show up here.</Text>
+            <Text style={styles.emptyTitle}>{t('stall_reviews.no_reviews_title', 'No reviews yet')}</Text>
+            <Text style={styles.emptyText}>{t('stall_reviews.no_reviews_desc', 'Reviews left after an order from this stall will show up here.')}</Text>
           </View>
         ) : (
           <>
@@ -177,7 +181,7 @@ export default function StallReviewsScreen({ route }) {
                   onPress={() => setActiveFilter(filter)}
                 >
                   <Text style={[styles.filterChipText, activeFilter === filter && styles.filterChipTextActive]}>
-                    {filter === 'all' ? 'All' : `${filter}★`}
+                    {filter === 'all' ? t('stall_reviews.filter_all', 'All') : `${filter}★`}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -242,7 +246,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 11,
-    color: COLORS.text.tertiary,
+    color: COLORS.text.secondary,
     marginTop: 6,
     textAlign: 'center',
   },
@@ -307,7 +311,8 @@ const createStyles = (COLORS) => StyleSheet.create({
     fontWeight: '600',
   },
   filterChipTextActive: {
-    color: COLORS.text.inverse,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   reviewList: {
     paddingHorizontal: 16,

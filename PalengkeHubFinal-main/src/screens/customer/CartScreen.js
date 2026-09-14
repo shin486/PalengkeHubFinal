@@ -209,22 +209,40 @@ export default function CartScreen({ navigation, route }) {
     if (newQuantity <= 0) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
-        if (window.confirm(`Remove ${item.name} from cart?`)) {
+        if (window.confirm(`${t('cart.remove_item', 'Remove Item')}\n\n${t('cart.remove_item_named', 'Remove %{name} from cart?', { name: item.name })}`)) {
           removeItem(item.product_id);
         }
         return;
       }
       Alert.alert(
-        'Remove Item',
-        `Remove ${item.name} from cart?`,
+        t('cart.remove_item', 'Remove Item'),
+        t('cart.remove_item_named', 'Remove %{name} from cart?', { name: item.name }),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Remove', onPress: () => removeItem(item.product_id) }
+          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+          { text: t('common.delete', 'Remove'), onPress: () => removeItem(item.product_id) }
         ]
       );
     } else {
       updateQuantity(item.product_id, newQuantity);
     }
+  };
+
+  const handleClearCart = () => {
+    if (cart.length === 0) return;
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${t('cart.clear_all_title', 'Clear Cart')}\n\n${t('cart.clear_all_confirm', 'Are you sure you want to remove all items from your cart?')}`)) {
+        clearCart();
+      }
+      return;
+    }
+    Alert.alert(
+      t('cart.clear_all_title', 'Clear Cart'),
+      t('cart.clear_all_confirm', 'Are you sure you want to remove all items from your cart?'),
+      [
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        { text: t('cart.clear_all', 'Clear All'), style: 'destructive', onPress: clearCart }
+      ]
+    );
   };
 
   const groupByStall = () => {
@@ -251,15 +269,18 @@ export default function CartScreen({ navigation, route }) {
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      Alert.alert(t('checkout.empty_cart_title'), t('checkout.empty_cart_body'));
+      Alert.alert(t('checkout.empty_cart_title', 'Empty Cart'), t('checkout.empty_cart_body', 'Add items to your cart first'));
       return;
     }
     if (selectedItems.length === 0) {
-      Alert.alert('Nothing Selected', 'Check at least one item to check out — the rest will stay in your cart.');
+      Alert.alert(
+        t('cart.nothing_selected_title', 'Nothing Selected'),
+        t('cart.nothing_selected_body', 'Check at least one item to check out — the rest will stay in your cart.')
+      );
       return;
     }
     if (hasClosedStall) {
-      Alert.alert(t('cart.closed_stalls_title'), t('cart.closed_stalls_body'));
+      Alert.alert(t('cart.closed_stalls_title', 'Closed Stalls'), t('cart.closed_stalls_body', 'Please remove items from closed stalls before proceeding.'));
       return;
     }
     setActiveTab(TABS.CHECKOUT);
@@ -304,9 +325,12 @@ export default function CartScreen({ navigation, route }) {
               <Ionicons name="warning-outline" size={18} />
             </View>
             <View style={styles.closedWarningContent}>
-              <Text style={styles.closedWarningTitle}>Some stalls are closed</Text>
+              <Text style={styles.closedWarningTitle}>{t('cart.closed_stalls_warning', 'Some stalls are closed')}</Text>
               <Text style={styles.closedWarningText}>
-                {closedStallNames.join(', ')} {closedStallNames.length === 1 ? 'is' : 'are'} temporarily closed.
+                {t('cart.closed_stalls_desc', '%{stalls} %{verb} temporarily closed.', {
+                  stalls: closedStallNames.join(', '),
+                  verb: closedStallNames.length === 1 ? t('cart.is', 'is') : t('cart.are', 'are'),
+                })}
               </Text>
             </View>
           </View>
@@ -333,13 +357,15 @@ export default function CartScreen({ navigation, route }) {
                   <Ionicons name="storefront-outline" size={18} />
                 </View>
                 <View style={styles.stallHeaderText}>
-                  <Text style={styles.stallName}>{data.stall?.stall_name || 'Market Stall'}</Text>
-                  <Text style={styles.stallMeta}>Stall #{data.stall?.stall_number} • {data.stall?.section}</Text>
+                  <Text style={styles.stallName}>{data.stall?.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
+                  <Text style={styles.stallMeta}>
+                    {t('stalls.stall_number', 'Stall #%{number}', { number: data.stall?.stall_number })} • {data.stall?.section ? (t(`market_sections.${data.stall.section}`, data.stall.section)) : t('stalls.no_section', 'No Section')}
+                  </Text>
                 </View>
               </View>
               {data.isClosed && (
                 <View style={styles.closedBadge}>
-                  <Text style={styles.closedBadgeText}>Closed</Text>
+                  <Text style={styles.closedBadgeText}>{t('common.closed', 'Closed')}</Text>
                 </View>
               )}
             </View>
@@ -400,7 +426,7 @@ export default function CartScreen({ navigation, route }) {
                         </View>
                       ) : (
                         <View style={styles.closedItemBadge}>
-                          <Text style={styles.closedItemLabel}>Closed</Text>
+                          <Text style={styles.closedItemLabel}>{t('common.closed', 'Closed')}</Text>
                         </View>
                       )}
                       <Text style={styles.itemTotal}>
@@ -429,7 +455,7 @@ export default function CartScreen({ navigation, route }) {
               onPress={() => setActiveTab(TABS.CART)}
             >
               <Text style={[styles.tabText, activeTab === TABS.CART && styles.activeTabText]}>
-                Cart ({cart.length})
+                {t('cart.tab_cart', 'Cart (%{count})', { count: cart.length })}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -437,12 +463,12 @@ export default function CartScreen({ navigation, route }) {
               onPress={() => setActiveTab(TABS.CHECKOUT)}
             >
               <Text style={[styles.tabText, activeTab === TABS.CHECKOUT && styles.activeTabText]}>
-                Checkout
+                {t('checkout.title', 'Checkout')}
               </Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={clearCart} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={styles.clearText}>Clear All</Text>
+          <TouchableOpacity onPress={handleClearCart} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.clearText}>{t('cart.clear_all', 'Clear All')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -484,9 +510,13 @@ export default function CartScreen({ navigation, route }) {
                 color={isAllSelected ? COLORS.primary : COLORS.text.tertiary}
               />
               <View>
-                <Text style={styles.footerTotalLabel}>{t('cart.total')}</Text>
+                <Text style={styles.footerTotalLabel}>{t('cart.total', 'Total')}</Text>
                 <Text style={styles.footerTotalItems}>
-                  {selectedItems.length} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected
+                  {t('cart.selected_items_count', '%{selected} of %{total} %{unit} selected', {
+                    selected: selectedItems.length,
+                    total: cart.length,
+                    unit: cart.length === 1 ? t('cart.item_singular', 'item') : t('cart.item_plural', 'items'),
+                  })}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -675,12 +705,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   stallName: {
     fontSize: 17,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 2,
   },
   stallMeta: {
     fontSize: 12,
-    color: COLORS.text.light,
+    color: COLORS.text.secondary,
   },
   closedBadge: {
     backgroundColor: COLORS.error,
@@ -736,13 +766,13 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     paddingRight: 8,
     lineHeight: 20,
   },
   itemPrice: {
     fontSize: 13,
-    color: COLORS.text.medium,
+    color: COLORS.text.secondary,
     marginBottom: 10,
   },
   quantityControls: {
@@ -775,7 +805,7 @@ const createStyles = (COLORS) => StyleSheet.create({
   quantityText: {
     fontSize: 15,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     minWidth: 28,
     textAlign: 'center',
   },
@@ -811,8 +841,9 @@ const createStyles = (COLORS) => StyleSheet.create({
   footer: {
     backgroundColor: COLORS.surface,
     padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: COLORS.borderLight,
     shadowColor: COLORS.shadowDark,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 1,
@@ -834,12 +865,12 @@ const createStyles = (COLORS) => StyleSheet.create({
   footerTotalLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.text.dark,
+    color: COLORS.text.primary,
     marginBottom: 2,
   },
   footerTotalItems: {
     fontSize: 13,
-    color: COLORS.text.light,
+    color: COLORS.text.secondary,
   },
   footerTotalAmount: {
     fontSize: 24,

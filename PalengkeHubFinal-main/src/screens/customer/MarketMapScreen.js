@@ -24,10 +24,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, RefreshControl, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
+import { useI18n } from '../../contexts/i18nContext';
 import MarketMapView from '../../components/MarketMapView';
 import { fetchAllStallsWithLocations } from '../../services/stallLocationService';
 
 function StallPreviewCard({ stall, onViewStall, onClose, styles, COLORS }) {
+  const { t } = useI18n();
   const [imageError, setImageError] = useState(false);
 
   return (
@@ -50,9 +52,9 @@ function StallPreviewCard({ stall, onViewStall, onClose, styles, COLORS }) {
         )}
 
         <View style={styles.previewInfo}>
-          <Text style={styles.previewName} numberOfLines={1}>{stall.stall_name || 'Market Stall'}</Text>
+          <Text style={styles.previewName} numberOfLines={1}>{stall.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
           <Text style={styles.previewMeta} numberOfLines={1}>
-            Stall #{stall.stall_number || 'N/A'} • {stall.section || 'No section'}
+            {t('stalls.stall_number', { number: stall.stall_number || 'N/A' })} • {stall.section || t('stalls.no_section', 'No section')}
           </Text>
           {!!stall.description && (
             <Text style={styles.previewDescription} numberOfLines={2}>{stall.description}</Text>
@@ -61,16 +63,17 @@ function StallPreviewCard({ stall, onViewStall, onClose, styles, COLORS }) {
       </View>
 
       <TouchableOpacity style={styles.viewStallButton} onPress={() => onViewStall(stall)} activeOpacity={0.85}>
-        <Text style={styles.viewStallButtonText}>View Stall</Text>
+        <Text style={styles.viewStallButtonText}>{t('market_map.view_stall', 'View Stall')}</Text>
         <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
       </TouchableOpacity>
-      <Text style={styles.previewHint}>Tap this pin again to view the stall</Text>
+      <Text style={styles.previewHint}>{t('market_map.tap_pin_hint', 'Tap this pin again to view the stall')}</Text>
     </View>
   );
 }
 
 export default function MarketMapScreen({ navigation }) {
   const COLORS = useColors();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const [stalls, setStalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -85,12 +88,12 @@ export default function MarketMapScreen({ navigation }) {
       setStalls(data);
     } catch (err) {
       console.error('Error loading market map:', err);
-      setError('Failed to load stall locations. Please try again.');
+      setError(t('market_map.error_loading', 'Failed to load stall locations. Please try again.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -139,8 +142,8 @@ export default function MarketMapScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
         >
           <Ionicons name="map-outline" size={40} color={COLORS.text.tertiary} />
-          <Text style={styles.emptyText}>No stall locations have been pinned yet.</Text>
-          <Text style={styles.emptySubtext}>Check back once vendors have set their stall's location.</Text>
+          <Text style={styles.emptyText}>{t('market_map.no_stalls_pinned', 'No stall locations have been pinned yet.')}</Text>
+          <Text style={styles.emptySubtext}>{t('market_map.no_stalls_subtext', "Check back once vendors have set their stall's location.")}</Text>
         </ScrollView>
       ) : (
         <View style={styles.mapWrap}>

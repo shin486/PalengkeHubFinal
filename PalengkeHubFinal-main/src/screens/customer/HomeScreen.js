@@ -282,6 +282,7 @@ const StallCard = ({ stall, onPress, isClosed = false, isFavorite = false, onTog
 // ============================================================
 const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress }) => {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
   const displayRating = stall.average_rating || 0;
@@ -306,7 +307,7 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
         )}
         <View style={[styles.topStallStatusBadge, openNow ? styles.topStallStatusOpen : styles.topStallStatusClosed]}>
           <Text style={[styles.topStallStatusText, openNow ? styles.topStallStatusTextOpen : styles.topStallStatusTextClosed]}>
-            {openNow ? 'Bukas' : 'Sarado'}
+            {openNow ? t('stalls.open', 'Bukas') : t('stalls.closed', 'Sarado')}
           </Text>
         </View>
         {onToggleFavorite && (
@@ -342,7 +343,7 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
               ₱{priceRange.min.toFixed(0)} - ₱{priceRange.max.toFixed(0)} / {priceRange.unit}
             </Text>
             <View style={styles.topStallRangeBadge}>
-              <Text style={styles.topStallRangeBadgeText}>PRESYO RANGE</Text>
+              <Text style={styles.topStallRangeBadgeText}>{t('home.price_range', 'PRESYO RANGE')}</Text>
             </View>
           </View>
         )}
@@ -360,6 +361,7 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
 const PromoBannerCard = ({ promo, width, styles, onPress }) => {
   const [imageError, setImageError] = useState(false);
   const { colors } = useTheme();
+  const { t } = useI18n();
   const product = promo.product;
   const stall = promo.stall;
   const discountText = promo.discount_type === 'percentage'
@@ -383,13 +385,13 @@ const PromoBannerCard = ({ promo, width, styles, onPress }) => {
       <View style={styles.hoursBannerOverlay} />
       <View style={styles.hoursBannerContent}>
         <View style={styles.hoursBannerTag}>
-          <Text style={styles.hoursBannerTagText}>May Diskwento</Text>
+          <Text style={styles.hoursBannerTagText}>{t('home.discounted', 'May Diskwento')}</Text>
         </View>
         <Text style={styles.hoursBannerTitle} numberOfLines={1}>
           {discountText} — {product?.name}
         </Text>
         <Text style={styles.hoursBannerText} numberOfLines={1}>
-          sa {stall?.stall_name || 'stall'}
+          {t('home.at_stall', 'sa %{stall}', { stall: stall?.stall_name || 'stall' })}
         </Text>
       </View>
     </TouchableOpacity>
@@ -481,6 +483,7 @@ const CategoryChip = ({ cat, styles, colors, onPress }) => {
 // load by default. Needs its own component (not inline in the .map()
 // below) so each card can track its own load failure independently.
 const PresyoCard = ({ item, colors, styles, navigation }) => {
+  const { t } = useI18n();
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   // Safety net: a stale/dead image_url (e.g. a leftover link from before
@@ -535,7 +538,7 @@ const PresyoCard = ({ item, colors, styles, navigation }) => {
 
       <View style={styles.presyoPriceRow}>
         <PriceText price={item.minPrice} unit={item.unit} />
-        <VerdictChip verdict="PINAKAMURA" />
+        <VerdictChip verdict={t('home.cheapest_badge', 'PINAKAMURA')} />
       </View>
 
       <View style={styles.presyoBarTrack}>
@@ -543,18 +546,24 @@ const PresyoCard = ({ item, colors, styles, navigation }) => {
         <View style={[styles.presyoBarTick, { left: `${tickPct}%` }]} />
       </View>
       <View style={styles.presyoBarLabels}>
-        <Text style={styles.presyoBarLabel}>₱{item.minPrice.toFixed(0)} pinakamura</Text>
-        <Text style={styles.presyoBarLabel}>avg ₱{item.avgPrice.toFixed(0)}</Text>
+        <Text style={styles.presyoBarLabel}>
+          {t('home.min_price_label', '₱%{price} pinakamura', { price: item.minPrice.toFixed(0) })}
+        </Text>
+        <Text style={styles.presyoBarLabel}>
+          {t('home.avg_price_label', 'avg ₱%{price}', { price: item.avgPrice.toFixed(0) })}
+        </Text>
       </View>
 
       <View style={styles.presyoFooterRow}>
         <View style={styles.presyoStallCountRow}>
           <Ionicons name="storefront-outline" size={13} color={colors.text.tertiary} />
-          <Text style={styles.presyoStallCount}>{item.stallCount} na stalls</Text>
+          <Text style={styles.presyoStallCount}>
+            {t('home.stall_count', '%{count} na stalls', { count: item.stallCount })}
+          </Text>
         </View>
         <TouchableOpacity onPress={goTo} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
           <View style={styles.presyoCompareRow}>
-            <Text style={styles.presyoCompareText}>Ikumpara</Text>
+            <Text style={styles.presyoCompareText}>{t('home.compare', 'Ikumpara')}</Text>
             <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
           </View>
         </TouchableOpacity>
@@ -1449,8 +1458,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                   {marketOpen ? t('home.market_open') : t('home.market_closed')}
                 </Text>
               </View>
-              <Text style={styles.hoursBannerTitle}>5:00 AM to 7:00 PM, araw-araw</Text>
-              <Text style={styles.hoursBannerText}>Pickup sa mismong stall. Walang delivery fee.</Text>
+              <Text style={styles.hoursBannerTitle}>{t('home.banner_hours', '5:00 AM to 7:00 PM, araw-araw')}</Text>
+              <Text style={styles.hoursBannerText}>{t('home.banner_pickup_desc', 'Pickup sa mismong stall. Walang delivery fee.')}</Text>
             </View>
           </View>
 
@@ -1463,10 +1472,10 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             <View style={styles.hoursBannerOverlay} />
             <View style={styles.hoursBannerContent}>
               <View style={styles.hoursBannerTag}>
-                <Text style={styles.hoursBannerTagText}>Bagong Ani</Text>
+                <Text style={styles.hoursBannerTagText}>{t('home.fresh_harvest', 'Bagong Ani')}</Text>
               </View>
-              <Text style={styles.hoursBannerTitle}>Sariwang gulay at prutas araw-araw</Text>
-              <Text style={styles.hoursBannerText}>Direkta mula sa mga stall sa palengke.</Text>
+              <Text style={styles.hoursBannerTitle}>{t('home.fresh_harvest_title', 'Sariwang gulay at prutas araw-araw')}</Text>
+              <Text style={styles.hoursBannerText}>{t('home.fresh_harvest_desc', 'Direkta mula sa mga stall sa palengke.')}</Text>
             </View>
           </View>
 
@@ -1488,11 +1497,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Presyo Check</Text>
-                <Text style={styles.sectionSubtitle}>Pinakamura kada kilo ngayon</Text>
+                <Text style={styles.sectionTitle}>{t('home.presyo_check', 'Presyo Check')}</Text>
+                <Text style={styles.sectionSubtitle}>{t('home.cheapest_per_unit', 'Pinakamura kada kilo ngayon')}</Text>
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-                <Text style={styles.sectionLink}>Tingnan Lahat</Text>
+                <Text style={styles.sectionLink}>{t('home.see_all', 'Tingnan Lahat')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1579,8 +1588,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}> Recently Viewed</Text>
-                <Text style={styles.sectionSubtitle}>Pick up where you left off</Text>
+                <Text style={styles.sectionTitle}> {t('home.recently_viewed', 'Recently Viewed')}</Text>
+                <Text style={styles.sectionSubtitle}>{t('home.recently_viewed_sub', 'Pick up where you left off')}</Text>
               </View>
             </View>
             <ScrollView 
@@ -1716,7 +1725,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
                 <Text style={styles.sectionSubtitle}>{t('home.top_rated_subtitle')}</Text>
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-                <Text style={styles.sectionLink}>Tingnan Lahat</Text>
+                <Text style={styles.sectionLink}>{t('home.see_all', 'Tingnan Lahat')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView
@@ -1760,15 +1769,20 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             showsHorizontalScrollIndicator={false} 
             contentContainerStyle={styles.filterContainer}
           >
-            {sections.map((section, index) => (
-              <Chip
-                key={index}
-                isOn={selectedSection === section}
-                onPress={() => setSelectedSection(section)}
-              >
-                {section}
-              </Chip>
-            ))}
+            {sections.map((section, index) => {
+              const chipLabel = section === 'All'
+                ? t('home.all_sections', 'All')
+                : t(`categories.${section.toLowerCase()}`, section);
+              return (
+                <Chip
+                  key={index}
+                  isOn={selectedSection === section}
+                  onPress={() => setSelectedSection(section)}
+                >
+                  {chipLabel}
+                </Chip>
+              );
+            })}
           </ScrollView>
 
           <View style={styles.stallsContainer}>
@@ -1795,7 +1809,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           {loadingMoreStalls && (
             <View style={styles.loadMoreStallsRow}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadMoreStallsText}>Naglo-load pa ng mga stall...</Text>
+              <Text style={styles.loadMoreStallsText}>{t('home.loading_more_stalls', 'Naglo-load pa ng mga stall...')}</Text>
             </View>
           )}
         </View>
@@ -1811,7 +1825,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               <Ionicons name="checkmark-circle" size={22} color={colors.onSuccess} />
             </View>
             <View style={styles.toastTextWrap}>
-              <Text style={styles.toastTitle}>Added to Cart</Text>
+              <Text style={styles.toastTitle}>{t('cart.added_to_cart', 'Added to Cart')}</Text>
               <Text style={styles.toastSubtitle} numberOfLines={1}>{toastMessage}</Text>
             </View>
           </View>
