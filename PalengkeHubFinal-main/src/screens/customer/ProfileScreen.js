@@ -39,7 +39,7 @@ import {
 export default function ProfileScreen({ navigation }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
-  const { user, profile, logout, setIsGuest, isGuest, checkUser } = useAuth();
+  const { user, profile, logout, resetToLogin, setIsGuest, isGuest, checkUser } = useAuth();
   const { t, locale, changeLanguage } = useI18n();
   const { isDark } = useTheme();
   const { getFavoriteCount } = useFavorites();
@@ -372,12 +372,24 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
+    const doLogout = async () => {
+      console.log(' Customer logging out...');
+      const result = await logout();
+      if (result.success) {
+        resetToLogin();
+      } else {
+        if (Platform.OS === 'web') {
+          window.alert(result.error || 'Failed to logout');
+        } else {
+          Alert.alert(t('common.error', 'Error'), result.error || 'Failed to logout');
+        }
+      }
+    };
+
     if (Platform.OS === 'web') {
       const confirmLogout = window.confirm(t('profile_shared.logout_confirm_msg', 'Are you sure you want to logout?'));
       if (confirmLogout) {
-        console.log(' Logging out...');
-        await supabase.auth.signOut();
-        window.location.href = '/';
+        await doLogout();
       }
       return;
     }
@@ -390,17 +402,7 @@ export default function ProfileScreen({ navigation }) {
         {
           text: t('profile_shared.logout'),
           style: 'destructive',
-          onPress: async () => {
-            const result = await logout();
-            if (result.success) {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } else {
-              Alert.alert(t('common.error'), result.error);
-            }
-          }
+          onPress: doLogout,
         }
       ]
     );

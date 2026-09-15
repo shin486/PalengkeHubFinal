@@ -934,13 +934,24 @@ export const AuthProvider = ({ children }) => {
   const resetToLogin = useCallback(() => {
     console.log(' resetToLogin called from AuthContext');
     if (global.navigationRef) {
-      global.navigationRef.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        })
-      );
-      console.log(' Reset to Login executed');
+      try {
+        if (typeof global.navigationRef.reset === 'function') {
+          global.navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        } else {
+          global.navigationRef.dispatch(
+            CommonActions.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            })
+          );
+        }
+        console.log(' Reset to Login executed');
+      } catch (err) {
+        console.error('Error executing resetToLogin:', err);
+      }
     } else {
       console.log(' navigationRef not found');
     }

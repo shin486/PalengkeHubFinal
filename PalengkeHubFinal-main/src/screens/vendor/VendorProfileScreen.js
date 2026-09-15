@@ -359,17 +359,25 @@ export default function VendorProfileScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    // react-native-web does NOT implement Alert.alert — use window.confirm on web
-    if (Platform.OS === 'web') {
-      const confirmLogout = window.confirm('Are you sure you want to logout?');
-      if (!confirmLogout) return;
-      console.log(' Vendor logging out (web)...');
-      try {
-        await supabase.auth.signOut();
-      } catch (err) {
-        console.error('Error during logout:', err);
+    const doLogout = async () => {
+      console.log(' Vendor logging out...');
+      const result = await logout();
+      if (result.success) {
+        resetToLogin();
+      } else {
+        if (Platform.OS === 'web') {
+          window.alert(result.error || 'Failed to logout');
+        } else {
+          Alert.alert(t('common.error', 'Error'), result.error || 'Failed to logout');
+        }
       }
-      window.location.href = '/';
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmLogout = window.confirm(t('profile_shared.logout_confirm_msg', 'Are you sure you want to logout?'));
+      if (confirmLogout) {
+        await doLogout();
+      }
       return;
     }
 
@@ -381,14 +389,7 @@ export default function VendorProfileScreen({ navigation }) {
         {
           text: t('profile_shared.logout', 'Logout'),
           style: 'destructive',
-          onPress: async () => {
-            const result = await logout();
-            if (result.success) {
-              resetToLogin();
-            } else {
-              Alert.alert(t('common.error', 'Error'), result.error || 'Failed to logout');
-            }
-          }
+          onPress: doLogout,
         }
       ]
     );
@@ -1249,7 +1250,7 @@ const createStyles = (COLORS) => StyleSheet.create({
 
   // ── Spacer ──
   bottomSpacer: {
-    height: 30,
+    height: 100,
   },
 
   // ── Modal ──

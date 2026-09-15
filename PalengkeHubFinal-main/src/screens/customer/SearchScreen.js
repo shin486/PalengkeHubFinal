@@ -874,7 +874,7 @@ export default function SearchScreen({ navigation }) {
     setSearchSubmitted(false);
   };
 
-  const addToCartFromComparison = (product, stall, qty) => {
+  const addToCartFromComparison = async (product, stall, qty) => {
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
@@ -889,7 +889,7 @@ export default function SearchScreen({ navigation }) {
       ]);
       return;
     }
-    addToCart(product, stall.id, stall, qty || 1);
+    await addToCart(product, stall.id, stall, qty || 1);
     hapticMedium();
     setAddedProductId(product.id);
     setTimeout(() => {

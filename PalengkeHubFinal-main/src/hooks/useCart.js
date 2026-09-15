@@ -27,11 +27,32 @@ let cartVersion = 0;
 // version, since the write itself is a truer picture of where the cart is
 // headed than a read that raced ahead of it.
 let pendingWrites = 0;
+let writeCount = 0;
+let activeWritePromise = null;
 
 const updateSharedCart = (newCart) => {
   sharedCart = newCart;
   cartVersion += 1;
   listeners.forEach(fn => fn(sharedCart));
+};
+
+const runDbWrite = (writeFn) => {
+  pendingWrites += 1;
+  writeCount += 1;
+  const currentWrite = (async () => {
+    try {
+      await writeFn();
+    } catch (e) {
+      console.error('Cart DB write error:', e);
+    } finally {
+      pendingWrites = Math.max(0, pendingWrites - 1);
+      if (activeWritePromise === currentWrite) {
+        activeWritePromise = null;
+      }
+    }
+  })();
+  activeWritePromise = currentWrite;
+  return currentWrite;
 };
 
 export const useCart = () => {
@@ -48,12 +69,18 @@ export const useCart = () => {
 
   const fetchCart = useCallback(async () => {
     if (isGuest || !user) {
-      updateSharedCart([]);
       setLoading(false);
       return;
     }
 
+    // Await any in-flight DB write before querying the database so the read
+    // doesn't race ahead and fetch pre-mutation data from the DB.
+    while (activeWritePromise) {
+      await activeWritePromise;
+    }
+
     const versionAtStart = cartVersion;
+    const writeCountAtStart = writeCount;
 
     try {
       setLoading(true);
@@ -68,7 +95,7 @@ export const useCart = () => {
 
       if (error) {
         console.error(' Error fetching cart:', error);
-        updateSharedCart([]);
+        // Never wipe out local cart on network/fetch error
         return;
       }
 
@@ -118,28 +145,23 @@ export const useCart = () => {
       }));
       
       console.log(' Cart loaded:', formattedItems.length, 'items');
-      if (cartVersion !== versionAtStart) {
-        // addToCart/updateQuantity/removeItem/clearCart changed the cart
-        // while this fetch was in flight — that local write is newer than
-        // what we just read, so trust it and drop this stale result.
+
+      // If a newer write started or completed while read was in flight, discard this read.
+      if (cartVersion !== versionAtStart || writeCount !== writeCountAtStart || pendingWrites > 0) {
         console.log(' Skipping stale cart fetch — a newer local change won the race');
         return;
       }
-      if (pendingWrites > 0) {
-        // A mutation's own DB write is still in flight — even though it
-        // already bumped cartVersion before we started (so the check
-        // above passed), our read could still have raced ahead of that
-        // write landing and come back with the pre-change row. Trust the
-        // pending write over this read; whichever screen needs fresh data
-        // will refetch again on its next focus, by which point the write
-        // will be done.
-        console.log(' Skipping cart fetch — a write is still in flight');
+
+      // Safety guard: if local cart has items, never let an empty DB response wipe it out
+      if (sharedCart.length > 0 && formattedItems.length === 0) {
+        console.log(' Skipping empty DB cart fetch — preserving active local cart');
         return;
       }
+
       updateSharedCart(formattedItems);
     } catch (error) {
       console.error(' Error fetching cart:', error);
-      updateSharedCart([]);
+      // Never wipe out local cart on exception
     } finally {
       setLoading(false);
     }
@@ -241,26 +263,28 @@ export const useCart = () => {
 
     updateSharedCart(updatedCart);
 
-    pendingWrites += 1;
-    try {
+    return runDbWrite(async () => {
       // Get existing cart to ensure we update the correct row
       const { data: existingCart } = await supabase
         .from('carts')
         .select('id')
         .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (existingCart) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('carts')
           .update({
             items: updatedCart,
             stall_id: stallId,
             updated_at: new Date().toISOString()
           })
-          .eq('user_id', user.id);
+          .eq('id', existingCart.id);
+        if (updateError) console.error('Error updating cart in DB:', updateError);
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('carts')
           .insert({
             user_id: user.id,
@@ -269,14 +293,11 @@ export const useCart = () => {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
+        if (insertError) console.error('Error inserting cart in DB:', insertError);
       }
 
       console.log(' Cart saved to database');
-    } catch (dbError) {
-      console.error(' Database error:', dbError);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user, isGuest]);
 
   const updateQuantity = useCallback(async (productId, newQuantity) => {
@@ -287,16 +308,12 @@ export const useCart = () => {
     if (newQuantity <= 0) {
       const updatedCart = sharedCart.filter(item => item.product_id !== productId);
       updateSharedCart(updatedCart);
-      pendingWrites += 1;
-      try {
+      return runDbWrite(async () => {
         await supabase
           .from('carts')
           .update({ items: updatedCart, updated_at: new Date().toISOString() })
           .eq('user_id', user.id);
-      } finally {
-        pendingWrites -= 1;
-      }
-      return;
+      });
     }
 
     const updatedCart = sharedCart.map(item =>
@@ -306,15 +323,12 @@ export const useCart = () => {
     );
     updateSharedCart(updatedCart);
 
-    pendingWrites += 1;
-    try {
+    return runDbWrite(async () => {
       await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user]);
 
   const removeItem = useCallback(async (productId) => {
@@ -325,15 +339,12 @@ export const useCart = () => {
     const updatedCart = sharedCart.filter(item => item.product_id !== productId);
     updateSharedCart(updatedCart);
 
-    pendingWrites += 1;
-    try {
+    return runDbWrite(async () => {
       await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user]);
 
   // Removes a specific set of items rather than the whole cart — used
@@ -347,15 +358,12 @@ export const useCart = () => {
     const updatedCart = sharedCart.filter(item => !idSet.has(item.product_id));
     updateSharedCart(updatedCart);
 
-    pendingWrites += 1;
-    try {
+    return runDbWrite(async () => {
       await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user]);
 
   // Corrects stale prices in place — used by checkout's server-side price
@@ -371,15 +379,12 @@ export const useCart = () => {
     });
     updateSharedCart(updatedCart);
 
-    pendingWrites += 1;
-    try {
+    return runDbWrite(async () => {
       await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user]);
 
   const clearCart = useCallback(async () => {
@@ -390,9 +395,7 @@ export const useCart = () => {
     // Clear local state first for immediate UI feedback
     updateSharedCart([]);
 
-    pendingWrites += 1;
-    try {
-      // Update database with empty items array
+    return runDbWrite(async () => {
       const { error } = await supabase
         .from('carts')
         .update({
@@ -406,11 +409,7 @@ export const useCart = () => {
       } else {
         console.log(' Cart cleared successfully in database');
       }
-    } catch (error) {
-      console.error(' Error clearing cart:', error);
-    } finally {
-      pendingWrites -= 1;
-    }
+    });
   }, [user]);
 
   const refreshCart = useCallback(async () => {

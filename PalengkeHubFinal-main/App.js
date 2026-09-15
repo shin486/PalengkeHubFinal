@@ -583,7 +583,19 @@ function RootNavigator() {
     : 'VendorApplicationStatus';
 
   useEffect(() => {
-    if (loading || !user || !global.navigationRef) return;
+    if (loading || !global.navigationRef) return;
+
+    if (!user && !isGuest) {
+      console.log('🚪 No user session - resetting to Login');
+      global.navigationRef.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+      return;
+    }
+
+    if (!user) return;
+
     // Wait for the approval check before deciding a vendor's destination.
     if (profile?.role === 'vendor' && vendorStatus === null) return;
 
@@ -595,7 +607,7 @@ function RootNavigator() {
       index: 0,
       routes: [{ name: target }],
     });
-  }, [user, profile, loading, vendorStatus]);
+  }, [user, profile, loading, isGuest, vendorStatus]);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -671,8 +683,6 @@ function RootNavigator() {
             applicants). Registered here for the same reason as that
             comment explains. */}
         <Stack.Screen name="VendorSuspended" component={VendorSuspendedScreen} />
-        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
 
         {/* Customer / Guest App */}
         <Stack.Screen name="App">

@@ -570,7 +570,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
     return unitInfo?.suffix || unit;
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     hapticMedium();
     if (!user) {
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
@@ -615,7 +615,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
         } : null
       };
       
-      addToCart(cartProduct, stall.id, stall, quantity);
+      await addToCart(cartProduct, stall.id, stall, quantity);
       
       // Haptic feedback + animated toast
       Vibration.vibrate(50);
