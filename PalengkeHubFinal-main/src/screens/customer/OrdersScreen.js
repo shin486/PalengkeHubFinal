@@ -880,24 +880,36 @@ export default function OrdersScreen({ navigation }) {
         .eq('consumer_id', user.id);
       if (updateError) throw updateError;
 
-      let { data: conversation } = await supabase
+      // .maybeSingle() errors (rather than just returning null) if more
+      // than one conversation row matches -- surface that instead of
+      // silently falling through to the "no conversation yet" branch
+      // below and creating a duplicate.
+      let { data: conversation, error: convLookupError } = await supabase
         .from('conversations')
-        .select('id, customer_unread_count')
+        .select('id, vendor_unread_count')
         .eq('customer_id', user.id)
         .eq('stall_id', orderToCancel.stall_id)
         .maybeSingle();
+      if (convLookupError) throw convLookupError;
 
       let conversationId;
       if (conversation) {
         conversationId = conversation.id;
-        await supabase
+        // This message is sender_role: 'customer' below -- the VENDOR is
+        // the recipient, so vendor_unread_count is what should increment.
+        // This previously incremented customer_unread_count instead,
+        // which put a phantom unread badge on the customer's own Chats
+        // tab for a message they sent themselves, while the vendor never
+        // got notified at all.
+        const { error: convUpdateError } = await supabase
           .from('conversations')
           .update({
  last_message: ` Customer cancelled order: ${finalMessage}`,
             last_message_time: new Date(),
-            customer_unread_count: (conversation.customer_unread_count || 0) + 1,
+            vendor_unread_count: (conversation.vendor_unread_count || 0) + 1,
           })
           .eq('id', conversationId);
+        if (convUpdateError) throw convUpdateError;
       } else {
         const { data: newConv, error: convError } = await supabase
           .from('conversations')
@@ -906,7 +918,7 @@ export default function OrdersScreen({ navigation }) {
             stall_id: orderToCancel.stall_id,
  last_message: ` Customer cancelled order: ${finalMessage}`,
             last_message_time: new Date(),
-            customer_unread_count: 1,
+            vendor_unread_count: 1,
           })
           .select()
           .single();
@@ -914,14 +926,22 @@ export default function OrdersScreen({ navigation }) {
         conversationId = newConv.id;
       }
 
- const messageText = ` Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
-      await supabase.from('messages').insert({
+      // This insert was previously unchecked -- if it failed (RLS, a bad
+      // conversation_id, etc.), the conversation's last_message/unread
+      // count above had already been updated successfully, so the chat
+      // list showed a preview and an unread badge for a message that
+      // never actually landed in the messages table, and opening the
+      // conversation showed nothing new. Throwing here at least surfaces
+      // that instead of reporting "order cancelled" as if it fully worked.
+      const messageText = ` Order #${orderToCancel.order_number?.slice(-8)} cancelled: ${finalMessage}`;
+      const { error: messageError } = await supabase.from('messages').insert({
         conversation_id: conversationId,
         sender_id: user.id,
         sender_role: 'customer',
         message: messageText,
         is_read: false,
       });
+      if (messageError) throw messageError;
 
       await refreshOrders();
       notify(t('orders.order_cancelled_title'), t('orders.order_cancelled_body'));
@@ -973,15 +993,19 @@ export default function OrdersScreen({ navigation }) {
         .maybeSingle();
       
       if (conversation) {
-        await supabase.from('messages').insert({
+        // Same "badge shows, no message" bug as handleCancelOrder had --
+        // if this insert fails silently, the conversation update below
+        // still runs, previewing a message that never actually landed.
+        const { error: messageError } = await supabase.from('messages').insert({
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
           message: ` I accept the proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
           is_read: false,
         });
-        
-        await supabase
+        if (messageError) throw messageError;
+
+        const { error: convUpdateError } = await supabase
           .from('conversations')
           .update({
             last_message: ` Customer accepted proposal. Order updated to ${proposalData.proposed_quantity} x ${proposalData.proposed_unit} of ${proposalData.item_name} (₱${(proposalData.proposed_quantity * proposalData.price_per_unit).toFixed(2)}).`,
@@ -989,6 +1013,7 @@ export default function OrdersScreen({ navigation }) {
             vendor_unread_count: 1,
           })
           .eq('id', conversation.id);
+        if (convUpdateError) throw convUpdateError;
       }
       
       await refreshOrders();
@@ -1018,15 +1043,19 @@ export default function OrdersScreen({ navigation }) {
         .maybeSingle();
       
       if (conversation) {
-        await supabase.from('messages').insert({
+        // Same "badge shows, no message" bug as handleCancelOrder had --
+        // if this insert fails silently, the conversation update below
+        // still runs, previewing a message that never actually landed.
+        const { error: messageError } = await supabase.from('messages').insert({
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_role: 'customer',
           message: ` I do not accept the proposal. Please fulfill the original order or cancel.`,
           is_read: false,
         });
-        
-        await supabase
+        if (messageError) throw messageError;
+
+        const { error: convUpdateError } = await supabase
           .from('conversations')
           .update({
             last_message: ` Customer rejected the proposal. Please fulfill original order.`,
@@ -1034,12 +1063,14 @@ export default function OrdersScreen({ navigation }) {
             vendor_unread_count: 1,
           })
           .eq('id', conversation.id);
+        if (convUpdateError) throw convUpdateError;
       }
-      
-      await supabase
+
+      const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({ proposed_changes: { ...proposalData, status: 'rejected' } })
         .eq('id', order.id);
+      if (orderUpdateError) throw orderUpdateError;
       
       await refreshOrders();
       notify(t('orders.proposal_rejected_title'), t('orders.proposal_rejected_body'));

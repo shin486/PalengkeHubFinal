@@ -46,6 +46,12 @@ import { getProductEnglishName } from '../../utils/productNameTranslations';
 import { CATEGORY_CHIPS, CATEGORY_TONES } from '../../constants/categoryChips';
 import { WovenBackground } from '../../components/WovenBackground';
 
+// Design system ".promo .scrim": a 3-stop gradient (heavy at the bottom
+// where the text sits, nearly clear at the top so the photo still
+// reads), not a flat uniform tint over the whole banner.
+const PROMO_SCRIM_COLORS = ['rgba(38,16,6,0.06)', 'rgba(38,16,6,0.55)', 'rgba(38,16,6,0.90)'];
+const PROMO_SCRIM_LOCATIONS = [0, 0.58, 1];
+
 // No 'Fish' chip: it isn't a real value in CategoryProductsScreen's
 // category set, so navigating to it would silently return zero
 // products — the icon existing upstream doesn't make the category real.
@@ -338,13 +344,19 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
           </Text>
         </View>
         {priceRange && (
-          <View style={styles.topStallPriceRow}>
+          // Design system ".rangebar": one shared background across the
+          // whole bar (not a plain row with a small separate badge on
+          // one side). "Closed state swaps the leaf range bar for a
+          // neutral wicker one" -- prices still matter when the stall
+          // reopens, so this never greys out, it just stops implying
+          // the range is live leaf-green "good to go" data.
+          <View style={[styles.topStallPriceRow, !openNow && styles.topStallPriceRowClosed]}>
             <Text style={styles.topStallPriceRange} numberOfLines={1}>
               ₱{priceRange.min.toFixed(0)} - ₱{priceRange.max.toFixed(0)} / {priceRange.unit}
             </Text>
-            <View style={styles.topStallRangeBadge}>
-              <Text style={styles.topStallRangeBadgeText}>{t('home.price_range', 'PRESYO RANGE')}</Text>
-            </View>
+            <Text style={[styles.topStallRangeBadgeText, !openNow && styles.topStallRangeBadgeTextClosed]}>
+              {openNow ? t('home.price_range', 'PRESYO RANGE') : t('home.price_range_closed', 'SARADO NGAYON')}
+            </Text>
           </View>
         )}
       </View>
@@ -382,7 +394,13 @@ const PromoBannerCard = ({ promo, width, styles, onPress }) => {
           <Ionicons name="pricetag-outline" size={28} color={colors.text.quaternary} />
         </View>
       )}
-      <View style={styles.hoursBannerOverlay} />
+      <LinearGradient
+        colors={PROMO_SCRIM_COLORS}
+        locations={PROMO_SCRIM_LOCATIONS}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.hoursBannerOverlay}
+      />
       <View style={styles.hoursBannerContent}>
         <View style={styles.hoursBannerTag}>
           <Text style={styles.hoursBannerTagText}>{t('home.discounted', 'May Diskwento')}</Text>
@@ -537,8 +555,14 @@ const PresyoCard = ({ item, colors, styles, navigation }) => {
       </View>
 
       <View style={styles.presyoPriceRow}>
-        <PriceText price={item.minPrice} unit={item.unit} />
-        <VerdictChip verdict={t('home.cheapest_badge', 'PINAKAMURA')} />
+        <PriceText price={item.minPrice} unit={item.unit} amountStyle={styles.presyoAmount} />
+        {/* VerdictChip's MURA/KATAMTAMAN/MAHAL/PINAKAMURA are fixed brand
+            vocabulary (see VerdictChip.js), not locale-translated display
+            strings -- routing this through t() used to return "CHEAPEST"
+            in English mode, which matches none of VerdictChip's cases and
+            made the badge silently disappear whenever the app wasn't in
+            Filipino. */}
+        <VerdictChip verdict="PINAKAMURA" />
       </View>
 
       <View style={styles.presyoBarTrack}>
@@ -573,6 +597,54 @@ const PresyoCard = ({ item, colors, styles, navigation }) => {
 };
 
 // ============================================================
+// RECENTLY VIEWED CARD — same real-image -> fallback-photo -> icon
+// chain as ProductCard, so a product without item.image doesn't render
+// as a permanently blank box the way a bare <Image> does on a broken/
+// missing uri (RN Image has no default failure UI of its own).
+// ============================================================
+const RecentlyViewedCard = ({ item, styles, colors, onPress }) => {
+  const [imageError, setImageError] = useState(false);
+  // The curated fallback had no error handling of its own -- if that
+  // specific bundled asset ever failed to render (a bad require(),
+  // corrupted file), there was no third tier to drop to, just a blank
+  // box where even the generic icon should have appeared.
+  const [fallbackError, setFallbackError] = useState(false);
+  const fallbackPhoto = (!item.image || imageError) && !fallbackError ? getProductFallbackPhoto(item.name) : null;
+
+  return (
+    <TouchableOpacity
+      style={[styles.productCard, { marginRight: SPACING.md }]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      {item.image && !imageError ? (
+        <Image
+          source={{ uri: item.image }}
+          style={styles.productImage}
+          onError={() => setImageError(true)}
+        />
+      ) : fallbackPhoto ? (
+        <Image
+          source={fallbackPhoto}
+          style={styles.productImage}
+          resizeMode="cover"
+          onError={() => setFallbackError(true)}
+        />
+      ) : (
+        <View style={[styles.productImage, styles.recentImagePlaceholder]}>
+          <Ionicons name="cart-outline" size={26} color={colors.text.tertiary} />
+        </View>
+      )}
+      <View style={styles.recentInfo}>
+        <Text numberOfLines={2} style={styles.productName}>{item.name}</Text>
+        <Text numberOfLines={1} style={styles.recentStallText}>{item.stall_name}</Text>
+        <Text style={styles.productPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ============================================================
 // MAIN COMPONENT
 // ============================================================
 export default function HomeScreen({ isGuest = false, navigation, route }) {
@@ -589,6 +661,12 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [recentOrderItems, setRecentOrderItems] = useState([]);
   const [priceDropItems, setPriceDropItems] = useState([]);
+  const [topProductsThisMonth, setTopProductsThisMonth] = useState([]);
+  const [topProductsIsAllTime, setTopProductsIsAllTime] = useState(false);
+  // Design-system "Carousel": dots widen into a pill on the active slide
+  // instead of just changing colour, and there's no autoplay -- this
+  // only tracks where a manual swipe lands, it never advances itself.
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [priceTrends, setPriceTrends] = useState(new Map());
   const [productVerdicts, setProductVerdicts] = useState(new Map());
   const [topRatedStalls, setTopRatedStalls] = useState([]);
@@ -857,8 +935,24 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   // exactly what blew card widths up to ~4x on first web-preview load.
   const { width: winWidth } = useWindowDimensions();
   const CARD_WIDTH = winWidth * 0.44;
-  const BANNER_CARD_WIDTH = winWidth * 0.78;
+  // Design system: "width:calc(100vw - 44px);max-width:520px" -- a fixed
+  // 44px pullback (leaving a peek of the next card), not a percentage,
+  // which scaled the peek inconsistently across device widths.
+  const BANNER_CARD_WIDTH = Math.min(winWidth - 44, 520);
   const styles = useMemo(() => createStyles(colors, CARD_WIDTH), [colors, CARD_WIDTH]);
+
+  // Design-system "Carousel": dots widen into a pill on the active slide
+  // instead of just changing colour, and there's no autoplay -- this
+  // only tracks where a manual swipe lands, it never advances itself.
+  // onMomentumScrollEnd alone misses a plain drag-and-release with no
+  // residual fling velocity (common on web/mouse, and on some Android
+  // builds) -- binding this to onScrollEndDrag too guarantees the dot
+  // updates every time a swipe ends.
+  const handleBannerScrollEnd = useCallback((e) => {
+    const slideWidth = BANNER_CARD_WIDTH + SPACING.md;
+    const index = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+    setActiveBannerIndex(index);
+  }, [BANNER_CARD_WIDTH]);
 
   // Best live promo for the second banner card — highest real discount
   // among promos that actually have a product photo, so the card never
@@ -904,11 +998,17 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: stallsData } = await supabase
+      // This previously never checked for an error -- a transient
+      // failure (network blip, timeout) silently rendered Market
+      // Stalls as an empty section with zero indication anything went
+      // wrong, which is exactly what "refresh fixes it" was: the retry
+      // happened to not hit the same transient failure, not a real fix.
+      const { data: stallsData, error: stallsError } = await supabase
         .from('stalls')
         .select('*')
         .eq('is_active', true)
         .order('stall_number');
+      if (stallsError) console.error('Error fetching stalls:', stallsError);
       setStalls(stallsData || []);
       fetchTopRatedStalls();
 
@@ -1103,6 +1203,83 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     }
   }, [user]);
 
+  // Market-wide ranking (not personal to this shopper), so unlike Buy
+  // Again / Price Drop this runs for guests too and isn't gated on user.
+  // orders.items is a jsonb snapshot per order, not a live relation, so
+  // "most bought" can only be computed by summing quantities across
+  // every completed order this calendar month client-side, then
+  // re-reading current name/price/image/rating fresh from products --
+  // same reasoning as fetchPriceDrops re-reading instead of trusting
+  // the snapshot (a vendor may have changed the photo or price since).
+  // orders is RLS-locked to each consumer's own rows, so a plain client
+  // query can only ever see "my purchases" -- never a market-wide tally.
+  // get_top_products() is a SECURITY DEFINER RPC (add-top-products-rpc.sql)
+  // that aggregates server-side and returns only an anonymous
+  // product_id/sold_qty pair, safe to expose to anon + authenticated.
+  const rankProductsBySoldQty = async (afterIso) => {
+    const { data, error } = await supabase.rpc('get_top_products', {
+      p_since: afterIso,
+      p_limit: 10,
+    });
+    if (error) throw error;
+
+    const soldQtyByProductId = new Map((data || []).map((row) => [row.product_id, Number(row.sold_qty) || 0]));
+    const rankedIds = (data || []).map((row) => row.product_id);
+    return { rankedIds, soldQtyByProductId };
+  };
+
+  const fetchTopProductsThisMonth = useCallback(async () => {
+    try {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      let { rankedIds, soldQtyByProductId } = await rankProductsBySoldQty(startOfMonth.toISOString());
+      let isAllTime = false;
+
+      // Demo/seed data can predate the real current calendar month entirely
+      // (e.g. UAT data seeded in the past) -- rather than show an empty
+      // section, fall back to all-time "most bought" so the section stays
+      // useful. Once real month-to-month order volume exists this branch
+      // stops being hit and the section reflects the true current month.
+      if (rankedIds.length === 0) {
+        isAllTime = true;
+        ({ rankedIds, soldQtyByProductId } = await rankProductsBySoldQty(null));
+      }
+
+      if (rankedIds.length === 0) {
+        setTopProductsThisMonth([]);
+        return;
+      }
+
+      const { data: products, error: prodError } = await supabase
+        .from('products')
+        .select('id, name, price, unit, image_url, image_urls, category, stalls(id, stall_name, stall_number, section, average_rating, total_ratings)')
+        .in('id', rankedIds)
+        .eq('is_available', true);
+      if (prodError) throw prodError;
+
+      const productById = new Map((products || []).map((p) => [p.id, p]));
+      const ranked = rankedIds
+        .map((id, index) => {
+          const product = productById.get(id);
+          if (!product) return null;
+          return {
+            ...product,
+            stall: product.stalls,
+            soldQty: soldQtyByProductId.get(id),
+            rank: index + 1,
+          };
+        })
+        .filter(Boolean);
+
+      setTopProductsIsAllTime(isAllTime);
+      setTopProductsThisMonth(ranked);
+    } catch (error) {
+      console.error('Error fetching top products this month:', error);
+    }
+  }, []);
+
   // ── Bell badge unread count ──
   const fetchUnreadCount = useCallback(async () => {
     if (!user?.id) { setUnreadCount(0); return; }
@@ -1163,6 +1340,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
       fetchData();
       fetchHomeAnnouncement();
       fetchProductComparisons();
+      fetchTopProductsThisMonth();
       if (user && !isGuest) {
         fetchRecentOrders();
         fetchPriceDrops();
@@ -1257,6 +1435,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     fetchData();
     fetchHomeAnnouncement();
     fetchProductComparisons();
+    fetchTopProductsThisMonth();
     if (user && !isGuest) {
       fetchRecentOrders();
       fetchPriceDrops();
@@ -1444,6 +1623,15 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.bannerScrollContent}
+          decelerationRate="fast"
+          snapToInterval={BANNER_CARD_WIDTH + SPACING.md}
+          snapToAlignment="start"
+          // onMomentumScrollEnd alone misses a plain drag-and-release with
+          // no residual fling velocity (common on web/mouse, and on some
+          // Android builds) -- binding the same handler to onScrollEndDrag
+          // too guarantees the dot updates every time a swipe ends.
+          onMomentumScrollEnd={handleBannerScrollEnd}
+          onScrollEndDrag={handleBannerScrollEnd}
         >
           <View style={[styles.hoursBanner, { width: BANNER_CARD_WIDTH }]}>
             <Image
@@ -1451,7 +1639,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               style={styles.hoursBannerImage}
               resizeMode="cover"
             />
-            <View style={styles.hoursBannerOverlay} />
+            <LinearGradient
+              colors={PROMO_SCRIM_COLORS}
+              locations={PROMO_SCRIM_LOCATIONS}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.hoursBannerOverlay}
+            />
             <View style={styles.hoursBannerContent}>
               <View style={styles.hoursBannerTag}>
                 <Text style={styles.hoursBannerTagText}>
@@ -1469,7 +1663,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               style={styles.hoursBannerImage}
               resizeMode="cover"
             />
-            <View style={styles.hoursBannerOverlay} />
+            <LinearGradient
+              colors={PROMO_SCRIM_COLORS}
+              locations={PROMO_SCRIM_LOCATIONS}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.hoursBannerOverlay}
+            />
             <View style={styles.hoursBannerContent}>
               <View style={styles.hoursBannerTag}>
                 <Text style={styles.hoursBannerTagText}>{t('home.fresh_harvest', 'Bagong Ani')}</Text>
@@ -1489,6 +1689,15 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
           )}
         </ScrollView>
 
+        <View style={styles.bannerDotsRow}>
+          {Array.from({ length: bestPromo ? 3 : 2 }).map((_, index) => (
+            <View
+              key={index}
+              style={[styles.bannerDot, activeBannerIndex === index && styles.bannerDotActive]}
+            />
+          ))}
+        </View>
+
         {/* ============================================================
             PRESYO CHECK — cheapest-per-unit across stalls, real query,
             same reference-unit rule as ProductDetails/Search (no fake data)
@@ -1505,11 +1714,18 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            <View>
+            {/* Design system: Presyo Check is a horizontal rail ("#presyoRail"),
+                fixed-width cards side by side -- not a full-width vertical
+                stack, which is what this rendered as before. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            >
               {presyoCheckItems.map((item) => (
                 <PresyoCard key={item.name} item={item} colors={colors} styles={styles} navigation={navigation} />
               ))}
-            </View>
+            </ScrollView>
           </View>
         )}
 
@@ -1598,22 +1814,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               contentContainerStyle={styles.horizontalList}
             >
               {freshLastViewed.map((item) => (
-                <TouchableOpacity
+                <RecentlyViewedCard
                   key={item.id}
-                  style={[styles.productCard, { marginRight: SPACING.md }]}
+                  item={item}
+                  styles={styles}
+                  colors={colors}
                   onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
-                  activeOpacity={0.9}
-                >
-                  <Image
-                    source={{ uri: item.image }}
-                    style={styles.productImage}
-                  />
-                  <View style={styles.recentInfo}>
-                    <Text numberOfLines={2} style={styles.productName}>{item.name}</Text>
-                    <Text numberOfLines={1} style={styles.recentStallText}>{item.stall_name}</Text>
-                    <Text style={styles.productPrice}>₱{parseFloat(item.price || 0).toFixed(2)}</Text>
-                  </View>
-                </TouchableOpacity>
+                />
               ))}
             </ScrollView>
           </View>
@@ -1627,7 +1834,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             <View style={styles.sectionHeader}>
               <View>
                 <Text style={styles.sectionTitle}>{t('home.buy_again')}</Text>
-                <Text style={styles.sectionSubtitle}>{t('home.recent_favorites')}</Text>
+                {/* This used to say "Your recent favorites" -- easily
+                    confused with the separate hearted/wishlisted
+                    Favorites feature, when this section is actually
+                    reorder-your-past-purchases. */}
+                <Text style={styles.sectionSubtitle}>{t('home.buy_again_subtitle')}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowAllBuyAgain(v => !v)}>
                 <Text style={styles.sectionLink}>{t('home.see_all')}</Text>
@@ -1754,6 +1965,47 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         )}
 
         {/* ============================================================
+            TOP PRODUCTS THIS MONTH (market-wide, quantity sold)
+        ============================================================ */}
+        {topProductsThisMonth.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>
+                  {t(topProductsIsAllTime ? 'home.top_products_alltime' : 'home.top_products_this_month')}
+                </Text>
+                <Text style={styles.sectionSubtitle}>{t('home.top_products_subtitle')}</Text>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Search', { tab: 'products' })}>
+                <Text style={styles.sectionLink}>{t('home.see_all', 'Tingnan Lahat')}</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            >
+              {topProductsThisMonth.map(item => (
+                <View key={item.id} style={styles.topProductWrapper}>
+                  <View style={styles.rankBadge}>
+                    <Text style={styles.rankBadgeText}>#{item.rank}</Text>
+                  </View>
+                  <ProductCard
+                    style={{ width: CARD_WIDTH }}
+                    product={item}
+                    stall={item.stall}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+                    onAddToCart={() => handleAddToCart(item, item.stall)}
+                    isWishlisted={isProductFavorite(item.id)}
+                    onToggleWishlist={() => { hapticLight(); toggleProductFavorite(item); }}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ============================================================
             MARKET STALLS
         ============================================================ */}
         <View style={[styles.section, styles.lastSection]}>
@@ -1762,11 +2014,14 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               <Text style={styles.sectionTitle}>{t('home.market_stalls')}</Text>
               <Text style={styles.sectionSubtitle}>{t('home.explore_vendors')}</Text>
             </View>
+            <TouchableOpacity onPress={() => navigation.navigate('StallsDirectory')}>
+              <Text style={styles.sectionLink}>{t('home.see_all', 'Tingnan Lahat')}</Text>
+            </TouchableOpacity>
           </View>
 
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterContainer}
           >
             {sections.map((section, index) => {
@@ -1933,8 +2188,8 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     gap: SPACING.sm,
   },
   brandLogo: {
-    width: 28,
-    height: 28,
+    width: 38,
+    height: 38,
     borderRadius: RADIUS.full,
   },
   brandWordmark: {
@@ -1942,7 +2197,7 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     color: colors.text.primary,
   },
   brandWordmarkAccent: {
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   brandRight: {
     flexDirection: 'row',
@@ -1953,8 +2208,8 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: SPACING.sm,
-    height: 26,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
     borderRadius: RADIUS.full,
   },
   marketStatusPillOpen: {
@@ -1964,9 +2219,9 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     backgroundColor: colors.errorLight,
   },
   marketStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   marketStatusDotOpen: {
     backgroundColor: colors.success,
@@ -1975,7 +2230,7 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     backgroundColor: colors.error,
   },
   marketStatusText: {
-    fontSize: TYPE.size.micro,
+    fontSize: TYPE.size.caption,
     fontWeight: TYPE.weight.bold,
   },
   marketStatusTextOpen: {
@@ -2024,6 +2279,8 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     height: LAYOUT.searchHeight,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
   },
   searchPlaceholder: {
     flex: 1,
@@ -2041,12 +2298,12 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     opacity: 0.8,
   },
 
-  // ── Notification Bell ──
+  // ── Notification Bell -- design system ".iconbtn" has no background of
+  // its own (only a :hover fill, a desktop-only affordance) ──
   notificationButton: {
     width: LAYOUT.minTapTarget,
     height: LAYOUT.minTapTarget,
     borderRadius: LAYOUT.minTapTarget / 2,
-    backgroundColor: colors.wickerSoft,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -2088,11 +2345,15 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xxxl,
   },
+  // ProductCard's default width (48%) is sized to pair with
+  // justifyContent:'space-between' alone -- an explicit gap on top of
+  // that double-spaces the row (48% + 48% + gap can exceed 100%),
+  // which is what made this grid look inconsistent next to sections
+  // that don't stack both spacing mechanisms.
   buyAgainGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: SPACING.md,
   },
   lastSection: {
     paddingBottom: 80,
@@ -2119,16 +2380,20 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
 
   // ── Greeting ──
   greetingSection: {
-    paddingTop: SPACING.xl,
+    paddingTop: 11,
     paddingBottom: 0,
   },
+  // Local overrides (fontSize 20, not the shared TYPE.size.h1 token's 22)
+  // -- kept scoped to this Home-only pass rather than shifting a token
+  // other, not-yet-reviewed screens also share.
   greetingText: {
     ...TEXT_STYLES.h1,
+    fontSize: 20,
     color: colors.text.primary,
   },
   greetingSubtitle: {
     ...TEXT_STYLES.bodySmall,
-    color: colors.text.tertiary,
+    color: colors.text.secondary,
     marginTop: 2,
   },
 
@@ -2138,11 +2403,30 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     paddingTop: SPACING.lg,
     gap: SPACING.md,
   },
+  // Dots widen into a pill on the active slide instead of just changing
+  // colour (design system "Carousel" spec) -- manual-swipe position only,
+  // there is no autoplay driving this.
+  bannerDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+  },
+  bannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: RADIUS.full ?? 999,
+    backgroundColor: colors.border,
+  },
+  bannerDotActive: {
+    width: 18,
+    backgroundColor: colors.primary,
+  },
+  // Design system ".promo": height:150px (216px from the 1024px desktop
+  // breakpoint, not reproduced here since this is mobile-first).
   hoursBanner: {
-    // Closer to the source photo's own aspect ratio (3552x2664, ~1.33)
-    // than the old fixed 140 — that was cropping tighter than it needed
-    // to, into a "too zoomed in" close-up of the building.
-    height: 190,
+    height: 150,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
     backgroundColor: colors.inkSurface,
@@ -2163,13 +2447,11 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     alignItems: 'center',
     backgroundColor: colors.surfaceSecondary,
   },
+  // Positioning only -- color now comes from the LinearGradient's own
+  // `colors` prop (PROMO_SCRIM_COLORS) at each call site, matching the
+  // design system's 3-stop ".promo .scrim" instead of a flat tint.
   hoursBannerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    // colors.overlay (not inkSurface) — inkSurface/onInk flips to a light
-    // card in dark mode (it's the toast/badge pairing), which washed this
-    // photo out. overlay is a fixed dark scrim in both themes, same token
-    // stallClosedBadge already uses to darken a photo underneath text.
-    backgroundColor: colors.overlay,
   },
   hoursBannerContent: {
     flex: 1,
@@ -2186,22 +2468,28 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
   hoursBannerTagText: {
     fontSize: TYPE.size.micro,
-    fontWeight: TYPE.weight.black,
+    fontWeight: TYPE.weight.bold,
     color: colors.onPrimary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
+  // fontSize 21 is a local override (not the shared TYPE.size.h3 token,
+  // 17px, used elsewhere for stall names/card titles) -- kept scoped to
+  // this Home-only pass.
   hoursBannerTitle: {
     ...TEXT_STYLES.h3,
+    fontSize: 21,
     // Fixed white, not a theme token: this sits on a photo behind a
-    // permanently-dark scrim (colors.overlay) in both light and dark mode,
-    // so it must not flip dark the way body text does in light mode.
+    // permanently-dark scrim in both light and dark mode, so it must not
+    // flip dark the way body text does in light mode.
     color: '#FFFFFF',
+    marginTop: 8,
     marginBottom: 2,
   },
   hoursBannerText: {
-    fontSize: TYPE.size.caption,
-    color: '#FFFFFF',
-    opacity: 0.85,
+    fontSize: 14,
+    fontWeight: TYPE.weight.semibold,
+    color: '#F0DFCB',
   },
 
   // ── Category Chips ──
@@ -2217,15 +2505,17 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     alignItems: 'center',
     width: 72,
     minHeight: 42,
+    gap: 7,
   },
   categoryChipIconCircle: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: RADIUS.full,
     backgroundColor: colors.wickerSoft,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.xs,
     overflow: 'hidden',
   },
   categoryChipImage: {
@@ -2239,7 +2529,7 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
   categoryChipSubLabel: {
     fontSize: TYPE.size.micro,
-    fontWeight: TYPE.weight.medium,
+    fontWeight: TYPE.weight.semibold,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
@@ -2252,6 +2542,32 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     paddingRight: SPACING.lg,
     gap: SPACING.md,
     paddingVertical: SPACING.xs,
+  },
+
+  // ── Top Products This Month (rank badge overlaid on the shared
+  // ProductCard -- ProductCard has no built-in rank-badge prop, so this
+  // wraps it in a `position: relative` box and lays the badge on top as
+  // a later sibling, rather than modifying the shared card). ──
+  topProductWrapper: {
+    position: 'relative',
+  },
+  rankBadge: {
+    position: 'absolute',
+    top: SPACING.sm,
+    left: SPACING.sm,
+    zIndex: 2,
+    minWidth: 26,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: RADIUS.full ?? 999,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankBadgeText: {
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
+    color: colors.onPrimary,
   },
 
   // ── Recently Viewed card (its own lightweight card, not the shared
@@ -2271,6 +2587,10 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     height: 80,
     borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
+  },
+  recentImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   recentInfo: {
     padding: SPACING.md,
@@ -2354,13 +2674,15 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
 
   // ── Presyo Check Cards ──
+  // Design system ".presyo": a fixed-width rail card (252px), not a
+  // full-width vertical-stack row.
   presyoCard: {
+    width: 252,
     backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     borderWidth: LAYOUT.borderWidth,
     borderColor: colors.border,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    padding: 14,
   },
   presyoTopRow: {
     flexDirection: 'row',
@@ -2369,14 +2691,14 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     marginBottom: SPACING.md,
   },
   presyoImage: {
-    width: 56,
-    height: 56,
+    width: 46,
+    height: 46,
     borderRadius: RADIUS.md,
     backgroundColor: colors.inputBg,
   },
   presyoImagePlaceholder: {
-    width: 56,
-    height: 56,
+    width: 46,
+    height: 46,
     borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2385,12 +2707,19 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   presyoTitleCol: {
     flex: 1,
   },
+  // ".presyo .nm" is a <span>, not an <h*> tag -- the design system only
+  // puts the Baloo 2 display font on actual headings (greeting, section
+  // titles, banner h3s); card names like this inherit the body's Nunito
+  // font instead. TEXT_STYLES.h3 would have wrongly pulled in Baloo 2.
   presyoName: {
-    ...TEXT_STYLES.h3,
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 16,
+    fontWeight: TYPE.weight.bold,
     color: colors.text.primary,
   },
   presyoSubtitle: {
-    fontSize: TYPE.size.bodySmall,
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.semibold,
     color: colors.text.tertiary,
     marginTop: 2,
   },
@@ -2400,52 +2729,69 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     justifyContent: 'space-between',
     marginBottom: SPACING.sm,
   },
+  // ".presyo .amt" has no font-family override in the design system, so
+  // it inherits the body's Nunito -- PriceText's shared default pulls in
+  // the Baloo 2 display font instead, which is only meant for actual
+  // heading elements. Kept as a local opt-in (PriceText's amountStyle)
+  // rather than changing that shared default, since other not-yet-
+  // reviewed screens (Search, Product Details) use it too.
+  presyoAmount: {
+    fontFamily: 'Nunito_900Black',
+    fontSize: 26,
+    fontWeight: TYPE.weight.black,
+    letterSpacing: -0.4,
+  },
   presyoBarTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 9,
+    borderRadius: RADIUS.full,
     backgroundColor: colors.wickerSoft,
     overflow: 'visible',
     position: 'relative',
   },
+  // Design system: the gauge fill is the lighter "leaf" tone
+  // (successFill, #9EBF5C), not leaf-dark (colors.success) -- that
+  // darker green is reserved for verdict text/solid fills elsewhere.
   presyoBarFill: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
+    height: 9,
+    borderRadius: RADIUS.full,
+    backgroundColor: colors.successFill,
   },
   presyoBarTick: {
     position: 'absolute',
-    top: -2,
-    width: 2,
-    height: 10,
+    top: -3,
+    width: 3,
+    height: 15,
+    borderRadius: 2,
     backgroundColor: colors.text.primary,
-    marginLeft: -1,
+    marginLeft: -1.5,
   },
   presyoBarLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 6,
+    marginTop: 5,
   },
   presyoBarLabel: {
     fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
     color: colors.text.tertiary,
   },
+  // Design system ".foot": one inline row directly under the gauge, no
+  // divider border (this previously had a border-top + extra padding).
   presyoFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
-    borderTopWidth: LAYOUT.hairlineWidth,
-    borderTopColor: colors.border,
+    marginTop: 9,
   },
   presyoStallCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   presyoStallCount: {
     fontSize: TYPE.size.caption,
-    color: colors.text.tertiary,
+    fontWeight: TYPE.weight.semibold,
+    color: colors.text.secondary,
   },
   presyoCompareRow: {
     flexDirection: 'row',
@@ -2454,6 +2800,7 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
   presyoCompareText: {
     ...TEXT_STYLES.label,
+    fontSize: TYPE.size.caption,
     color: colors.primaryDark,
   },
 
@@ -2612,25 +2959,34 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   },
 
   // ── Top Stall Card (Top-Rated Stalls rail) ──
+  // Design system ".scard": a fixed 290px, not a value derived from the
+  // 2-column grid's own card width.
   topStallCard: {
-    width: cardWidth * 1.7,
+    width: 290,
     backgroundColor: colors.card,
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
     borderWidth: LAYOUT.borderWidth,
     borderColor: colors.border,
   },
+  // Design system ".scard .media": aspect-ratio 16/9, not a fixed pixel
+  // height -- the ratio belongs on this wrapping View, not the <Image>
+  // itself (React Native Web doesn't reliably honor aspectRatio on
+  // Image directly; see ProductCard.js's imageContainer for the same
+  // fix and why).
   topStallImageWrap: {
     position: 'relative',
+    width: '100%',
+    aspectRatio: 16 / 9,
   },
   topStallImage: {
     width: '100%',
-    height: 120,
+    height: '100%',
     backgroundColor: colors.inputBg,
   },
   topStallImagePlaceholder: {
     width: '100%',
-    height: 120,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.inputBg,
@@ -2673,17 +3029,21 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
   topStallBody: {
     padding: SPACING.md,
   },
+  // ".scard .nm" -- no font-family override, inherits Nunito (bodySmall
+  // already carries that family); fontSize is a local override (17, not
+  // bodySmall's 15) to match exactly.
   topStallName: {
     ...TEXT_STYLES.bodySmall,
+    fontSize: 17,
     fontWeight: TYPE.weight.bold,
     color: colors.text.primary,
-    marginBottom: 4,
+    marginBottom: 7,
   },
   topStallMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: SPACING.sm,
+    marginBottom: 0,
   },
   topStallRating: {
     fontSize: TYPE.size.caption,
@@ -2704,32 +3064,41 @@ const createStyles = (colors, cardWidth = Dimensions.get('window').width * 0.44)
     color: colors.text.tertiary,
     flexShrink: 1,
   },
+  // Design system ".rangebar": the whole bar shares one background
+  // (leaf-soft open / wicker-soft closed), not a plain row with a small
+  // separate badge on one side.
   topStallPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: SPACING.sm,
-    borderTopWidth: LAYOUT.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  topStallPriceRange: {
-    ...TEXT_STYLES.label,
-    fontWeight: TYPE.weight.bold,
-    color: colors.text.primary,
-    flexShrink: 1,
-    marginRight: SPACING.xs,
-  },
-  topStallRangeBadge: {
+    gap: 7,
+    marginTop: 9,
     backgroundColor: colors.successLight,
     borderRadius: RADIUS.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  topStallPriceRowClosed: {
+    backgroundColor: colors.wickerSoft,
+  },
+  // ".rangebar .rng" -- no font-family override, inherits Nunito.
+  topStallPriceRange: {
+    fontFamily: 'Nunito_900Black',
+    fontSize: 16,
+    fontWeight: TYPE.weight.black,
+    letterSpacing: -0.2,
+    color: colors.text.primary,
+    flexShrink: 1,
   },
   topStallRangeBadgeText: {
-    fontSize: 9,
-    fontWeight: TYPE.weight.black,
+    marginLeft: 'auto',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
     color: colors.success,
-    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  topStallRangeBadgeTextClosed: {
+    color: colors.text.tertiary,
   },
 
   // ── Empty States ──

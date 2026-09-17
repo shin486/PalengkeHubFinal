@@ -11,19 +11,41 @@ export const useFavorites = () => {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
 
-  // Get current user
+  // Get current user. getSession() (not getUser()) deliberately -- it
+  // resolves instantly from the locally cached session instead of a
+  // real network round-trip to Supabase's auth server. That round-trip
+  // (a few hundred ms to ~1s) was exactly the window "shows, then
+  // disappears after a second" fell into: on a freshly-mounted
+  // useFavorites() instance (e.g. an uncontrolled ProductCard on a
+  // screen that doesn't pass isWishlisted/onToggleWishlist -- see
+  // CategoryProductsScreen.js), userId starts null until this
+  // resolves. A heart-tap in that window optimistically shows the
+  // favorite, but saveFavorites' `if (userId)` guard is still false,
+  // so the Supabase sync is silently skipped (only AsyncStorage gets
+  // it) -- and the moment userId then resolves, the effect below
+  // re-fetches from the server, which never received the toggle,
+  // overwriting the optimistic state right back to unfavorited.
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUserId(user?.id || null);
+      const { data: { session } } = await supabase.auth.getSession();
+      setUserId(session?.user?.id || null);
     };
     checkUser();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    // onAuthStateChange fires on more than sign-in/sign-out -- also
+    // TOKEN_REFRESHED, USER_UPDATED, an initial INITIAL_SESSION event,
+    // etc. This used to call loadFavoritesFromSupabase directly here
+    // AND (via setUserId below) trigger the separate userId-effect to
+    // also call it -- two independent, unsynchronized fetches per
+    // event. If either of those extra events fired a few seconds after
+    // a heart-tap, whichever fetch resolved last could land with
+    // pre-toggle data and silently overwrite the just-added favorite,
+    // which is exactly what "shows, then disappears a few seconds
+    // later" was. setUserId alone is enough: the effect below only
+    // re-fetches when the id actually changes (a real sign-in/out),
+    // not on a same-user token refresh.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserId(session?.user?.id || null);
-      if (session?.user?.id) {
-        loadFavoritesFromSupabase(session.user.id);
-      }
     });
 
     return () => listener.subscription.unsubscribe();
@@ -91,12 +113,27 @@ export const useFavorites = () => {
       console.warn('Error saving local favorites:', e);
     }
 
-    // Sync to Supabase if logged in
+    // Sync to Supabase if logged in. A plain update, not an upsert --
+    // every real user's profiles row already exists (created by the
+    // handle_new_user() signup trigger), and .upsert()'s INSERT ... ON
+    // CONFLICT DO UPDATE must satisfy the table's INSERT policy too,
+    // even when it ends up updating an existing row. This table's
+    // INSERT policy is admin-only, so a regular user's upsert here was
+    // always rejected with a 403 -- confirmed directly against the live
+    // database. update() only needs the (already-correct) UPDATE
+    // policy, which permits a user to update their own row.
+    //
+    // Also: supabase-js does not throw on an HTTP error response like
+    // that 403 -- it resolves to { data, error }. This never checked
+    // that, so the failure was silently swallowed before it could even
+    // reach a catch block, which is why nothing ever surfaced it.
     if (userId) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('profiles')
-          .upsert({ id: userId, favorites: { products, stalls } }, { onConflict: 'id' });
+          .update({ favorites: { products, stalls } })
+          .eq('id', userId);
+        if (error) console.warn('Error syncing favorites to Supabase:', error);
       } catch (e) {
         console.warn('Error syncing favorites to Supabase:', e);
       }
@@ -172,14 +209,30 @@ export const useFavorites = () => {
 
   const getFavoriteCount = () => favoriteProducts.length + favoriteStalls.length;
 
+  // Must be stable across renders -- callers wire this into
+  // useFocusEffect(useCallback(() => refreshFavorites(), [refreshFavorites])).
+  // Returning a fresh arrow function every render (as this used to, inline
+  // in the object below) made that dependency "change" on every render,
+  // and since calling it triggers a state update (a re-render) via
+  // loadFavoritesFromSupabase/loadLocalFavorites, that re-render produced
+  // yet another new reference -- an infinite refetch loop that froze
+  // FavoritesScreen and ProfileScreen the moment either mounted.
+  const refreshFavorites = useCallback(() => {
+    if (userId) loadFavoritesFromSupabase(userId);
+    else loadLocalFavorites();
+  }, [userId]);
+
   const clearAllFavorites = async () => {
     setFavoriteProducts([]);
     setFavoriteStalls([]);
     await AsyncStorage.removeItem(FAVORITES_KEY);
     if (userId) {
-      await supabase
+      // Same upsert-vs-update fix as saveFavorites above.
+      const { error } = await supabase
         .from('profiles')
-        .upsert({ id: userId, favorites: { products: [], stalls: [] } }, { onConflict: 'id' });
+        .update({ favorites: { products: [], stalls: [] } })
+        .eq('id', userId);
+      if (error) console.warn('Error clearing favorites in Supabase:', error);
     }
   };
 
@@ -193,9 +246,6 @@ export const useFavorites = () => {
     toggleStallFavorite,
     getFavoriteCount,
     clearAllFavorites,
-    refreshFavorites: () => {
-      if (userId) loadFavoritesFromSupabase(userId);
-      else loadLocalFavorites();
-    },
+    refreshFavorites,
   };
 };

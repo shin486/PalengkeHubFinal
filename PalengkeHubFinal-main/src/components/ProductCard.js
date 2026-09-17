@@ -34,6 +34,7 @@ import { VerdictChip } from './ui/VerdictChip';
 import { RADIUS, LAYOUT, SPACING, TYPE } from '../theme/tokens';
 import { getProductFallbackPhoto } from '../utils/productPhotoFallbacks';
 import { getProductPriceRange } from '../utils/priceRange';
+import { getProductEnglishName } from '../utils/productNameTranslations';
 
 const IMAGE_FADE = 180;
 
@@ -70,7 +71,16 @@ export const ProductCard = ({
   const controlled = onToggleWishlist != null;
   const wishlisted = controlled ? !!isWishlisted : fav.isProductFavorite(product?.id);
 
-  const toggleWishlist = () => {
+  // React Native's native responder system gives a nested touchable
+  // exclusive claim to a press, so only the heart's own onPress fires
+  // there -- but react-native-web compiles this down to real DOM nodes
+  // with real bubbling, which doesn't know about that native semantic.
+  // Without stopping it here, tapping the heart also bubbled up to the
+  // outer card's onPress and navigated to product details, which could
+  // read as "favoriting doesn't work" if the screen changes before a
+  // shopper even sees the heart fill in.
+  const toggleWishlist = (e) => {
+    e?.stopPropagation?.();
     if (!product?.id) return;
     if (controlled) {
       onToggleWishlist(product);
@@ -79,7 +89,8 @@ export const ProductCard = ({
     }
   };
 
-  const readAloud = () => {
+  const readAloud = (e) => {
+    e?.stopPropagation?.();
     if (!product) return;
     speak(
       `${product.name}. Presyo, ${product.price} pesos, bawat ${product.unit || 'unit'}.`,
@@ -89,6 +100,11 @@ export const ProductCard = ({
 
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  // The curated fallback had no error handling of its own -- if that
+  // specific bundled asset ever failed to render (a bad require(),
+  // corrupted file), there was no third tier to drop to, just a blank
+  // box where even the generic icon should have appeared.
+  const [fallbackError, setFallbackError] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -123,12 +139,13 @@ export const ProductCard = ({
     : null;
   const hasOriginal = hasPromotion && originalPrice != null && Number(originalPrice) > 0;
   const safePrice = Number(product?.price) || 0;
-  const fallbackPhoto = !product?.image_url || imageError ? getProductFallbackPhoto(product?.name) : null;
+  const fallbackPhoto = (!product?.image_url || imageError) && !fallbackError ? getProductFallbackPhoto(product?.name) : null;
 
   const priceRange = getProductPriceRange(product);
   const hasPriceRange = !!priceRange;
   const rangeMin = priceRange?.min;
   const rangeMax = priceRange?.max;
+  const englishName = getProductEnglishName(product?.name);
 
     return (
     <Animated.View
@@ -165,6 +182,7 @@ export const ProductCard = ({
               source={fallbackPhoto}
               style={[styles.image, { opacity: fadeAnim }, imageStyle]}
               onLoad={handleImageLoad}
+              onError={() => setFallbackError(true)}
               resizeMode="cover"
             />
           ) : (
@@ -192,7 +210,7 @@ export const ProductCard = ({
 
           {/* Promotion badge */}
           {hasPromotion && discountText ? (
-            <Badge tone="tomato" style={styles.discountBadge}>{discountText}</Badge>
+            <Badge tone="tomatoSolid" style={styles.discountBadge}>{discountText}</Badge>
           ) : null}
 
           {/* This thumbnail is too small for a real gallery — vendors can
@@ -209,9 +227,20 @@ export const ProductCard = ({
 
         <View style={styles.body}>
           <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: COLORS.text.primary }]} numberOfLines={2}>
-              {product?.name || 'Product'}
-            </Text>
+            <View style={styles.nameCol}>
+              <Text style={[styles.name, { color: COLORS.text.primary }]} numberOfLines={2}>
+                {product?.name || 'Product'}
+              </Text>
+              {/* Reserve this line's height unconditionally (design-system
+                  Product Card bilingual convention, e.g. "Kamatis" / "Tomato")
+                  so a product without a mapped translation doesn't end up
+                  shorter than its grid neighbor that has one -- same
+                  uneven-row trap the cardWrapper minHeight comment above
+                  already had to work around once. */}
+              <Text style={[styles.nameEnglish, { color: COLORS.text.tertiary }]} numberOfLines={1}>
+                {englishName || ' '}
+              </Text>
+            </View>
             {showVoice && (
               <TouchableOpacity
                 style={styles.speakBtn}
@@ -232,13 +261,24 @@ export const ProductCard = ({
               originalPrice={hasOriginal ? originalPrice : null}
               stacked
               style={styles.priceRow}
+              amountStyle={styles.priceAmount}
             />
             {verdict ? <VerdictChip verdict={verdict} /> : null}
           </View>
 
-          {priceTrend ? (
-            <PriceTrendBadge currentPrice={safePrice} previousPrice={priceTrend.previous_price} />
-          ) : null}
+          {/* Fixed-height slot regardless of whether a badge actually
+              renders inside it -- PriceTrendBadge can itself return null
+              (negligible delta, no valid previous price) even when
+              priceTrend is truthy, so "conditionally render the row" was
+              exactly the uneven-grid trap the name-subtitle fix above and
+              the cardWrapper minHeight already had to work around once:
+              a card with a real, visible price move ends up one whole
+              badge taller than its row-mate without one. */}
+          <View style={styles.trendSlot}>
+            {priceTrend ? (
+              <PriceTrendBadge currentPrice={safePrice} previousPrice={priceTrend.previous_price} />
+            ) : null}
+          </View>
 
           {rating != null ? (
             <View style={styles.ratingRow}>
@@ -295,6 +335,16 @@ const styles = StyleSheet.create({
   cardWrapper: {
     width: '48%',
     marginBottom: 12,
+    // Card height is otherwise fully content-driven -- a card whose
+    // product has a rating, a stall row, and a price-trend badge ends up
+    // visibly taller than a neighbor missing all three, which is what
+    // makes a 2-column grid look uneven row to row. Pinning a shared
+    // minHeight (sized for the tallest realistic combination: image +
+    // 2-line name + English subtitle + price + trend badge + rating +
+    // stall + button) keeps every card the same height; one with less
+    // optional content just gets a little empty space below its button
+    // instead of being visibly shorter than its row-mate.
+    minHeight: 330,
   },
   card: {
     width: '100%',
@@ -302,8 +352,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: LAYOUT.borderWidth,
   },
+  // 1:1 square (design system "Product Card": aspect-ratio 1/1), not a
+  // fixed pixel height -- a fixed height on a variable-width card (2-up
+  // on a phone, more columns at wider breakpoints) crops a different
+  // fraction of the photo per column count, which is what read as an
+  // uneven, "not smooth" grid; a square scales with the card so every
+  // photo keeps the same crop and every row lines up cleanly.
+  //
+  // The aspect ratio lives on this container, not on the <Image> itself
+  // -- React Native Web's Image doesn't reliably honor aspectRatio on
+  // its own (it fell back to each photo's natural, usually portrait,
+  // proportions, producing a wildly uneven grid instead of a square
+  // one). A plain View's aspectRatio is far more consistently supported
+  // across native and web, so the image/placeholder below just fill it.
   imageContainer: {
     position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
     backgroundColor: '#F3F4F6',
     borderTopLeftRadius: RADIUS.lg,
     borderTopRightRadius: RADIUS.lg,
@@ -315,14 +380,14 @@ const styles = StyleSheet.create({
   // in particular), which is what left this square on the web preview.
   image: {
     width: '100%',
-    height: 110,
+    height: '100%',
     backgroundColor: '#F3F4F6',
     borderTopLeftRadius: RADIUS.lg,
     borderTopRightRadius: RADIUS.lg,
   },
   imagePlaceholder: {
     width: '100%',
-    height: 110,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
@@ -333,9 +398,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -375,11 +440,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 6,
   },
-  name: {
+  nameCol: {
     flex: 1,
+  },
+  // ".pcard .nm"/".en" -- no font-family override in the design system,
+  // inherits the body's Nunito (this file never set Baloo 2 here, so no
+  // family fix needed, just size/weight).
+  name: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  nameEnglish: {
     fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 17,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 1,
   },
   speakBtn: {
     padding: 2,
@@ -394,6 +470,24 @@ const styles = StyleSheet.create({
   priceRow: {
     marginBottom: 2,
   },
+  // ".priceline .amt" has no font-family override, inheriting the
+  // body's Nunito -- PriceText's shared default pulls in the Baloo 2
+  // display font instead (meant only for actual heading elements). Kept
+  // as a local opt-in via PriceText's amountStyle rather than changing
+  // that shared default, since other not-yet-reviewed screens use it too.
+  priceAmount: {
+    fontFamily: 'Nunito_900Black',
+    fontSize: 21,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  // Matches PriceTrendBadge's own rendered height (paddingVertical 3+3,
+  // ~15px line at fontSize 12, marginBottom 4) so reserving this slot
+  // when the badge is absent doesn't leave a visibly different gap than
+  // when it's present.
+  trendSlot: {
+    minHeight: 25,
+  },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -401,11 +495,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   ratingText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   ratingCount: {
-    fontSize: 11,
+    fontSize: 13,
+    fontWeight: '700',
   },
   stallRow: {
     flexDirection: 'row',
@@ -414,7 +509,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stall: {
-    fontSize: 11,
+    fontSize: 13,
+    fontWeight: '700',
     flexShrink: 1,
   },
   addButton: {

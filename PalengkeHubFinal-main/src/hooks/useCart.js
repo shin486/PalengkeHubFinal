@@ -309,10 +309,11 @@ export const useCart = () => {
       const updatedCart = sharedCart.filter(item => item.product_id !== productId);
       updateSharedCart(updatedCart);
       return runDbWrite(async () => {
-        await supabase
+        const { error } = await supabase
           .from('carts')
           .update({ items: updatedCart, updated_at: new Date().toISOString() })
           .eq('user_id', user.id);
+        if (error) throw error;
       });
     }
 
@@ -324,10 +325,11 @@ export const useCart = () => {
     updateSharedCart(updatedCart);
 
     return runDbWrite(async () => {
-      await supabase
+      const { error } = await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      if (error) throw error;
     });
   }, [user]);
 
@@ -340,10 +342,11 @@ export const useCart = () => {
     updateSharedCart(updatedCart);
 
     return runDbWrite(async () => {
-      await supabase
+      const { error } = await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      if (error) throw error;
     });
   }, [user]);
 
@@ -359,10 +362,11 @@ export const useCart = () => {
     updateSharedCart(updatedCart);
 
     return runDbWrite(async () => {
-      await supabase
+      const { error } = await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      if (error) throw error;
     });
   }, [user]);
 
@@ -380,10 +384,11 @@ export const useCart = () => {
     updateSharedCart(updatedCart);
 
     return runDbWrite(async () => {
-      await supabase
+      const { error } = await supabase
         .from('carts')
         .update({ items: updatedCart, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      if (error) throw error;
     });
   }, [user]);
 

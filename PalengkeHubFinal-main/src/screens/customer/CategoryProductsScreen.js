@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../hooks/useCart';
+import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAnnounceActiveScreen } from '../../contexts/ActiveScreenContext';
 import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
@@ -264,6 +265,13 @@ export default function CategoryProductsScreen({ route, navigation }) {
       announceActiveScreen('CategoryProducts');
     }, [announceActiveScreen])
   );
+
+  // Single shared instance for this whole screen -- without this, every
+  // <ProductCard> below fell back to its own uncontrolled, isolated
+  // useFavorites() call (no isWishlisted/onToggleWishlist passed), each
+  // with its own independent fetch and its own exposure to the
+  // just-mounted-instance race described in useFavorites.js.
+  const { isProductFavorite, toggleProductFavorite } = useFavorites();
 
   const { categoryName } = route.params;
   const [products, setProducts] = useState([]);
@@ -509,6 +517,8 @@ export default function CategoryProductsScreen({ route, navigation }) {
         hasPromotion={hasPromotion}
         discountText={discountText}
         style={{ width: gridCardWidthPct }}
+        isWishlisted={isProductFavorite(item.id)}
+        onToggleWishlist={() => toggleProductFavorite(item)}
         onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
         onAddToCart={() => handleAddToCart(item, stall)}
       />

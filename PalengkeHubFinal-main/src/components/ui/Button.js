@@ -70,7 +70,16 @@ export const Button = ({
     }).start();
   };
 
-  const handlePress = () => {
+  // React Native's native responder system gives a nested touchable
+  // exclusive claim to a press, so a Button inside a pressable card only
+  // fires its own onPress there -- but react-native-web compiles this to
+  // real DOM nodes with real bubbling, which doesn't know about that
+  // native semantic. Without stopping it here, every Button nested in a
+  // pressable card (e.g. ProductCard's "Add to Cart") also bubbled up
+  // and fired the card's own onPress (navigate to product details)
+  // instead of just adding to cart in place.
+  const handlePress = (e) => {
+    e?.stopPropagation?.();
     if (isDisabled) return;
     if (isSinking) hapticLight();
     onPress?.();

@@ -12,6 +12,11 @@ const toneColors = (COLORS) => ({
   brand: { bg: COLORS.brandSoft, text: COLORS.primaryDark },
   leaf: { bg: COLORS.successLight, text: COLORS.success },
   tomato: { bg: COLORS.errorLight, text: COLORS.errorDark },
+  // Design system ".badge-off" (discount badges): solid tomato fill,
+  // not the soft tomato/errorDark pairing above -- that softer one is
+  // reserved for MAHAL and alert contexts. Purely additive: the
+  // existing "tomato" tone and its callers are unchanged.
+  tomatoSolid: { bg: COLORS.error, text: COLORS.onError },
   gold: { bg: COLORS.warningLight, text: COLORS.warning },
   fish: { bg: COLORS.infoLight, text: COLORS.info },
   neutral: { bg: COLORS.wickerSoft, text: COLORS.text.secondary },

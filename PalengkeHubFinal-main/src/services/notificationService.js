@@ -108,9 +108,18 @@ export const registerPushToken = async (userId) => {
     const token = await requestNotificationPermission();
     if (!token || !userId) return;
 
+    // update, not upsert -- same reasoning as useFavorites.js's
+    // saveFavorites(): this only ever runs for an already-authenticated
+    // user, whose profiles row already exists, and .upsert()'s INSERT
+    // path requires the (admin-only) insert policy even when it ends
+    // up updating an existing row. This is native-only (isNative guard
+    // above), so it never surfaced in any web testing -- push tokens
+    // have likely been silently failing to save for every non-admin
+    // user's phone app.
     const { error } = await supabase
       .from('profiles')
-      .upsert({ id: userId, expo_push_token: token }, { onConflict: 'id' });
+      .update({ expo_push_token: token })
+      .eq('id', userId);
 
     if (error) console.warn('Error saving push token:', error);
  else console.log(' Push token registered for user:', userId);

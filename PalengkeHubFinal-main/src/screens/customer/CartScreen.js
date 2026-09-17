@@ -22,6 +22,7 @@ import { useCart } from '../../hooks/useCart';
 import { useI18n } from '../../contexts/i18nContext';
 import CheckoutContent from '../../components/CheckoutContent';
 import { getProductFallbackPhoto } from '../../utils/productPhotoFallbacks';
+import { RADIUS, SPACING, LAYOUT, TYPE, TEXT_STYLES } from '../../theme/tokens';
 
 const TABS = {
   CART: 'cart',
@@ -354,7 +355,7 @@ export default function CartScreen({ navigation, route }) {
                   </TouchableOpacity>
                 )}
                 <View style={styles.stallIconWrap}>
-                  <Ionicons name="storefront-outline" size={18} />
+                  <Ionicons name="storefront-outline" size={18} color={COLORS.text.secondary} />
                 </View>
                 <View style={styles.stallHeaderText}>
                   <Text style={styles.stallName}>{data.stall?.stall_name || t('stalls.vendor_fallback', 'Market Stall')}</Text>
@@ -437,6 +438,17 @@ export default function CartScreen({ navigation, route }) {
                 </View>
               </View>
             ))}
+
+            {/* Purely derived from items already in hand -- no new fetch
+                or state, just the per-stall sum shoppers otherwise have
+                to add up themselves across a page of separate line items
+                (each stall pays out separately via its own GCash). */}
+            <View style={styles.stallTotalRow}>
+              <Text style={styles.stallTotalLabel}>{t('cart.stall_total', 'Stall Total')}</Text>
+              <Text style={styles.stallTotalAmount}>
+                ₱{data.items.reduce((sum, item) => sum + (item.quantity || 1) * item.price, 0).toFixed(2)}
+              </Text>
+            </View>
           </View>
         ))}
       </>
@@ -651,25 +663,21 @@ const createStyles = (COLORS) => StyleSheet.create({
     height: 80,
   },
 
-  // Stall Section
+  // Stall Section -- a flat, bordered card (design system: "surfaces
+  // separate by contrast... not by shadow" -- tokens.js's own header
+  // comment), not the heavier drop-shadow card this used before.
   stallSection: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderWidth: LAYOUT.borderWidth,
+    borderColor: COLORS.border,
   },
   closedStallSection: {
     backgroundColor: COLORS.accentSoft,
-    borderWidth: 1,
     borderColor: COLORS.accentLight,
     opacity: 0.8,
   },
@@ -677,22 +685,20 @@ const createStyles = (COLORS) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
+    marginBottom: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: LAYOUT.hairlineWidth,
     borderBottomColor: COLORS.borderLight,
   },
   stallHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACING.sm,
     flex: 1,
   },
   stallIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.accentSoft,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -703,30 +709,49 @@ const createStyles = (COLORS) => StyleSheet.create({
     flex: 1,
   },
   stallName: {
-    fontSize: 17,
-    fontWeight: '700',
+    ...TEXT_STYLES.bodySmall,
+    fontSize: 16,
+    fontWeight: TYPE.weight.bold,
     color: COLORS.text.primary,
     marginBottom: 2,
   },
   stallMeta: {
-    fontSize: 12,
-    color: COLORS.text.secondary,
+    fontSize: TYPE.size.caption,
+    color: COLORS.text.tertiary,
   },
   closedBadge: {
-    backgroundColor: COLORS.error,
-    paddingHorizontal: 10,
+    backgroundColor: COLORS.errorLight,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: RADIUS.sm,
   },
   closedBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'white',
+    fontSize: TYPE.size.micro,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.errorDark,
+  },
+  // "Stall Total" -- purely a display of the sum of items already
+  // rendered above it (see the reduce() at the call site); each stall
+  // pays out separately via its own GCash, so a per-stall running total
+  // is the natural thing to show before the page-wide footer total.
+  stallTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    paddingTop: SPACING.sm,
+    borderTopWidth: LAYOUT.hairlineWidth,
+    borderTopColor: COLORS.borderLight,
+  },
+  stallTotalLabel: {
+    fontSize: TYPE.size.caption,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.tertiary,
+  },
+  stallTotalAmount: {
+    fontSize: TYPE.size.body,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.primary,
   },
 
   // Cart Items
@@ -742,10 +767,10 @@ const createStyles = (COLORS) => StyleSheet.create({
     gap: 10,
   },
   itemThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
-    backgroundColor: COLORS.accentSoft,
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.wickerSoft,
   },
   itemDetails: {
     flex: 1,
@@ -775,38 +800,33 @@ const createStyles = (COLORS) => StyleSheet.create({
     color: COLORS.text.secondary,
     marginBottom: 10,
   },
+  // Pill-shaped capsule with flush circular buttons -- no per-button
+  // shadow or rounded-rect sub-buttons "floating" in a track, which is
+  // what made this read as boxier/less smooth than the rest of the app.
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
+    backgroundColor: COLORS.wickerSoft,
+    borderRadius: RADIUS.full,
+    padding: 4,
   },
   quantityButton: {
-    width: 34,
-    height: 34,
-    backgroundColor: COLORS.surface,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: RADIUS.full,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 1,
-    shadowRadius: 2,
-    elevation: 1,
   },
   quantityButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: TYPE.weight.bold,
+    color: COLORS.text.primary,
   },
   quantityText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: TYPE.size.label,
+    fontWeight: TYPE.weight.black,
     color: COLORS.text.primary,
-    minWidth: 28,
+    minWidth: 30,
     textAlign: 'center',
   },
   closedItemBadge: {
@@ -837,17 +857,20 @@ const createStyles = (COLORS) => StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Footer
+  // Footer -- this one legitimately floats above scrolling content, so
+  // it keeps a lift shadow (design system: "reach for shadows only when
+  // something floats"), just a softer one than the rest of this screen
+  // had.
   footer: {
     backgroundColor: COLORS.surface,
     padding: 16,
     paddingBottom: Platform.OS === 'ios' ? 28 : 16,
-    borderTopWidth: 1,
+    borderTopWidth: LAYOUT.hairlineWidth,
     borderTopColor: COLORS.borderLight,
-    shadowColor: COLORS.shadowDark,
-    shadowOffset: { width: 0, height: -3 },
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 1,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 6,
   },
   footerRow: {

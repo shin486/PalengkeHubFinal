@@ -1,6 +1,6 @@
 // src/screens/customer/ProfileScreen.js
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,7 +43,16 @@ export default function ProfileScreen({ navigation }) {
   const { user, profile, logout, resetToLogin, setIsGuest, isGuest, checkUser } = useAuth();
   const { t, locale, changeLanguage } = useI18n();
   const { isDark } = useTheme();
-  const { getFavoriteCount } = useFavorites();
+  const { getFavoriteCount, refreshFavorites } = useFavorites();
+  // Same staleness fix as FavoritesScreen.js: useFavorites() fetches once
+  // per mount with no shared state across call sites, so this screen's
+  // count would keep showing whatever it saw at mount time even after a
+  // favorite was added/removed elsewhere.
+  useFocusEffect(
+    useCallback(() => {
+      refreshFavorites();
+    }, [refreshFavorites])
+  );
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);

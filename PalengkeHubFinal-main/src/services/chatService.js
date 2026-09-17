@@ -297,7 +297,12 @@ export const chatService = {
       .eq('id', conversationId)
       .single();
 
-    await supabase
+    // The image message itself already succeeded above -- this is a
+    // secondary "update the badge/preview" step, so a failure here
+    // shouldn't fail the whole send, but it was previously invisible
+    // even to the console: the recipient's unread count/preview would
+    // silently never update for an image message specifically.
+    const { error: convUpdateError } = await supabase
       .from('conversations')
       .update({
         last_message: 'Sent an image',
@@ -305,6 +310,7 @@ export const chatService = {
         [recipientField]: (convRow?.[recipientField] || 0) + 1,
       })
       .eq('id', conversationId);
+    if (convUpdateError) console.error('Error updating conversation after image message:', convUpdateError);
 
     console.log(' Image message saved:', data);
     return data;
@@ -318,16 +324,22 @@ export const chatService = {
       ? { vendor_unread_count: 0 }
       : { customer_unread_count: 0, vendor_unread_count: 0 };
 
-    await supabase
+    // Both previously unchecked -- a failure here left the unread badge
+    // stuck at a stale count (or messages stuck marked unread) with no
+    // visible sign why, even though the user had genuinely opened and
+    // read the conversation.
+    const { error: convError } = await supabase
       .from('conversations')
       .update(updateField)
       .eq('id', conversationId);
+    if (convError) console.error('Error clearing conversation unread count:', convError);
 
-    await supabase
+    const { error: messagesError } = await supabase
       .from('messages')
       .update({ is_read: true })
       .eq('conversation_id', conversationId)
       .neq('sender_role', normalizedReaderRole);
+    if (messagesError) console.error('Error marking messages as read:', messagesError);
   },
 
   async getAllConversations() {

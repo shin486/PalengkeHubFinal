@@ -90,9 +90,15 @@ export default function ChatListScreen({ navigation }) {
         </Text>
         <Text style={styles.time}>{formatTime(item.last_message_time)}</Text>
       </View>
-      {item.vendor_unread_count > 0 && (
+      {/* This is the customer's own chat list, so the badge must reflect
+          the customer's unread count -- vendor_unread_count is how many
+          unread messages the VENDOR has from this conversation, which
+          isn't this screen's business to show. VendorChatListScreen.js
+          gets this right (reads vendor_unread_count); this was the one
+          place it was copied over without swapping the field name. */}
+      {item.customer_unread_count > 0 && (
         <View style={styles.unreadBadge}>
-          <Text style={styles.unreadText}>{item.vendor_unread_count}</Text>
+          <Text style={styles.unreadText}>{item.customer_unread_count}</Text>
         </View>
       )}
     </TouchableOpacity>

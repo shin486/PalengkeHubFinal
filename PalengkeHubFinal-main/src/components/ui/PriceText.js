@@ -23,6 +23,10 @@ export const PriceText = ({
   size = 'default', // 'default' | 'hero'
   stacked = false, // original price above current, instead of beside it
   style,
+  // Opt-in only, merges onto the amount Text specifically (style merges
+  // onto the outer row/View instead) -- every existing caller renders
+  // exactly as before since none of them pass this.
+  amountStyle,
 }) => {
   const COLORS = useColors();
   const priceStyle = size === 'hero' ? TEXT_STYLES.priceHero : TEXT_STYLES.price;
@@ -39,7 +43,7 @@ export const PriceText = ({
   ) : null;
 
   const current = (
-    <Text style={[priceStyle, { color: COLORS.primary }]}>
+    <Text style={[priceStyle, { color: COLORS.primary }, amountStyle]}>
       {hasRange ? `₱${safePrice.toFixed(2)} – ₱${Number(maxPrice).toFixed(2)}` : `₱${safePrice.toFixed(2)}`}
     </Text>
   );

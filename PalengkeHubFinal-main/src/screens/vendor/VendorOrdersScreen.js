@@ -163,6 +163,13 @@ export default function VendorOrdersScreen({ navigation }) {
       if (conversation) {
         conversationId = conversation.id;
       } else {
+        // This is a vendor-authored message (sender_role: 'vendor' below) --
+        // the customer is the recipient, so customer_unread_count is what
+        // should be seeded here. This previously set vendor_unread_count
+        // instead, and since the update further down only ever *sets*
+        // customer_unread_count (never resets this one), a brand-new
+        // conversation was left with both counts at 1 -- a phantom unread
+        // badge on the vendor's own Chats tab for a message they just sent.
         const { data: newConv, error: convError } = await supabase
           .from('conversations')
           .insert({
@@ -170,7 +177,7 @@ export default function VendorOrdersScreen({ navigation }) {
             stall_id: order.stall_id,
             last_message: `Payment request for Order #${order.order_number?.slice(-8)}`,
             last_message_time: new Date(),
-            vendor_unread_count: 1,
+            customer_unread_count: 1,
           })
           .select()
           .single();

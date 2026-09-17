@@ -55,6 +55,22 @@ const PHOTOS_BY_SLUG = {
   'whole-chicken': require('../assets/products/whole-chicken.jpg'),
 };
 
+// Filipino/local product names that are the same item as an existing
+// English-labeled asset above -- reuse that photo rather than requiring a
+// second copy of the same picture under a new filename.
+const ALIAS_TO_SLUG = {
+  'kamatis': 'tomatoes',
+  'giniling-na-baboy': 'ground-pork',
+  'lakatan-banana': 'bananas',
+  'carabao-mango': 'mangoes',
+  'itlog': 'fresh-eggs',
+  // Rice variety photos are hard to tell apart at thumbnail size --
+  // premium-rice is a reasonable stand-in for any raw white/brown rice
+  // product that doesn't have its own dedicated photo.
+  'dinorado-rice': 'premium-rice',
+  'sinandomeng-rice': 'premium-rice',
+};
+
 const slugify = (name) =>
   String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -62,5 +78,6 @@ const slugify = (name) =>
 // don't have a fallback for it (caller should fall back further, e.g. to a
 // generic placeholder icon).
 export const getProductFallbackPhoto = (productName) => {
-  return PHOTOS_BY_SLUG[slugify(productName)] || null;
+  const slug = slugify(productName);
+  return PHOTOS_BY_SLUG[slug] || PHOTOS_BY_SLUG[ALIAS_TO_SLUG[slug]] || null;
 };

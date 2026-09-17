@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../contexts/ThemeContext';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/i18nContext';
@@ -68,8 +69,22 @@ export default function FavoritesScreen({ navigation }) {
     loading,
     toggleProductFavorite,
     toggleStallFavorite,
+    refreshFavorites,
   } = useFavorites();
   const [activeTab, setActiveTab] = useState('products');
+
+  // useFavorites() has no shared/global state -- every call site (every
+  // ProductCard, HomeScreen, this screen, ProfileScreen...) mounts its
+  // own independent copy, fetched once on mount. Toggling a favorite
+  // elsewhere never updates THIS screen's already-mounted copy, so
+  // without this a favorite added on Home wouldn't show here until a
+  // full app reload. refreshFavorites() already existed for exactly
+  // this but nothing was calling it.
+  useFocusEffect(
+    useCallback(() => {
+      refreshFavorites();
+    }, [refreshFavorites])
+  );
 
   const handleProductPress = (product) => {
     navigation.navigate('ProductDetails', { productId: product.id });

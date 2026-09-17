@@ -360,17 +360,25 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
+    // update, not upsert -- the on_auth_user_created trigger fires
+    // synchronously within the same transaction as the auth.users
+    // insert (OAuth-created rows included), so by the time a valid
+    // session exists here the profiles row is already guaranteed to
+    // exist. .upsert()'s INSERT ... ON CONFLICT DO UPDATE requires the
+    // (admin-only) insert policy even when it ends up updating an
+    // existing row -- so this always 403'd for a real user, meaning
+    // Google/Facebook sign-in has likely always failed at this exact
+    // step, immediately signing the user back out with "Could not
+    // finish creating your account."
     const meta = sessionUser.user_metadata || {};
     const { error: upsertError } = await supabase
       .from('profiles')
-      .upsert({
-        id: sessionUser.id,
+      .update({
         email: sessionUser.email,
         full_name: meta.full_name || meta.name || 'PalengkeHub Customer',
         avatar_url: meta.avatar_url || meta.picture || null,
-        phone: '',
-        role: 'consumer',
-      }, { onConflict: 'id' });
+      })
+      .eq('id', sessionUser.id);
 
     if (upsertError) {
       console.error(' OAuth profile creation error:', upsertError);
