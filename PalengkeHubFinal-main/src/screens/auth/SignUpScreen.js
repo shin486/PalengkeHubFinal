@@ -985,6 +985,7 @@ export const SignUpScreen = () => {
             • Customers can cancel orders while still pending{'\n'}
             • Cancellations after vendor confirmation require vendor approval{'\n'}
             • Refunds are processed at the vendor's discretion{'\n'}
+            • Orders that are not picked up by the customer within the agreed pickup period are considered a failed pickup and are non-refundable{'\n'}
             • PalengkeHub may mediate disputes but is not liable for refunds
 
             {'\n\n'}<Text style={styles.termsHeading}>9. Prohibited Activities{'\n\n'}</Text>
