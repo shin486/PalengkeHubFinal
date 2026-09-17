@@ -22,6 +22,27 @@
     },
   });
 
+  const STATUS_STYLES = {
+    pending: { label: 'Pending', cls: 'status-pending' },
+    confirmed: { label: 'Confirmed', cls: 'status-confirmed' },
+    preparing: { label: 'Preparing', cls: 'status-preparing' },
+    ready: { label: 'Ready', cls: 'status-ready' },
+    completed: { label: 'Completed', cls: 'status-completed' },
+    cancelled: { label: 'Cancelled', cls: 'status-cancelled' },
+    active: { label: 'Active', cls: 'status-active' },
+    inactive: { label: 'Inactive', cls: 'status-inactive' },
+    approved: { label: 'Approved', cls: 'status-approved' },
+    rejected: { label: 'Rejected', cls: 'status-rejected' },
+    resolved: { label: 'Resolved', cls: 'status-resolved' },
+    reviewing: { label: 'Reviewing', cls: 'status-reviewing' },
+    dismissed: { label: 'Dismissed', cls: 'status-dismissed' },
+    deactivated: { label: 'Deactivated', cls: 'status-deactivated' },
+  };
+  const statusPillHTML = (status) => {
+    const st = STATUS_STYLES[status] || { label: status || '—', cls: 'status-pending' };
+    return `<span class="admin-status ${st.cls}">${st.label}</span>`;
+  };
+
   document.addEventListener('DOMContentLoaded', function() {
     const menuToggle = document.getElementById('menu-toggle');
     const navMenu = document.getElementById('nav-menu');
@@ -59,6 +80,59 @@
       return { session, profile };
     };
 
+    // ── Generic response modal (reject reason / report response) ──
+    const modalOverlay = document.getElementById('admin-modal-overlay');
+    const modalTitle = document.getElementById('admin-modal-title');
+    const modalDesc = document.getElementById('admin-modal-desc');
+    const modalStatus = document.getElementById('admin-modal-status');
+    const modalTextarea = document.getElementById('admin-modal-textarea');
+    const modalCancel = document.getElementById('admin-modal-cancel');
+    const modalSubmit = document.getElementById('admin-modal-submit');
+    let modalSubmitHandler = null;
+
+    const openModal = ({ title, description, statusOptions, currentStatus, currentNote, textareaPlaceholder, submitLabel, onSubmit }) => {
+      modalTitle.textContent = title;
+      modalDesc.textContent = description || '';
+      modalTextarea.value = currentNote || '';
+      modalTextarea.placeholder = textareaPlaceholder || 'Add a note...';
+
+      if (statusOptions && statusOptions.length) {
+        modalStatus.style.display = 'block';
+        modalStatus.innerHTML = statusOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        if (currentStatus) modalStatus.value = currentStatus;
+      } else {
+        modalStatus.style.display = 'none';
+        modalStatus.innerHTML = '';
+      }
+
+      modalSubmit.textContent = submitLabel || 'Submit';
+      modalSubmitHandler = onSubmit;
+      modalOverlay.classList.add('open');
+    };
+
+    const closeModal = () => {
+      modalOverlay.classList.remove('open');
+      modalSubmitHandler = null;
+    };
+
+    if (modalCancel) modalCancel.addEventListener('click', closeModal);
+    if (modalOverlay) modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+    if (modalSubmit) modalSubmit.addEventListener('click', async () => {
+      if (!modalSubmitHandler) return;
+      const note = modalTextarea.value.trim();
+      const status = modalStatus.style.display !== 'none' ? modalStatus.value : null;
+      modalSubmit.disabled = true;
+      try {
+        await modalSubmitHandler({ note, status });
+        closeModal();
+      } catch (err) {
+        console.error('Modal submit error:', err);
+        alert('Something went wrong: ' + err.message);
+      } finally {
+        modalSubmit.disabled = false;
+      }
+    });
+
     // ── Fetch dashboard stats ──
     const fetchStats = async () => {
       try {
@@ -90,13 +164,30 @@
           .select('id', { count: 'exact', head: true })
           .eq('status', 'pending');
 
+        // Open reports/flags needing admin attention (missing tables/RLS
+        // just leave these at 0 — count queries don't throw on error)
+        const { count: customerReportsOpen } = await supabase
+          .from('customer_reports')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'reviewing']);
+        const { count: vendorReportsOpen } = await supabase
+          .from('vendor_reports')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'reviewing']);
+        const { count: priceFlagsOpen } = await supabase
+          .from('price_anomalies')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'deactivated']);
+        const openReports = (customerReportsOpen || 0) + (vendorReportsOpen || 0) + (priceFlagsOpen || 0);
+
         document.getElementById('stat-vendors').textContent = vendorCount || 0;
         document.getElementById('stat-customers').textContent = customerCount || 0;
         document.getElementById('stat-stalls').textContent = stallCount || 0;
         document.getElementById('stat-orders').textContent = orderCount || 0;
         document.getElementById('stat-pending').textContent = pendingApps || 0;
+        document.getElementById('stat-reports').textContent = openReports;
 
-        return { vendorCount, customerCount, stallCount, orderCount, pendingApps };
+        return { vendorCount, customerCount, stallCount, orderCount, pendingApps, openReports };
       } catch (err) {
         console.error('Error fetching stats:', err);
         return null;
@@ -182,7 +273,7 @@
         tbody.innerHTML = '';
 
         if (!data || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4" class="admin-empty">No pending applications</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" class="admin-empty">No pending applications</td></tr>';
           return;
         }
 
@@ -198,21 +289,79 @@
             if (applicant) applicantName = applicant.full_name;
           }
 
-          const date = new Date(app.created_at).toLocaleDateString('en-PH', {
-            month: 'short', day: 'numeric', year: 'numeric',
-          });
+          const tdApplicant = document.createElement('td');
+          tdApplicant.textContent = applicantName;
+          const tdBusiness = document.createElement('td');
+          tdBusiness.textContent = app.business_name;
+          const tdCategory = document.createElement('td');
+          tdCategory.textContent = app.category || '—';
+          const tdStatus = document.createElement('td');
+          tdStatus.innerHTML = statusPillHTML('pending');
+          const tdActions = document.createElement('td');
+          tdActions.className = 'admin-row-actions';
 
-          tr.innerHTML = `
-            <td>${applicantName}</td>
-            <td>${app.business_name}</td>
-            <td>${app.category || '—'}</td>
-            <td><span class="admin-status status-pending">Pending Review</span></td>
-          `;
+          const approveBtn = document.createElement('button');
+          approveBtn.className = 'admin-action-btn approve';
+          approveBtn.textContent = 'Approve';
+          approveBtn.addEventListener('click', () => approveApplication(app.id, app.applicant_id));
+
+          const rejectBtn = document.createElement('button');
+          rejectBtn.className = 'admin-action-btn reject';
+          rejectBtn.textContent = 'Reject';
+          rejectBtn.addEventListener('click', () => rejectApplication(app.id));
+
+          tdActions.append(approveBtn, rejectBtn);
+          tr.append(tdApplicant, tdBusiness, tdCategory, tdStatus, tdActions);
           tbody.appendChild(tr);
         }
       } catch (err) {
         console.error('Error fetching applications:', err);
       }
+    };
+
+    // ── Approve / reject a vendor application ──
+    const approveApplication = async (appId, applicantId) => {
+      if (!confirm('Approve this vendor application? Their stall will go live immediately.')) return;
+      try {
+        const { error: appErr } = await supabase
+          .from('vendor_applications')
+          .update({ status: 'approved' })
+          .eq('id', appId);
+        if (appErr) throw appErr;
+
+        if (applicantId) {
+          const { error: stallErr } = await supabase
+            .from('stalls')
+            .update({ is_active: true })
+            .eq('vendor_id', applicantId);
+          if (stallErr) throw stallErr;
+        }
+
+        await fetchStats();
+        await fetchPendingApplications();
+        await fetchRecentVendors();
+      } catch (err) {
+        console.error('Approve error:', err);
+        alert('Could not approve this application: ' + err.message);
+      }
+    };
+
+    const rejectApplication = (appId) => {
+      openModal({
+        title: 'Reject Vendor Application',
+        description: 'The applicant will see their application as not approved. This note is for internal records only.',
+        textareaPlaceholder: 'Reason for rejection...',
+        submitLabel: 'Reject Application',
+        onSubmit: async ({ note }) => {
+          const { error } = await supabase
+            .from('vendor_applications')
+            .update({ status: 'rejected', notes: note || 'Rejected by admin' })
+            .eq('id', appId);
+          if (error) throw error;
+          await fetchStats();
+          await fetchPendingApplications();
+        },
+      });
     };
 
     // ── Fetch recent vendors ──
@@ -261,6 +410,222 @@
         }
       } catch (err) {
         console.error('Error fetching vendors:', err);
+      }
+    };
+
+    // ── Respond to a customer or vendor report ──
+    const respondToReport = (table, report, refreshFn) => {
+      openModal({
+        title: 'Respond to Report',
+        description: report.description || '',
+        statusOptions: [
+          { value: 'reviewing', label: 'Mark as Reviewing' },
+          { value: 'resolved', label: 'Mark as Resolved' },
+          { value: 'dismissed', label: 'Dismiss' },
+        ],
+        currentStatus: report.status,
+        currentNote: report.admin_notes,
+        textareaPlaceholder: 'Note visible to the reporter...',
+        submitLabel: 'Save Response',
+        onSubmit: async ({ note, status }) => {
+          const updates = { status };
+          if (note) updates.admin_notes = note;
+          const { error } = await supabase.from(table).update(updates).eq('id', report.id);
+          if (error) throw error;
+          await fetchStats();
+          await refreshFn();
+        },
+      });
+    };
+
+    // ── Fetch customer reports ──
+    const fetchCustomerReports = async (limit = 8) => {
+      try {
+        const { data, error } = await supabase
+          .from('customer_reports')
+          .select('id, user_id, report_type, target_name, reason, description, status, admin_notes, created_at')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('customer-reports-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="admin-empty">No customer reports</td></tr>';
+          return;
+        }
+
+        for (const report of data) {
+          const tr = document.createElement('tr');
+          let reporterName = '—';
+          if (report.user_id) {
+            const { data: reporter } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', report.user_id)
+              .single();
+            if (reporter) reporterName = reporter.full_name;
+          }
+
+          const tdReporter = document.createElement('td');
+          tdReporter.textContent = reporterName;
+          const tdType = document.createElement('td');
+          tdType.textContent = report.target_name ? `${report.report_type || '—'} — ${report.target_name}` : (report.report_type || '—');
+          const tdReason = document.createElement('td');
+          tdReason.className = 'admin-desc-cell';
+          tdReason.textContent = report.reason || '—';
+          const tdDesc = document.createElement('td');
+          tdDesc.className = 'admin-desc-cell';
+          tdDesc.textContent = report.description || '—';
+          const tdStatus = document.createElement('td');
+          tdStatus.innerHTML = statusPillHTML(report.status);
+          const tdActions = document.createElement('td');
+          const respondBtn = document.createElement('button');
+          respondBtn.className = 'admin-action-btn respond';
+          respondBtn.textContent = 'Respond';
+          respondBtn.addEventListener('click', () => respondToReport('customer_reports', report, fetchCustomerReports));
+          tdActions.appendChild(respondBtn);
+
+          tr.append(tdReporter, tdType, tdReason, tdDesc, tdStatus, tdActions);
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching customer reports:', err);
+      }
+    };
+
+    // ── Fetch vendor reports ──
+    const fetchVendorReports = async (limit = 8) => {
+      try {
+        const { data, error } = await supabase
+          .from('vendor_reports')
+          .select('id, vendor_id, customer_name, report_type, description, status, admin_notes, created_at')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('vendor-reports-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="admin-empty">No vendor reports</td></tr>';
+          return;
+        }
+
+        for (const report of data) {
+          const tr = document.createElement('tr');
+          let vendorName = '—';
+          if (report.vendor_id) {
+            const { data: vendor } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', report.vendor_id)
+              .single();
+            if (vendor) vendorName = vendor.full_name;
+          }
+
+          const tdVendor = document.createElement('td');
+          tdVendor.textContent = vendorName;
+          const tdCustomer = document.createElement('td');
+          tdCustomer.textContent = report.customer_name || '—';
+          const tdType = document.createElement('td');
+          tdType.textContent = report.report_type || '—';
+          const tdDesc = document.createElement('td');
+          tdDesc.className = 'admin-desc-cell';
+          tdDesc.textContent = report.description || '—';
+          const tdStatus = document.createElement('td');
+          tdStatus.innerHTML = statusPillHTML(report.status);
+          const tdActions = document.createElement('td');
+          const respondBtn = document.createElement('button');
+          respondBtn.className = 'admin-action-btn respond';
+          respondBtn.textContent = 'Respond';
+          respondBtn.addEventListener('click', () => respondToReport('vendor_reports', report, fetchVendorReports));
+          tdActions.appendChild(respondBtn);
+
+          tr.append(tdVendor, tdCustomer, tdType, tdDesc, tdStatus, tdActions);
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching vendor reports:', err);
+      }
+    };
+
+    // ── Fetch flagged (anomalous) prices ──
+    const fetchPriceAnomalies = async (limit = 8) => {
+      try {
+        const { data, error } = await supabase
+          .from('price_anomalies')
+          .select('id, product_id, vendor_id, flagged_price, market_avg_price, deviation_pct, status, created_at')
+          .in('status', ['pending', 'deactivated'])
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) throw error;
+
+        const tbody = document.getElementById('price-anomalies-body');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="admin-empty">No flagged prices</td></tr>';
+          return;
+        }
+
+        for (const anomaly of data) {
+          const tr = document.createElement('tr');
+          let productName = '—';
+          let vendorName = '—';
+          if (anomaly.product_id) {
+            const { data: product } = await supabase
+              .from('products')
+              .select('name')
+              .eq('id', anomaly.product_id)
+              .single();
+            if (product) productName = product.name;
+          }
+          if (anomaly.vendor_id) {
+            const { data: vendor } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', anomaly.vendor_id)
+              .single();
+            if (vendor) vendorName = vendor.full_name;
+          }
+
+          const tdProduct = document.createElement('td');
+          tdProduct.textContent = `${productName} (${vendorName})`;
+          const tdPrice = document.createElement('td');
+          tdPrice.textContent = `₱${parseFloat(anomaly.flagged_price).toFixed(2)}` +
+            (anomaly.market_avg_price ? ` (avg ₱${parseFloat(anomaly.market_avg_price).toFixed(2)})` : '');
+          const tdDeviation = document.createElement('td');
+          tdDeviation.textContent = anomaly.deviation_pct ? `+${Math.round(anomaly.deviation_pct)}%` : '—';
+          const tdStatus = document.createElement('td');
+          tdStatus.innerHTML = statusPillHTML(anomaly.status);
+          const tdActions = document.createElement('td');
+          const resolveBtn = document.createElement('button');
+          resolveBtn.className = 'admin-action-btn approve';
+          resolveBtn.textContent = 'Mark Resolved';
+          resolveBtn.addEventListener('click', async () => {
+            if (!confirm('Mark this price flag as resolved?')) return;
+            try {
+              const { error } = await supabase
+                .from('price_anomalies')
+                .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+                .eq('id', anomaly.id);
+              if (error) throw error;
+              await fetchStats();
+              await fetchPriceAnomalies();
+            } catch (err) {
+              console.error('Resolve anomaly error:', err);
+              alert('Could not resolve this flag: ' + err.message);
+            }
+          });
+          tdActions.appendChild(resolveBtn);
+
+          tr.append(tdProduct, tdPrice, tdDeviation, tdStatus, tdActions);
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('Error fetching price anomalies:', err);
       }
     };
 
@@ -317,6 +682,9 @@
       await fetchRecentOrders();
       await fetchPendingApplications();
       await fetchRecentVendors();
+      await fetchCustomerReports();
+      await fetchVendorReports();
+      await fetchPriceAnomalies();
     };
 
     init();
@@ -391,6 +759,13 @@
           <span class="admin-stat-label">Pending Applications</span>
         </div>
       </div>
+      <div class="admin-stat-card admin-stat-pending">
+        <div class="admin-stat-icon">🚩</div>
+        <div class="admin-stat-info">
+          <span class="admin-stat-value" id="stat-reports">0</span>
+          <span class="admin-stat-label">Open Reports</span>
+        </div>
+      </div>
     </div>
 
     <!-- Recent Orders -->
@@ -439,10 +814,91 @@
               <th>Business</th>
               <th>Category</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="applications-body">
-            <tr><td colspan="4" class="admin-empty">Loading applications...</td></tr>
+            <tr><td colspan="5" class="admin-empty">Loading applications...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Customer Reports -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Customer Reports</h2>
+          <p>Issues reported by customers about products, orders, or vendors</p>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Reporter</th>
+              <th>Type / Target</th>
+              <th>Reason</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="customer-reports-body">
+            <tr><td colspan="6" class="admin-empty">Loading reports...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Vendor Reports -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Vendor Reports</h2>
+          <p>Issues reported by vendors about customers or orders</p>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Customer</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vendor-reports-body">
+            <tr><td colspan="6" class="admin-empty">Loading reports...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Flagged Prices -->
+    <div class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>Flagged Prices</h2>
+          <p>Products priced well above the market average</p>
+        </div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Product (Vendor)</th>
+              <th>Flagged Price</th>
+              <th>Deviation</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="price-anomalies-body">
+            <tr><td colspan="5" class="admin-empty">Loading flagged prices...</td></tr>
           </tbody>
         </table>
       </div>
@@ -505,6 +961,19 @@
     </div>
   </div>
 </footer>
+
+<div class="admin-modal-overlay" id="admin-modal-overlay">
+  <div class="admin-modal">
+    <h3 id="admin-modal-title">Title</h3>
+    <p id="admin-modal-desc"></p>
+    <select id="admin-modal-status" style="display:none;"></select>
+    <textarea id="admin-modal-textarea" placeholder="Add a note..."></textarea>
+    <div class="admin-modal-actions">
+      <button type="button" class="admin-modal-cancel" id="admin-modal-cancel">Cancel</button>
+      <button type="button" class="admin-modal-submit" id="admin-modal-submit">Submit</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
