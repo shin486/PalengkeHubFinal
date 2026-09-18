@@ -133,20 +133,26 @@ export default function VendorOrdersScreen({ navigation }) {
         console.error('Failed to post rejection to chat:', chatError);
       }
 
-      await supabase.from('notifications').insert({
-        user_id: order.consumer_id,
-        title: 'Order Cancelled',
-        message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`,
-        type: 'order',
-        data: { order_id: order.id, type: 'cancellation' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: 'Order Cancelled',
+            message: `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${finalMessage}`,
+            type: 'order',
+            data: { order_id: order.id, type: 'cancellation' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       Alert.alert('Order Rejected', 'The order has been cancelled and the customer has been notified.');
     } catch (error) {
       console.error('Rejection error:', error);
-      Alert.alert('Error', 'Failed to reject order');
+      Alert.alert('Error', error?.message ? `Failed to reject order: ${error.message}` : 'Failed to reject order');
     }
   };
 
@@ -218,32 +224,42 @@ export default function VendorOrdersScreen({ navigation }) {
   const handleApprovePayment = async (order) => {
     setProcessing(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           payment_status: 'verified',
           status: 'preparing',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', order.id);
+        .eq('id', order.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Payment approval could not be saved. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      await supabase.from('notifications').insert({
-        user_id: order.consumer_id,
-        title: 'Payment Verified',
-        message: `Your payment for order #${order.order_number?.slice(-8)} has been verified. Your order is now being prepared!`,
-        type: 'payment',
-        data: { order_id: order.id, type: 'payment_verified' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: 'Payment Verified',
+            message: `Your payment for order #${order.order_number?.slice(-8)} has been verified. Your order is now being prepared!`,
+            type: 'payment',
+            data: { order_id: order.id, type: 'payment_verified' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       await refreshOrders();
       Alert.alert('Payment Approved', 'Payment verified and order is now preparing');
     } catch (error) {
       console.error('Error approving payment:', error);
-      Alert.alert('Error', 'Failed to approve payment');
+      Alert.alert('Error', error?.message ? `Failed to approve payment: ${error.message}` : 'Failed to approve payment');
     } finally {
       setProcessing(false);
     }
@@ -262,26 +278,36 @@ export default function VendorOrdersScreen({ navigation }) {
     }
     setProcessing(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           payment_status: 'rejected',
           payment_rejection_reason: rejectReason.trim(),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', selectedOrder.id);
+        .eq('id', selectedOrder.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Payment rejection could not be saved. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      await supabase.from('notifications').insert({
-        user_id: selectedOrder.consumer_id,
-        title: 'Payment Rejected',
-        message: `Your payment for order #${selectedOrder.order_number?.slice(-8)} was rejected. Reason: ${rejectReason}`,
-        type: 'payment',
-        data: { order_id: selectedOrder.id, type: 'payment_rejected' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (selectedOrder.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: selectedOrder.consumer_id,
+            title: 'Payment Rejected',
+            message: `Your payment for order #${selectedOrder.order_number?.slice(-8)} was rejected. Reason: ${rejectReason}`,
+            type: 'payment',
+            data: { order_id: selectedOrder.id, type: 'payment_rejected' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       await refreshOrders();
       setShowRejectPaymentModal(false);
@@ -289,7 +315,7 @@ export default function VendorOrdersScreen({ navigation }) {
       Alert.alert('Payment Rejected', 'Customer has been notified');
     } catch (error) {
       console.error('Error rejecting payment:', error);
-      Alert.alert('Error', 'Failed to reject payment');
+      Alert.alert('Error', error?.message ? `Failed to reject payment: ${error.message}` : 'Failed to reject payment');
     } finally {
       setProcessing(false);
     }

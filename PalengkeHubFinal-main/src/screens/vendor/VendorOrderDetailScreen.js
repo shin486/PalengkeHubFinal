@@ -24,6 +24,7 @@ import {
   vendorShadows,
 } from '../../theme/vendorTheme';
 import { useI18n } from '../../contexts/i18nContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { VendorStatusBadge, VendorPaymentStatusBadge } from '../../components/vendor/VendorStatusBadge';
 import { VendorSkeletonCard, VendorSkeletonList } from '../../components/vendor/VendorLoadingState';
 import { VendorSectionHeader } from '../../components/vendor/VendorSectionHeader';
@@ -70,6 +71,7 @@ const getTimeline = (status, t) => {
 };
 
 export default function VendorOrderDetailScreen({ navigation, route }) {
+  const { user, profile } = useAuth();
   const { t } = useI18n();
   const vendorColors = useVendorColors();
   const styles = useMemo(() => createStyles(vendorColors), [vendorColors]);
@@ -144,19 +146,27 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const handleUpdateStatus = async (newStatus) => {
     if (!order) return;
+    if (!user) {
+      notify(t('common.error', 'Error'), 'Please log in to update this order.');
+      return;
+    }
     setUpdating(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           status: newStatus,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', order.id);
+        .eq('id', order.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Order could not be updated. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      // Notify customer
+      // Notify customer (guarded so notification failures never block order updates)
       const statusMessages = {
         confirmed: 'Your order has been confirmed by the vendor!',
         preparing: 'Your order is now being prepared.',
@@ -164,23 +174,31 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
         completed: 'Your order has been completed. Thank you!',
       };
 
-      if (statusMessages[newStatus]) {
-        await supabase.from('notifications').insert({
-          user_id: order.consumer_id,
-          title: 'Order Update',
-          message: statusMessages[newStatus],
-          type: 'order',
-          data: { order_id: order.id, type: 'status_update' },
-          is_read: false,
-          created_at: new Date().toISOString(),
-        });
+      if (statusMessages[newStatus] && order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: 'Order Update',
+            message: statusMessages[newStatus],
+            type: 'order',
+            data: { order_id: order.id, type: 'status_update' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
       }
 
       await fetchOrder();
       notify(t('common.success', 'Success'), t('vendor_order_detail.status_updated', 'Order status updated'));
     } catch (err) {
       console.error('Error updating order:', err);
-      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_update', 'Failed to update order'));
+      const detail = err?.message || err?.details || '';
+      notify(
+        t('common.error', 'Error'),
+        detail ? `${t('vendor_order_detail.failed_update', 'Failed to update order')}: ${detail}` : t('vendor_order_detail.failed_update', 'Failed to update order')
+      );
     } finally {
       setUpdating(false);
     }
@@ -188,34 +206,53 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
 
   const handleApprovePayment = async () => {
     if (!order) return;
+    if (!user) {
+      notify(t('common.error', 'Error'), 'Please log in to approve payment.');
+      return;
+    }
     setUpdating(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           payment_status: 'verified',
           status: 'preparing',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', order.id);
+        .eq('id', order.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Payment approval could not be saved. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      await supabase.from('notifications').insert({
-        user_id: order.consumer_id,
-        title: 'Payment Verified',
-        message: `Your payment for order #${order.order_number?.slice(-8)} has been verified. Your order is now being prepared!`,
-        type: 'payment',
-        data: { order_id: order.id, type: 'payment_verified' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: 'Payment Verified',
+            message: `Your payment for order #${order.order_number?.slice(-8)} has been verified. Your order is now being prepared!`,
+            type: 'payment',
+            data: { order_id: order.id, type: 'payment_verified' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       await fetchOrder();
+      setShowApproveModal(false);
       notify(t('vendor_order_detail.payment_approved', 'Payment Approved'), t('vendor_order_detail.payment_verified_desc', 'Payment verified and order is now preparing'));
     } catch (err) {
       console.error('Error approving payment:', err);
-      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment'));
+      const detail = err?.message || err?.details || '';
+      notify(
+        t('common.error', 'Error'),
+        detail ? `${t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment')}: ${detail}` : t('vendor_order_detail.failed_approve_payment', 'Failed to approve payment')
+      );
     } finally {
       setUpdating(false);
     }
@@ -230,28 +267,42 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       notify(t('common.error', 'Error'), t('vendor_order_detail.provide_reason_rejection', 'Please provide a reason for rejection'));
       return;
     }
+    if (!user) {
+      notify(t('common.error', 'Error'), 'Please log in to reject payment.');
+      return;
+    }
     setUpdating(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           payment_status: 'rejected',
           payment_rejection_reason: rejectReason.trim(),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', order.id);
+        .eq('id', order.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Payment rejection could not be saved. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      await supabase.from('notifications').insert({
-        user_id: order.consumer_id,
-        title: 'Payment Rejected',
-        message: `Your payment for order #${order.order_number?.slice(-8)} was rejected. Reason: ${rejectReason}`,
-        type: 'payment',
-        data: { order_id: order.id, type: 'payment_rejected' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: 'Payment Rejected',
+            message: `Your payment for order #${order.order_number?.slice(-8)} was rejected. Reason: ${rejectReason}`,
+            type: 'payment',
+            data: { order_id: order.id, type: 'payment_rejected' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       await fetchOrder();
       setShowPaymentModal(false);
@@ -259,7 +310,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       notify(t('vendor_order_detail.payment_rejected_title', 'Payment Rejected'), t('vendor_order_detail.customer_notified', 'Customer has been notified'));
     } catch (err) {
       console.error('Error rejecting payment:', err);
-      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment'));
+      const detail = err?.message || err?.details || '';
+      notify(
+        t('common.error', 'Error'),
+        detail ? `${t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment')}: ${detail}` : t('vendor_order_detail.failed_reject_payment', 'Failed to reject payment')
+      );
     } finally {
       setUpdating(false);
     }
@@ -268,6 +323,10 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
   const handleRejectOrder = async () => {
     if (!order || !rejectReason.trim()) {
       notify(t('common.error', 'Error'), t('vendor_order_detail.provide_reason', 'Please provide a reason'));
+      return;
+    }
+    if (!user) {
+      notify(t('common.error', 'Error'), 'Please log in to reject order.');
       return;
     }
     // A customer who already submitted payment proof (payment_status
@@ -280,7 +339,7 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
     const disputable = hadPayment && !paymentWasInsufficient;
     setRejecting(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .update({
           status: 'cancelled',
@@ -288,21 +347,31 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
           payment_insufficient: hadPayment ? paymentWasInsufficient : null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', order.id);
+        .eq('id', order.id)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Order cancellation could not be saved. Please ensure you are logged in with the vendor account assigned to this stall.');
+      }
 
-      await supabase.from('notifications').insert({
-        user_id: order.consumer_id,
-        title: disputable ? 'Order Cancelled — Refund Needed' : 'Order Cancelled',
-        message: disputable
-          ? `Your order #${order.order_number?.slice(-8)} was cancelled after you already paid. Reason: ${rejectReason}. Open the order in your Orders tab to file a dispute and request a refund.`
-          : `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${rejectReason}`,
-        type: 'order',
-        data: { order_id: order.id, type: disputable ? 'cancelled_after_payment' : 'cancellation' },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      });
+      if (order.consumer_id) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: order.consumer_id,
+            title: disputable ? 'Order Cancelled — Refund Needed' : 'Order Cancelled',
+            message: disputable
+              ? `Your order #${order.order_number?.slice(-8)} was cancelled after you already paid. Reason: ${rejectReason}. Open the order in your Orders tab to file a dispute and request a refund.`
+              : `Your order #${order.order_number?.slice(-8)} was cancelled. Reason: ${rejectReason}`,
+            type: 'order',
+            data: { order_id: order.id, type: disputable ? 'cancelled_after_payment' : 'cancellation' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Could not insert notification:', notifErr);
+        }
+      }
 
       await fetchOrder();
       setShowRejectModal(false);
@@ -311,7 +380,11 @@ export default function VendorOrderDetailScreen({ navigation, route }) {
       notify(t('vendor_order_detail.order_rejected_title', 'Order Rejected'), t('vendor_order_detail.order_cancelled_desc', 'The order has been cancelled'));
     } catch (err) {
       console.error('Error rejecting order:', err);
-      notify(t('common.error', 'Error'), t('vendor_order_detail.failed_reject_order', 'Failed to reject order'));
+      const detail = err?.message || err?.details || '';
+      notify(
+        t('common.error', 'Error'),
+        detail ? `${t('vendor_order_detail.failed_reject_order', 'Failed to reject order')}: ${detail}` : t('vendor_order_detail.failed_reject_order', 'Failed to reject order')
+      );
     } finally {
       setRejecting(false);
     }
