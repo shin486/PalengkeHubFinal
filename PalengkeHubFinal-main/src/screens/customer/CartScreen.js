@@ -173,11 +173,11 @@ export default function CartScreen({ navigation, route }) {
     for (const stallId of uniqueStallIds) {
       const { data: stall } = await supabase
         .from('stalls')
-        .select('stall_name, is_temporarily_closed')
+        .select('stall_name, is_temporarily_closed, is_active')
         .eq('id', stallId)
         .single();
 
-      if (stall?.is_temporarily_closed) {
+      if (stall?.is_temporarily_closed || stall?.is_active === false) {
         closedStalls.push(stall.stall_name || `Stall #${stallId}`);
         closedIds.push(stallId);
       }

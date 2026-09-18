@@ -18,6 +18,7 @@ export const useStalls = (options = {}) => {
         .from('stalls')
         .select('*')
         .eq('is_active', true)
+        .not('vendor_id', 'is', null)
         .order('stall_number');
 
       if (section && section !== 'All') {
@@ -45,7 +46,8 @@ export const useStalls = (options = {}) => {
       const { data, error } = await supabase
         .from('stalls')
         .select('section')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('vendor_id', 'is', null);
 
       if (error) throw error;
       

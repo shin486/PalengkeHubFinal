@@ -858,17 +858,20 @@ export default function ProductDetailsScreen({ route, navigation }) {
         .from('products')
         .select(`
           *,
-          stalls (
+          stalls!inner (
             id,
             stall_name,
             stall_number,
             section,
             vendor_id,
+            is_active,
             profiles:vendor_id (full_name)
           )
         `)
         .eq('name', productData.name)
-        .eq('is_available', true);
+        .eq('is_available', true)
+        .eq('stalls.is_active', true)
+        .not('stalls.vendor_id', 'is', null);
 
       if (marketError) throw marketError;
       setMarketProducts(marketData || []);

@@ -24,14 +24,18 @@ export const useSearch = () => {
         .from('products')
         .select(`
           *,
-          stalls (
+          stalls!inner (
             stall_number,
             stall_name,
-            section
+            section,
+            is_active,
+            vendor_id
           )
         `)
         .ilike('name', `%${searchQuery}%`)
         .eq('is_available', true)
+        .eq('stalls.is_active', true)
+        .not('stalls.vendor_id', 'is', null)
         .limit(20);
 
       // Search stalls
@@ -40,6 +44,7 @@ export const useSearch = () => {
         .select('*')
         .or(`stall_number.ilike.%${searchQuery}%,stall_name.ilike.%${searchQuery}%,section.ilike.%${searchQuery}%`)
         .eq('is_active', true)
+        .not('vendor_id', 'is', null)
         .limit(20);
 
       setProducts(productsData || []);

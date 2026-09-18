@@ -45,13 +45,15 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
         .from('stalls')
         .select('*')
         .eq('is_active', true)
+        .not('vendor_id', 'is', null)
         .order('stall_number');
 
       if (error) throw error;
 
-      setStalls(data || []);
+      const activeStalls = (data || []).filter(s => s.is_active && s.vendor_id);
+      setStalls(activeStalls);
       
-      const uniqueSections = ['All', ...new Set(data.map(s => s.section))];
+      const uniqueSections = ['All', ...new Set(activeStalls.map(s => s.section))];
       setSections(uniqueSections);
       
     } catch (error) {
@@ -77,10 +79,10 @@ export default function StallsDirectoryScreen({ navigation, isGuest }) {
       >
         <View style={styles.stallHeader}>
           <Text style={styles.stallNumber}>#{item.stall_number}</Text>
-          {stallRatingsMap[item.id]?.average > 0 && (
+          {((stallRatingsMap[item.id]?.average ?? stallRatingsMap[String(item.id)]?.average ?? 0) > 0) && (
             <View style={styles.ratingContainer}>
               <Ionicons name="star" size={14} color="#F59E0B" />
-              <Text style={styles.ratingValue}>{stallRatingsMap[item.id].average.toFixed(1)}</Text>
+              <Text style={styles.ratingValue}>{(stallRatingsMap[item.id]?.average ?? stallRatingsMap[String(item.id)]?.average).toFixed(1)}</Text>
             </View>
           )}
         </View>

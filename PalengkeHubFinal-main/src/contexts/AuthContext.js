@@ -291,11 +291,37 @@ export const AuthProvider = ({ children }) => {
       setUser(user);
       
       if (user) {
-        const { data: profile } = await supabase
+        let { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
+
+        // Auto-heal: If user is authenticated in auth.users but has no public.profiles row
+        if (!profile) {
+          const newProfile = {
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Customer',
+            role: 'consumer',
+            phone: user.user_metadata?.phone || null,
+            created_at: new Date().toISOString(),
+          };
+          const { data: created } = await supabase
+            .from('profiles')
+            .insert(newProfile)
+            .select()
+            .maybeSingle();
+          profile = created;
+        }
+
+        if (!profile) {
+          console.warn('User has no profile row and auto-heal failed. Signing out stale session.');
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          return;
+        }
 
         if (profile?.role === 'admin') {
           console.log(' Admin session restored in app — signing out (admin is web-only)');

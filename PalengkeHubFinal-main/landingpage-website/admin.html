@@ -9,7 +9,34 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="pages.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .admin-coord-link {
+    color: #0f766e;
+    text-decoration: none;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .admin-coord-link:hover {
+    text-decoration: underline;
+  }
+  .admin-meta-text {
+    color: #64748b;
+    font-size: 12px;
+  }
+  #admin-market-map {
+    height: 380px;
+    width: 100%;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    z-index: 1;
+  }
+</style>
 <script>
   const SUPABASE_URL = 'https://jjpgmpufwpbgqjzqymvj.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqcGdtcHVmd3BiZ3FqenF5bXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjIyNjAsImV4cCI6MjA4OTIzODI2MH0.RzvRg521pq25V16GrkDTaSuUDhaWF43GEl9jkNp0trQ';
@@ -364,52 +391,148 @@
       });
     };
 
-    // ── Fetch recent vendors ──
-    const fetchRecentVendors = async (limit = 5) => {
+    let adminMap = null;
+    const mapMarkers = {};
+
+    const initAdminMap = () => {
+      if (adminMap || typeof L === 'undefined') return;
+      const mapEl = document.getElementById('admin-market-map');
+      if (!mapEl) return;
+
+      adminMap = L.map('admin-market-map', {
+        center: [13.9442, 121.1608],
+        zoom: 18,
+        maxZoom: 20,
+        attributionControl: false,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+      }).addTo(adminMap);
+    };
+
+    window.focusStallOnMap = (lat, lng) => {
+      if (!adminMap) return;
+      adminMap.setView([lat, lng], 19, { animate: true });
+      const key = `${lat}_${lng}`;
+      if (mapMarkers[key]) {
+        mapMarkers[key].openPopup();
+      }
+      const mapEl = document.getElementById('admin-market-map');
+      if (mapEl) {
+        mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+
+    // ── Fetch vendors, stalls, and coordinates ──
+    const fetchRecentVendors = async () => {
       try {
-        const { data, error } = await supabase
+        initAdminMap();
+
+        // 1. Fetch vendor profiles
+        const { data: vendors, error: vendorErr } = await supabase
           .from('profiles')
           .select('id, full_name, created_at, email')
           .eq('role', 'vendor')
-          .order('created_at', { ascending: false })
-          .limit(limit);
-        if (error) throw error;
+          .order('created_at', { ascending: false });
+        if (vendorErr) throw vendorErr;
+
+        // 2. Fetch all stalls with their stall_locations
+        const { data: stalls, error: stallErr } = await supabase
+          .from('stalls')
+          .select('id, vendor_id, stall_name, stall_number, section, is_active, stall_locations(id, lat, lng, capture_method, verified_by_admin, is_current)');
+        if (stallErr) throw stallErr;
+
+        const stallMap = new Map();
+        if (stalls) {
+          stalls.forEach((s) => {
+            if (s.vendor_id) stallMap.set(s.vendor_id, s);
+          });
+        }
 
         const tbody = document.getElementById('vendors-body');
         tbody.innerHTML = '';
 
-        if (!data || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="3" class="admin-empty">No vendors yet</td></tr>';
+        if (!vendors || vendors.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="admin-empty">No vendors found</td></tr>';
           return;
         }
 
-        for (const vendor of data) {
+        const boundsPoints = [];
+
+        for (const vendor of vendors) {
           const tr = document.createElement('tr');
-          let stallInfo = '—';
-          const { data: stall } = await supabase
-            .from('stalls')
-            .select('stall_name, stall_number, is_active')
-            .eq('vendor_id', vendor.id)
-            .single();
+          const stall = stallMap.get(vendor.id);
+
+          let stallDisplay = '—';
+          let sectionDisplay = '—';
+          let coordsDisplay = '—';
+          let locStatus = '<span class="admin-status status-inactive">Not Pinned</span>';
+          let stallStatus = '<span class="admin-status status-inactive">No Stall</span>';
+          let actionBtn = '—';
+
           if (stall) {
-            stallInfo = stall.is_active
+            stallDisplay = `<strong>${stall.stall_name || 'Unnamed Stall'}</strong><br><small class="admin-meta-text">Stall #${stall.stall_number || 'N/A'}</small>`;
+            sectionDisplay = stall.section || 'General';
+            stallStatus = stall.is_active
               ? `<span class="admin-status status-active">Active</span>`
               : `<span class="admin-status status-inactive">Inactive</span>`;
+
+            const locList = Array.isArray(stall.stall_locations) ? stall.stall_locations : [];
+            const loc = locList.find((l) => l.is_current) || locList[0];
+
+            if (loc && loc.lat && loc.lng) {
+              const lat = parseFloat(loc.lat);
+              const lng = parseFloat(loc.lng);
+              boundsPoints.push([lat, lng]);
+
+              coordsDisplay = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" class="admin-coord-link" title="Open in Google Maps">📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}</a>`;
+              locStatus = loc.verified_by_admin
+                ? `<span class="admin-status status-approved">📍 Verified</span>`
+                : `<span class="admin-status status-pending">📍 Pinned</span>`;
+
+              actionBtn = `<button type="button" class="admin-action-btn approve" onclick="focusStallOnMap(${lat}, ${lng})">View on Map</button>`;
+
+              if (adminMap && typeof L !== 'undefined') {
+                const key = `${lat}_${lng}`;
+                if (!mapMarkers[key]) {
+                  const marker = L.marker([lat, lng])
+                    .bindPopup(`
+                      <div style="font-family: inherit; font-size: 13px; line-height: 1.4;">
+                        <strong style="color:#0f766e; font-size: 14px;">${stall.stall_name || 'Stall'}</strong><br>
+                        <b>Stall #${stall.stall_number || '—'}</b> (${stall.section || 'General'})<br>
+                        <span>Vendor: ${vendor.full_name}</span><br>
+                        <small style="color:#64748b;">Coords: ${lat.toFixed(5)}, ${lng.toFixed(5)}</small>
+                      </div>
+                    `)
+                    .addTo(adminMap);
+                  mapMarkers[key] = marker;
+                }
+              }
+            }
           }
 
-          const date = new Date(vendor.created_at).toLocaleDateString('en-PH', {
-            month: 'short', day: 'numeric', year: 'numeric',
-          });
-
           tr.innerHTML = `
-            <td>${vendor.full_name}</td>
-            <td>${vendor.email || '—'}</td>
-            <td>${stallInfo}</td>
+            <td>
+              <strong>${vendor.full_name}</strong><br>
+              <small class="admin-meta-text">${vendor.email || 'No email'}</small>
+            </td>
+            <td>${stallDisplay}</td>
+            <td>${sectionDisplay}</td>
+            <td>${coordsDisplay}</td>
+            <td>${locStatus}</td>
+            <td>${stallStatus}</td>
+            <td>${actionBtn}</td>
           `;
           tbody.appendChild(tr);
         }
+
+        if (adminMap && boundsPoints.length > 0) {
+          const bounds = L.latLngBounds(boundsPoints);
+          adminMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+        }
       } catch (err) {
-        console.error('Error fetching vendors:', err);
+        console.error('Error fetching vendors and stalls:', err);
       }
     };
 
@@ -904,25 +1027,31 @@
       </div>
     </div>
 
-    <!-- Recent Vendors -->
+    <!-- Market Vendors & Stall Locations -->
     <div class="admin-section">
       <div class="admin-section-head">
         <div>
-          <h2>Recent Vendors</h2>
-          <p>Newest vendor accounts</p>
+          <h2>Market Vendors & Stall Locations</h2>
+          <p>Assigned stalls and verified market map coordinates in Lipa City Public Market</p>
         </div>
       </div>
+      <!-- Interactive Market Map -->
+      <div id="admin-market-map"></div>
       <div class="admin-table-wrap">
         <table class="admin-table">
           <thead>
             <tr>
-              <th>Vendor Name</th>
-              <th>Email</th>
-              <th>Stall Status</th>
+              <th>Vendor</th>
+              <th>Stall Name & #</th>
+              <th>Section</th>
+              <th>Coordinates</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="vendors-body">
-            <tr><td colspan="3" class="admin-empty">Loading vendors...</td></tr>
+            <tr><td colspan="7" class="admin-empty">Loading vendors and stall locations...</td></tr>
           </tbody>
         </table>
       </div>

@@ -630,21 +630,60 @@ export default function OrdersScreen({ navigation }) {
     }
 
     try {
-      const stall = order.stall;
-      const items = order.items || [];
+      // 1. Verify that stall still exists and is active
+      const { data: freshStall } = await supabase
+        .from('stalls')
+        .select('id, stall_name, stall_number, section, is_active, is_temporarily_closed, gcash_qr_url, gcash_number, vendor_id')
+        .eq('id', order.stall_id)
+        .maybeSingle();
 
-      for (const item of items) {
-        const productData = {
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          unit: item.unit,
-        };
-        
-        await addToCart(productData, stall?.id, stall, item.quantity);
+      if (!freshStall || freshStall.is_active === false || freshStall.is_temporarily_closed) {
+        notify(t('common.error'), t('orders.stall_not_available', 'This stall is currently closed or no longer active.'));
+        return;
       }
 
-      const addedMsg = t('orders.items_added_to_cart', { count: items.length, defaultValue: `${items.length} item(s) have been added to your cart.` });
+      const items = order.items || [];
+      if (items.length === 0) return;
+
+      // 2. Fetch fresh product details to ensure current prices and availability
+      const productIds = items.map(i => i.id).filter(Boolean);
+      const { data: freshProducts } = await supabase
+        .from('products')
+        .select('id, name, price, price_options, is_available')
+        .in('id', productIds);
+
+      const freshMap = new Map((freshProducts || []).map(p => [p.id, p]));
+      let addedCount = 0;
+
+      for (const item of items) {
+        const fresh = freshMap.get(item.id);
+        if (!fresh || !fresh.is_available) continue;
+
+        const unit = item.unit || 'kg';
+        let unitPrice = Number(fresh.price);
+        if (fresh.price_options && typeof fresh.price_options === 'object' && fresh.price_options[unit] != null) {
+          unitPrice = Number(fresh.price_options[unit]);
+        }
+
+        const productData = {
+          id: fresh.id,
+          name: fresh.name,
+          price: unitPrice,
+          unit: unit,
+          selected_unit: unit,
+          original_price: unitPrice,
+        };
+        
+        await addToCart(productData, freshStall.id, freshStall, item.quantity || 1);
+        addedCount++;
+      }
+
+      if (addedCount === 0) {
+        notify(t('common.error'), t('orders.items_no_longer_available', 'None of the items from this order are currently available.'));
+        return;
+      }
+
+      const addedMsg = t('orders.items_added_to_cart', { count: addedCount, defaultValue: `${addedCount} item(s) have been added to your cart.` });
       // react-native-web does NOT implement Alert.alert — use window.confirm on web
       if (Platform.OS === 'web') {
         if (window.confirm(`${addedMsg}\n\nOK = ${t('cart.view_cart', 'View Cart')}, Cancel = ${t('checkout.continue_shopping', 'Continue Shopping')}`)) {

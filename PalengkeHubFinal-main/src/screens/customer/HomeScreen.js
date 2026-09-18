@@ -207,9 +207,8 @@ const StallCard = ({ stall, onPress, isClosed = false, isFavorite = false, onTog
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [imageError, setImageError] = useState(false);
   const displayRating = rating;
-  // Market-hours open/closed, same local time gate as the header —
-  // stall-level "temporarily closed" (isClosed) always wins over it.
-  const openNow = !isClosed && isMarketOpenNow();
+  // Stall open/closed status reflects whether the vendor is active and not paused (!isClosed).
+  const openNow = !isClosed;
 
   return (
     <TouchableOpacity
@@ -294,7 +293,8 @@ const TopStallCard = ({ stall, priceRange, isFavorite, onToggleFavorite, onPress
   const displayRating = stall.average_rating || 0;
   const ratingCount = stall.total_ratings || 0;
   const isClosed = stall.is_temporarily_closed;
-  const openNow = !isClosed && isMarketOpenNow();
+  // Stall open/closed status reflects whether the vendor is active and not paused (!isClosed).
+  const openNow = !isClosed;
 
   return (
     <TouchableOpacity style={styles.topStallCard} onPress={onPress} activeOpacity={0.85}>
@@ -768,14 +768,20 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .from('stalls')
         .select('*')
         .in('id', topIds)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('vendor_id', 'is', null);
       if (!stallsData || stallsData.length === 0) return;
 
-      const list = stallsData.map(s => ({
-        ...s,
-        average_rating: allRatings[s.id].average,
-        total_ratings: allRatings[s.id].count,
-      }));
+      const list = stallsData
+        .filter(s => s.is_active && s.vendor_id)
+        .map(s => {
+          const r = allRatings[s.id] || allRatings[String(s.id)];
+          return {
+            ...s,
+            average_rating: r?.average || 0,
+            total_ratings: r?.count || 0,
+          };
+        });
       setTopRatedStalls(list);
     } catch (e) {
       console.warn('fetchTopRatedStalls failed:', e);
@@ -792,8 +798,13 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
     try {
       const { data } = await supabase
         .from('products')
-        .select('id, name, price, unit, image_url, stall_id')
+        .select(`
+          id, name, price, unit, image_url, stall_id,
+          stalls!inner ( id, is_active, vendor_id )
+        `)
         .eq('is_available', true)
+        .eq('stalls.is_active', true)
+        .not('stalls.vendor_id', 'is', null)
         .limit(500);
       if (!data || data.length === 0) return;
 
@@ -902,17 +913,19 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         const ids = lastViewedItems.map((i) => i.id);
         const { data, error } = await supabase
           .from('products')
-          .select('id, name, price, image_url, stalls:stall_id (stall_name)')
+          .select('id, name, price, image_url, is_available, stalls:stall_id (id, stall_name, is_active, vendor_id)')
           .in('id', ids);
         if (error) throw error;
         if (cancelled) return;
         const byId = new Map((data || []).map((p) => [p.id, p]));
         // Keep the cached recency order; drop anything since deleted/
-        // unlisted rather than show stale ghost data for it.
+        // unlisted or belonging to an inactive/deleted stall rather than show stale ghost data for it.
         const merged = lastViewedItems
           .map((cached) => {
             const live = byId.get(cached.id);
-            if (!live) return null;
+            if (!live || !live.is_available || !live.stalls || live.stalls.is_active === false || !live.stalls.vendor_id) {
+              return null;
+            }
             return {
               id: live.id,
               name: live.name,
@@ -1007,9 +1020,10 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .from('stalls')
         .select('*')
         .eq('is_active', true)
+        .not('vendor_id', 'is', null)
         .order('stall_number');
       if (stallsError) console.error('Error fetching stalls:', stallsError);
-      setStalls(stallsData || []);
+      setStalls((stallsData || []).filter(s => s.is_active && s.vendor_id));
       fetchTopRatedStalls();
 
       const now = new Date().toISOString();
@@ -1018,7 +1032,7 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .select(`
           *,
           product:product_id (id, name, unit, is_available, image_url, price),
-          stall:stall_id (id, stall_number, stall_name, section, gcash_qr_url, gcash_number)
+          stall:stall_id (id, stall_number, stall_name, section, is_active, vendor_id, gcash_qr_url, gcash_number)
         `)
         .eq('is_active', true)
         .gte('end_date', now)
@@ -1026,7 +1040,9 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
         .limit(10);
 
       if (promosData && promosData.length > 0) {
-        const validPromos = promosData.filter(p => p.product?.is_available === true);
+        const validPromos = promosData.filter(
+          p => p.product?.is_available === true && p.stall?.is_active === true && p.stall?.vendor_id
+        );
         setPromoProducts(validPromos);
         loadPriceTrends(validPromos.map(p => p.product).filter(Boolean));
         loadVerdicts(validPromos.map(p => ({ ...p.product, price: p.discounted_price })).filter(p => p.id));
@@ -1062,11 +1078,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
             if (!itemsMap.has(item.id) && itemsMap.size < 5) {
               const { data: currentProduct, error: prodErr } = await supabase
                 .from('products')
-                .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number, gcash_qr_url, gcash_number)')
+                .select('id, name, price, unit, image_url, stalls(id, stall_name, stall_number, is_active, vendor_id, gcash_qr_url, gcash_number)')
                 .eq('id', item.id)
                 .single();
               
-              if (prodErr || !currentProduct) continue;
+              if (prodErr || !currentProduct || !currentProduct.stalls || currentProduct.stalls.is_active === false || !currentProduct.stalls.vendor_id) continue;
 
               const now = new Date().toISOString();
               const { data: promotion } = await supabase
@@ -1254,9 +1270,11 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
 
       const { data: products, error: prodError } = await supabase
         .from('products')
-        .select('id, name, price, unit, image_url, image_urls, category, stalls(id, stall_name, stall_number, section, average_rating, total_ratings)')
+        .select('id, name, price, unit, image_url, image_urls, category, stalls!inner(id, stall_name, stall_number, section, average_rating, total_ratings, is_active, vendor_id)')
         .in('id', rankedIds)
-        .eq('is_available', true);
+        .eq('is_available', true)
+        .eq('stalls.is_active', true)
+        .not('stalls.vendor_id', 'is', null);
       if (prodError) throw prodError;
 
       const productById = new Map((products || []).map((p) => [p.id, p]));
@@ -2045,8 +2063,8 @@ export default function HomeScreen({ isGuest = false, navigation, route }) {
               <StallCard
                 key={stall.id}
                 stall={stall}
-                rating={stallRatings[stall.id]?.average}
-                ratingCount={stallRatings[stall.id]?.count}
+                rating={stallRatings[stall.id]?.average ?? stallRatings[String(stall.id)]?.average ?? stall.average_rating ?? 0}
+                ratingCount={stallRatings[stall.id]?.count ?? stallRatings[String(stall.id)]?.count ?? stall.total_ratings ?? 0}
                 isClosed={stall.is_temporarily_closed}
                 isFavorite={isStallFavorite(stall.id)}
                 onToggleFavorite={toggleStallFavorite}

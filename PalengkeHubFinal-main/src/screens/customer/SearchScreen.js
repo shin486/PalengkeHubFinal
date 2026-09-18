@@ -376,8 +376,14 @@ export default function SearchScreen({ navigation }) {
   // screen.
   const [stallRatingsMap, setStallRatingsMap] = useState({});
   useEffect(() => { fetchAllStallRatings().then(setStallRatingsMap); }, []);
-  const getStallRating = (stallId) => stallRatingsMap[stallId]?.average ?? 0;
-  const getRatingCount = (stallId) => stallRatingsMap[stallId]?.count ?? 0;
+  const getStallRating = (stallId) => {
+    const s = stallRatingsMap[stallId] ?? stallRatingsMap[String(stallId)];
+    return s?.average ?? 0;
+  };
+  const getRatingCount = (stallId) => {
+    const s = stallRatingsMap[stallId] ?? stallRatingsMap[String(stallId)];
+    return s?.count ?? 0;
+  };
   const { t } = useI18n();
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -436,30 +442,32 @@ export default function SearchScreen({ navigation }) {
 
   const loadSuggestions = async () => {
     try {
-      const [{ data: products }, { data: stallRows }] = await Promise.all([
+      const [ratings, { data: products }, { data: stallRows }] = await Promise.all([
+        fetchAllStallRatings(),
         supabase
           .from('products')
           .select(`
             id, name, price, unit, stall_id,
-            stalls!inner ( id, stall_number, stall_name, section, average_rating )
+            stalls!inner ( id, stall_number, stall_name, section, average_rating, is_active, vendor_id )
           `)
           .eq('is_available', true)
+          .eq('stalls.is_active', true)
+          .not('stalls.vendor_id', 'is', null)
           .order('created_at', { ascending: false })
           .limit(6),
         supabase
           .from('stalls')
           .select('*')
+          .eq('is_active', true)
+          .not('vendor_id', 'is', null)
           .order('stall_number')
           .limit(4),
       ]);
+      if (ratings) {
+        setStallRatingsMap(ratings);
+      }
       setSuggestedProducts(products || []);
-      setSuggestedStalls(
-        (stallRows || []).map(stall => ({
-          ...stall,
-          displayRating: getStallRating(stall.id),
-          ratingCount: getRatingCount(stall.id),
-        }))
-      );
+      setSuggestedStalls(stallRows || []);
     } catch (error) {
       console.warn('Could not load search suggestions:', error?.message);
     }
@@ -663,6 +671,7 @@ export default function SearchScreen({ navigation }) {
             name,
             price,
             unit,
+            category,
             stall_id,
             stalls!inner (
               id,
@@ -675,7 +684,8 @@ export default function SearchScreen({ navigation }) {
             )
           `)
           .or(buildSearchFilter(searchTerm))
-          .eq('is_available', true);
+          .eq('is_available', true)
+          .eq('stalls.is_active', true);
 
         if (error) throw error;
 
@@ -734,6 +744,7 @@ export default function SearchScreen({ navigation }) {
             });
           }
           setProductsData(results);
+          setSearchSubmitted(true);
 
           // Fetch price trends for the result products (Bumaba/Tumaas badges)
           const resultIds = results
@@ -756,7 +767,7 @@ export default function SearchScreen({ navigation }) {
             const { data: correctedData } = await supabase
               .from('products')
               .select(`
-                id, name, price, unit, stall_id,
+                id, name, price, unit, category, stall_id,
                 stalls!inner (id, stall_number, stall_name, section, average_rating, gcash_qr_url, gcash_number)
               `)
               .eq('is_available', true)
@@ -804,6 +815,7 @@ export default function SearchScreen({ navigation }) {
                 });
               }
               setProductsData(results);
+              setSearchSubmitted(true);
             } else {
               setProductsData([]);
             }
@@ -815,6 +827,8 @@ export default function SearchScreen({ navigation }) {
         const { data, error } = await supabase
           .from('stalls')
           .select('*')
+          .eq('is_active', true)
+          .not('vendor_id', 'is', null)
           .or(`stall_number.ilike.%${searchTerm}%,stall_name.ilike.%${searchTerm}%,section.ilike.%${searchTerm}%`)
           .order('stall_number')
           .limit(50);
@@ -906,7 +920,7 @@ export default function SearchScreen({ navigation }) {
     const rawProducts = productsData.filter(i => i.type === 'product').map(i => i.data);
 
     const filtered = rawProducts.filter((p) => {
-      if (categoryFilter && p.category !== categoryFilter) return false;
+      if (categoryFilter && (p.category || '').toLowerCase() !== categoryFilter.toLowerCase()) return false;
       if (priceRangeFilter) {
         const price = Number(p.price) || 0;
         if (priceRangeFilter.min != null && price < priceRangeFilter.min) return false;
@@ -922,11 +936,17 @@ export default function SearchScreen({ navigation }) {
     });
 
     let groupEntries = Object.entries(grouped);
-    if (sortOption === 'price_asc' || sortOption === 'price_desc') {
+    if (sortOption === 'price_asc') {
       groupEntries = groupEntries.sort((a, b) => {
         const aMin = Math.min(...a[1].map((p) => Number(p.price) || 0));
         const bMin = Math.min(...b[1].map((p) => Number(p.price) || 0));
-        return sortOption === 'price_asc' ? aMin - bMin : bMin - aMin;
+        return aMin - bMin;
+      });
+    } else if (sortOption === 'price_desc') {
+      groupEntries = groupEntries.sort((a, b) => {
+        const aMax = Math.max(...a[1].map((p) => Number(p.price) || 0));
+        const bMax = Math.max(...b[1].map((p) => Number(p.price) || 0));
+        return bMax - aMax;
       });
     } else if (sortOption === 'rating') {
       groupEntries = groupEntries.sort((a, b) => {
@@ -944,7 +964,21 @@ export default function SearchScreen({ navigation }) {
       const sortedVariants = [...variants].sort((a, b) => {
         const aRef = a.unit === referenceUnit ? 0 : 1;
         const bRef = b.unit === referenceUnit ? 0 : 1;
-        return aRef !== bRef ? aRef - bRef : a.price - b.price;
+        if (aRef !== bRef) return aRef - bRef;
+
+        const aPrice = Number(a.price) || 0;
+        const bPrice = Number(b.price) || 0;
+
+        if (sortOption === 'price_desc') {
+          return bPrice - aPrice;
+        }
+        if (sortOption === 'rating') {
+          const aRate = getStallRating(a.stalls?.id);
+          const bRate = getStallRating(b.stalls?.id);
+          if (bRate !== aRate) return bRate - aRate;
+          return aPrice - bPrice;
+        }
+        return aPrice - bPrice;
       });
       out.push({ type: 'header', name: productName });
       sortedVariants.forEach((variant) => out.push({ type: 'product', data: variant }));
@@ -988,10 +1022,21 @@ export default function SearchScreen({ navigation }) {
     const sameUnitItems = isInReferenceUnit ? groupItems.filter(i => i.data.unit === referenceUnit) : [];
     const hasDifferentUnitSiblings = !isInReferenceUnit;
     const isComparable = isInReferenceUnit && sameUnitItems.length > 1;
-    const minPriceInUnit = isComparable ? Math.min(...sameUnitItems.map(i => i.data.price)) : product.price;
-    const isCheapest = isComparable && product.price === minPriceInUnit;
+    const minPriceInUnit = isComparable ? Math.min(...sameUnitItems.map(i => Number(i.data.price) || 0)) : (Number(product.price) || 0);
+    const isCheapest = isComparable && (Number(product.price) || 0) === minPriceInUnit;
     const sortedSameUnit = isComparable
-      ? [...sameUnitItems].sort((a, b) => a.data.price - b.data.price)
+      ? [...sameUnitItems].sort((a, b) => {
+          const aPrice = Number(a.data.price) || 0;
+          const bPrice = Number(b.data.price) || 0;
+          if (sortOption === 'price_desc') return bPrice - aPrice;
+          if (sortOption === 'rating') {
+            const aRate = getStallRating(a.data.stalls?.id);
+            const bRate = getStallRating(b.data.stalls?.id);
+            if (bRate !== aRate) return bRate - aRate;
+            return aPrice - bPrice;
+          }
+          return aPrice - bPrice;
+        })
       : [];
     const rank = isComparable
       ? sortedSameUnit.findIndex(i => i.data.id === product.id) + 1
@@ -1081,8 +1126,9 @@ export default function SearchScreen({ navigation }) {
   };
 
   const renderStallCard = ({ item }) => {
-    const displayRating = item.displayRating ?? getStallRating(item.id);
-    const ratingCount = item.ratingCount ?? getRatingCount(item.id);
+    const ratingData = stallRatingsMap[item.id] ?? stallRatingsMap[String(item.id)];
+    const displayRating = ratingData?.average ?? item.displayRating ?? item.average_rating ?? 0;
+    const ratingCount = ratingData?.count ?? item.ratingCount ?? item.total_ratings ?? 0;
     
     return (
       <TouchableOpacity
@@ -1310,11 +1356,8 @@ export default function SearchScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Sort + filter chips — only once a search has actually been
-          submitted (not mid-keystroke from live search-as-you-type) and
-          has results; never while still typing, before typing at all, or
-          right after clearing the search box. */}
-      {searchType === 'products' && searchSubmitted && productsData.length > 0 && (
+      {/* Sort + filter chips — shown whenever search has product results */}
+      {searchType === 'products' && productsData.length > 0 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

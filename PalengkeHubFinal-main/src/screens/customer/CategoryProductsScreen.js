@@ -288,8 +288,14 @@ export default function CategoryProductsScreen({ route, navigation }) {
   // showed a different "rating" here than on its own stall page.
   const [stallRatingsMap, setStallRatingsMap] = useState({});
   useEffect(() => { fetchAllStallRatings().then(setStallRatingsMap); }, []);
-  const getStallRating = (stallId) => stallRatingsMap[stallId]?.average ?? 0;
-  const getRatingCount = (stallId) => stallRatingsMap[stallId]?.count ?? 0;
+  const getStallRating = (stallId) => {
+    const s = stallRatingsMap[stallId] ?? stallRatingsMap[String(stallId)];
+    return s?.average ?? 0;
+  };
+  const getRatingCount = (stallId) => {
+    const s = stallRatingsMap[stallId] ?? stallRatingsMap[String(stallId)];
+    return s?.count ?? 0;
+  };
 
   const { user, isGuest } = useAuth();
   const { addToCart } = useCart();
@@ -318,13 +324,15 @@ export default function CategoryProductsScreen({ route, navigation }) {
         .from('products')
         .select(`
           *,
-          stalls (
+          stalls!inner (
             id,
             stall_name,
             stall_number,
             section,
             gcash_qr_url,
-            gcash_number
+            gcash_number,
+            is_active,
+            vendor_id
           )
         `)
         // Case-insensitive: HomeScreen's category tiles pass the display
@@ -338,6 +346,8 @@ export default function CategoryProductsScreen({ route, navigation }) {
         // the capitalized form keep matching too.
         .ilike('category', categoryName)
         .eq('is_available', true)
+        .eq('stalls.is_active', true)
+        .not('stalls.vendor_id', 'is', null)
         .order('name');
 
       if (error) throw error;

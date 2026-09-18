@@ -71,6 +71,18 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
   }
 };
 
+const UNIT_MULTIPLIERS = {
+  'kg': 1.00,
+  '500g': 0.50,
+  '250g': 0.25,
+  'piece': 0.25,
+  'bundle': 0.35,
+  'dozen': 2.40,
+  'pack': 0.80,
+  'small': 0.70,
+  'medium': 1.00,
+  'large': 1.40,
+};
 
 export default function CheckoutContent({ cart, cartTotal, navigation, onBack }) {
   const { user } = useAuth();
@@ -776,7 +788,17 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
     const { data: freshProducts, error } = await supabase
       .from('products')
-      .select('id, price, is_available, name')
+      .select(`
+        id,
+        price,
+        is_available,
+        name,
+        price_options,
+        stall:stalls (
+          id,
+          is_active
+        )
+      `)
       .in('id', productIds);
 
     if (error) {
@@ -793,31 +815,37 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       const fresh = freshMap.get(pid);
       const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
 
-      if (!fresh || !fresh.is_available) {
+      // Block if product does not exist, is marked unavailable, or its stall is deactivated
+      if (!fresh || !fresh.is_available || (fresh.stall && fresh.stall.is_active === false)) {
         blockedNames.push(item.name);
         continue;
       }
 
-      // Compare against original_price (the raw base price snapshotted at
-      // add-to-cart time), not item.price directly. item.price is the
-      // actual CHARGED price, which legitimately differs from the base
-      // price for a non-default unit (price_options/UNIT_CONFIG
-      // multipliers), an active promotion, or an accepted haggle offer —
-      // all normal, all previously mistaken for "the price changed",
-      // which meant this check flagged and blocked nearly every real
-      // checkout that wasn't a plain per-kg, no-discount item.
-      const baseAtAddTime = Number(item.original_price ?? item.price);
-      const freshBase = Number(fresh.price);
+      // Determine expected unit base price from price_options or multiplier,
+      // matching ProductDetailsScreen and the database trigger enforce_order_item_prices()
+      const unit = item.selected_unit || item.unit || 'kg';
+      let expectedUnitBase = Number(fresh.price);
+      if (fresh.price_options && typeof fresh.price_options === 'object' && fresh.price_options[unit] != null) {
+        expectedUnitBase = Number(fresh.price_options[unit]);
+      } else {
+        const mult = UNIT_MULTIPLIERS[unit] || 1.00;
+        expectedUnitBase = Number((Number(fresh.price) * mult).toFixed(2));
+      }
 
-      if (freshBase !== baseAtAddTime) {
-        // The vendor's base listing price actually moved since this was
-        // added — scale the charged price by the same ratio instead of
-        // replacing it outright, so whatever unit/promo discount was
-        // baked into item.price is preserved rather than silently
-        // dropped. (An accepted haggle price is fixed and re-verified
-        // independently server-side regardless of this scaling.)
-        const ratio = baseAtAddTime > 0 ? freshBase / baseAtAddTime : 1;
-        const scaledPrice = Number((item.price * ratio).toFixed(2));
+      // An accepted haggle price is verified independently server-side against haggle_offers
+      if (item.haggle_offer_id) {
+        verifiedCart.push({ ...item, price: Number(item.price), quantity });
+        continue;
+      }
+
+      const baseAtAddTime = Number(item.original_price ?? item.price);
+      if (Math.abs(expectedUnitBase - baseAtAddTime) > 0.01 || Math.abs(expectedUnitBase - Number(item.price)) > 0.01) {
+        // If a discount ratio was applied, preserve it; otherwise use expectedUnitBase
+        const ratio = baseAtAddTime > 0 ? expectedUnitBase / baseAtAddTime : 1;
+        const scaledPrice = item.original_price && baseAtAddTime !== Number(item.price)
+          ? Number((item.price * ratio).toFixed(2))
+          : expectedUnitBase;
+
         changedPrices.set(pid, scaledPrice);
         verifiedCart.push({ ...item, price: scaledPrice, quantity });
         continue;
@@ -839,6 +867,52 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
   //  FULL GCASH PAYMENT FLOW - Place order then open GCash modal
   const placeOrder = async () => {
+    if (!user) {
+      notify(
+        t('auth.login_required', 'Login Required'),
+        t('checkout.login_required_body', 'Please log in to place your order.')
+      );
+      if (navigation?.navigate) {
+        navigation.navigate('Login');
+      }
+      return;
+    }
+
+    // Verify consumer exists in public.profiles before creating orders
+    let { data: profileCheck } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!profileCheck) {
+      const { data: created } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Customer',
+          role: 'consumer',
+          created_at: new Date().toISOString(),
+        })
+        .select('id')
+        .maybeSingle();
+
+      profileCheck = created;
+    }
+
+    if (!profileCheck) {
+      await supabase.auth.signOut();
+      notify(
+        t('auth.session_expired', 'Session Expired'),
+        t('checkout.session_expired_body', 'Your account profile was not found. Please log in with a registered account to complete your order.')
+      );
+      if (navigation?.navigate) {
+        navigation.navigate('Login');
+      }
+      return;
+    }
+
     if (cart.length === 0) {
       notify(t('checkout.empty_cart_title', 'Empty Cart'), t('checkout.empty_cart_body', 'Add items to your cart first'));
       return;
@@ -980,11 +1054,14 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
 
     } catch (error) {
       console.error('Error placing order:', error);
-      // Surfaces the real reason (e.g. the price-trigger's own rejection
-      // message) instead of a generic dead-end — this exact spot was the
-      // only thing standing between "order failed" and actually knowing
-      // why, since react-native-web has no console the customer can see.
-      notify(t('common.error', 'Error'), error?.message || t('checkout.place_order_error', 'Failed to place order. Please try again.'));
+      const isFkError = error?.code === '23503' || error?.message?.includes('orders_consumer_id_fkey');
+      const errorMessage = isFkError
+        ? t('checkout.account_not_found', 'Your account profile was not found. Please log in again to complete your order.')
+        : (error?.message || t('checkout.place_order_error', 'Failed to place order. Please try again.'));
+      notify(t('common.error', 'Error'), errorMessage);
+      if (isFkError && navigation?.navigate) {
+        navigation.navigate('Login');
+      }
     } finally {
       setLoading(false);
     }
