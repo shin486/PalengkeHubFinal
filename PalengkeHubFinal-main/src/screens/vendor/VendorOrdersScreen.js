@@ -83,11 +83,50 @@ export default function VendorOrdersScreen({ navigation }) {
     }
   }, [user]);
 
+  const [pendingOffersCount, setPendingOffersCount] = useState(0);
+
+  const fetchOffersCount = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { count, error } = await supabase
+        .from('haggle_offers')
+        .select('*', { count: 'exact', head: true })
+        .eq('vendor_id', user.id)
+        .eq('status', 'pending')
+        .eq('last_offered_by', 'customer');
+      if (!error) {
+        setPendingOffersCount(count || 0);
+      }
+    } catch (e) {
+      // Non-fatal
+    }
+  }, [user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       fetchStall();
-    }, [fetchStall])
+      fetchOffersCount();
+    }, [fetchStall, fetchOffersCount])
   );
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    fetchOffersCount();
+    const channel = supabase
+      .channel(`vendor-offers-count-${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'haggle_offers',
+        filter: `vendor_id=eq.${user.id}`,
+      }, () => {
+        fetchOffersCount();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchOffersCount]);
 
   const {
     orders,
@@ -100,7 +139,7 @@ export default function VendorOrdersScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshOrders(), fetchStall()]);
+    await Promise.all([refreshOrders(), fetchStall(), fetchOffersCount()]);
     setRefreshing(false);
   };
 
@@ -359,6 +398,37 @@ export default function VendorOrdersScreen({ navigation }) {
       <WovenBackground isDark={isDark} />
       <Header title={t('vendor_orders.title', 'Orders')} subtitle={stall?.stall_name || t('vendor_orders.subtitle', 'Manage your stall orders')} />
 
+      {/* Haggle Offers Quick-Access Banner */}
+      <TouchableOpacity
+        style={[styles.offersBanner, pendingOffersCount > 0 && styles.offersBannerActive]}
+        onPress={() => navigation.navigate('VendorOffers')}
+        activeOpacity={0.8}
+      >
+        <View style={styles.offersBannerLeft}>
+          <View style={[styles.offersBannerIconWrap, pendingOffersCount > 0 && styles.offersBannerIconActive]}>
+            <Ionicons name="pricetags" size={16} color={pendingOffersCount > 0 ? '#FFFFFF' : COLORS.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.offersBannerTitle}>
+              {t('vendor_orders.haggle_offers_title', 'Customer Haggle Offers')}
+            </Text>
+            <Text style={styles.offersBannerSubtitle} numberOfLines={1}>
+              {pendingOffersCount > 0
+                ? `${pendingOffersCount} pending offer${pendingOffersCount > 1 ? 's' : ''} waiting for your review`
+                : 'Review & respond to tawad requests'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.offersBannerRight}>
+          {pendingOffersCount > 0 && (
+            <View style={styles.offersPendingBadge}>
+              <Text style={styles.offersPendingBadgeText}>{pendingOffersCount}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={COLORS.text.secondary} />
+        </View>
+      </TouchableOpacity>
+
       {/* Status Tabs - No Emojis */}
       <View style={styles.tabsWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContent}>
@@ -562,6 +632,73 @@ const createStyles = (COLORS) => StyleSheet.create({
   },
   tabBadgeTextActive: {
     color: COLORS.primary,
+  },
+
+  // ── Haggle Offers Banner ──
+  offersBanner: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  offersBannerActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySurface,
+  },
+  offersBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  offersBannerIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  offersBannerIconActive: {
+    backgroundColor: COLORS.primary,
+  },
+  offersBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+  },
+  offersBannerSubtitle: {
+    fontSize: 11,
+    color: COLORS.text.secondary,
+  },
+  offersBannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  offersPendingBadge: {
+    backgroundColor: COLORS.error || '#EF4444',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  offersPendingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   // ── List ──

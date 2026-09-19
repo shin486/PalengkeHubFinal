@@ -1,9 +1,9 @@
-# Netlify _redirects - Subdomain configuration
-# Deploy this file alongside your site on Netlify/Vercel/Cloudflare Pages
-# https://admin.palengkehub.site/* -> serves from /admin-login.html and /admin.html
+# Netlify / Cloudflare Pages / Vercel redirects
+/admin/*           https://admin.palengkehub.site/admin-login 301!
+/admin             https://admin.palengkehub.site/admin-login 301!
+/admin-login.html  https://admin.palengkehub.site/admin-login 301!
+/admin.html        https://admin.palengkehub.site/admin 301!
 
-# This file tells the hosting platform how to handle the admin subdomain.
-# For Netlify: deploy both palengkehub.site and admin.palengkehub.site pointing to the same site.
 # For Vercel: use a separate project for admin subdomain, or set up rewrites.
 # For Cloudflare Pages: create a separate project or use Functions.
 

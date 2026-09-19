@@ -261,6 +261,8 @@ export default function NotificationScreen({ navigation }) {
   const handleNotificationNavigate = (notification) => {
     if (notification.type === 'order') {
       navigation.navigate('Orders');
+    } else if (notification.type === 'haggle_update' || notification.type === 'haggle_offer') {
+      navigation.navigate('Orders', { initialTab: 'offers' });
     } else if (notification.type === 'chat') {
       navigation.navigate('Chats');
     } else if (notification.type === 'price_drop') {

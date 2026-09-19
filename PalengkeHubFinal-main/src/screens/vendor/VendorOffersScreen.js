@@ -88,6 +88,35 @@ export default function VendorOffersScreen({ navigation }) {
     try {
       const { error } = await supabase.from('haggle_offers').update(updates).eq('id', offer.id);
       if (error) throw error;
+
+      if (offer.customer_id) {
+        try {
+          let title = 'Offer Update 🤝';
+          let message = `Update on your offer for ${offer.product?.name || 'product'}`;
+          if (updates.status === 'accepted') {
+            title = 'Offer Accepted! 🎉';
+            message = `Your offer of ₱${offer.current_price.toFixed(2)}/${offer.unit} on ${offer.product?.name || 'item'} was accepted! Go to Orders > Offers to order now.`;
+          } else if (updates.status === 'rejected') {
+            title = 'Offer Declined';
+            message = `Your offer on ${offer.product?.name || 'item'} was declined.`;
+          } else if (updates.last_offered_by === 'vendor') {
+            title = 'New Counter Offer 💬';
+            message = `The vendor countered ₱${Number(updates.current_price).toFixed(2)}/${offer.unit} on ${offer.product?.name || 'item'}. Check your Offers tab.`;
+          }
+          await supabase.from('notifications').insert({
+            user_id: offer.customer_id,
+            title,
+            message,
+            type: 'haggle_update',
+            data: { offer_id: offer.id, type: 'haggle_offer' },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        } catch (notifErr) {
+          console.warn('Customer notification failed (non-fatal):', notifErr.message);
+        }
+      }
+
       if (successMessage) Alert.alert('Done', successMessage);
       await load();
     } catch (err) {

@@ -88,7 +88,7 @@ const imageToCompressedDataUri = (uri, maxDim = 900, quality = 0.6) => {
 };
 
 
-export default function OrdersScreen({ navigation }) {
+export default function OrdersScreen({ navigation, route }) {
   const COLORS = useColors();
   const styles = useMemo(() => createStyles(COLORS), [COLORS]);
   const { user, isGuest } = useAuth();
@@ -105,7 +105,77 @@ export default function OrdersScreen({ navigation }) {
     }
   };
 
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState(route?.params?.initialTab || 'active');
+  const [haggleOffers, setHaggleOffers] = useState([]);
+  const [loadingOffers, setLoadingOffers] = useState(false);
+  const [offerActionId, setOfferActionId] = useState(null);
+
+  useEffect(() => {
+    if (route?.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route?.params?.initialTab]);
+
+  const fetchHaggleOffers = React.useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingOffers(true);
+    try {
+      const { data, error } = await supabase
+        .from('haggle_offers')
+        .select(`
+          *,
+          product:product_id(id, name, image_url, price, price_options, is_available),
+          stall:stall_id(id, stall_number, stall_name, phone_number, qr_code_url, gcash_number, gcash_name)
+        `)
+        .eq('customer_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setHaggleOffers((data || []).map(o => ({
+        ...o,
+        current_price: Number(o.current_price),
+        listed_price: Number(o.listed_price),
+      })));
+    } catch (err) {
+      console.warn('Failed to fetch haggle offers:', err.message);
+    } finally {
+      setLoadingOffers(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchHaggleOffers();
+    const channel = supabase
+      .channel(`customer-haggle-offers-${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'haggle_offers',
+        filter: `customer_id=eq.${user.id}`,
+      }, (payload) => {
+        fetchHaggleOffers();
+        if (payload?.eventType === 'UPDATE' && payload?.new?.status === 'accepted' && payload?.old?.status !== 'accepted') {
+          setActiveTab('offers');
+          Vibration.vibrate(200);
+          notify(
+            'Offer Accepted! 🎉',
+            `The vendor accepted your offer of ₱${Number(payload.new.current_price).toFixed(2)}! Tap "Order Now" to proceed with your special price.`
+          );
+        } else if (payload?.eventType === 'UPDATE' && payload?.new?.status === 'pending' && payload?.new?.last_offered_by === 'vendor') {
+          setActiveTab('offers');
+          Vibration.vibrate(200);
+          notify(
+            'Vendor Countered 💬',
+            `The vendor countered with ₱${Number(payload.new.current_price).toFixed(2)}! Check your Offers tab to respond.`
+          );
+        }
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchHaggleOffers]);
+
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStall, setSelectedStall] = useState(null);
   const [mapModalVisible, setMapModalVisible] = useState(false);
@@ -193,8 +263,84 @@ export default function OrdersScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshOrders();
+    await Promise.all([refreshOrders(), fetchHaggleOffers()]);
     setRefreshing(false);
+  };
+
+  const handleWithdrawOffer = async (offer) => {
+    setOfferActionId(offer.id);
+    try {
+      const { error } = await supabase
+        .from('haggle_offers')
+        .update({ status: 'cancelled' })
+        .eq('id', offer.id);
+      if (error) throw error;
+      notify(t('common.success', 'Success'), t('orders.offer_withdrawn_badge', 'Withdrawn'));
+      await fetchHaggleOffers();
+    } catch (err) {
+      notify(t('common.error', 'Error'), err.message || 'Could not withdraw offer');
+    } finally {
+      setOfferActionId(null);
+    }
+  };
+
+  const handleAcceptCounter = async (offer) => {
+    setOfferActionId(offer.id);
+    try {
+      const { error } = await supabase
+        .from('haggle_offers')
+        .update({ status: 'accepted' })
+        .eq('id', offer.id);
+      if (error) throw error;
+      notify(
+        t('orders.offer_accepted_badge', 'Offer Accepted!'),
+        t('orders.haggle_exclusive_note', 'Special negotiated price for you')
+      );
+      await fetchHaggleOffers();
+    } catch (err) {
+      notify(t('common.error', 'Error'), err.message || 'Could not accept counter');
+    } finally {
+      setOfferActionId(null);
+    }
+  };
+
+  const handleDeclineCounter = async (offer) => {
+    setOfferActionId(offer.id);
+    try {
+      const { error } = await supabase
+        .from('haggle_offers')
+        .update({ status: 'rejected' })
+        .eq('id', offer.id);
+      if (error) throw error;
+      await fetchHaggleOffers();
+    } catch (err) {
+      notify(t('common.error', 'Error'), err.message || 'Could not decline counter');
+    } finally {
+      setOfferActionId(null);
+    }
+  };
+
+  const handleOrderNow = async (offer) => {
+    if (!offer?.product) {
+      notify(t('common.error', 'Error'), 'Product information unavailable');
+      return;
+    }
+    setOfferActionId(offer.id);
+    try {
+      const productToAdd = {
+        ...offer.product,
+        stall_id: offer.stall_id || offer.stall?.id,
+        stall_name: offer.stall?.stall_name,
+        stall_number: offer.stall?.stall_number,
+        stall: offer.stall,
+      };
+      await addToCart(productToAdd, 1, offer.unit);
+      navigation.navigate('Cart');
+    } catch (err) {
+      notify(t('common.error', 'Error'), err.message || 'Could not add to cart');
+    } finally {
+      setOfferActionId(null);
+    }
   };
 
   React.useEffect(() => {
@@ -1588,6 +1734,197 @@ export default function OrdersScreen({ navigation }) {
     );
   }
 
+  const renderOfferCard = (offer) => {
+    const isCustomerTurn = offer.status === 'pending' && offer.last_offered_by === 'customer';
+    const isVendorCounter = offer.status === 'pending' && offer.last_offered_by === 'vendor';
+    const isAccepted = offer.status === 'accepted';
+    const isRejected = offer.status === 'rejected';
+    const isCancelled = offer.status === 'cancelled';
+    const isUsed = offer.status === 'used';
+    const isBusy = offerActionId === offer.id;
+
+    let badgeColor = COLORS.warning || '#F59E0B';
+    let badgeBg = COLORS.warningLight || '#FEF3C7';
+    let badgeText = t('orders.waiting_vendor', 'Waiting for vendor...');
+    let badgeIcon = 'time-outline';
+
+    if (isVendorCounter) {
+      badgeColor = '#D97706';
+      badgeBg = '#FEF3C7';
+      badgeText = `${t('orders.vendor_countered_badge', 'Vendor Countered')}: ₱${offer.current_price.toFixed(2)}`;
+      badgeIcon = 'swap-horizontal';
+    } else if (isAccepted) {
+      badgeColor = COLORS.success || '#10B981';
+      badgeBg = COLORS.successLight || '#D1FAE5';
+      badgeText = t('orders.offer_accepted_badge', 'Offer Accepted!');
+      badgeIcon = 'checkmark-circle';
+    } else if (isRejected) {
+      badgeColor = COLORS.error || '#EF4444';
+      badgeBg = COLORS.errorLight || '#FEE2E2';
+      badgeText = t('orders.offer_rejected_badge', 'Declined');
+      badgeIcon = 'close-circle';
+    } else if (isCancelled) {
+      badgeColor = COLORS.text.tertiary || '#6B7280';
+      badgeBg = COLORS.inputBg || '#F3F4F6';
+      badgeText = t('orders.offer_withdrawn_badge', 'Withdrawn');
+      badgeIcon = 'ban-outline';
+    } else if (isUsed) {
+      badgeColor = COLORS.primary || '#059669';
+      badgeBg = COLORS.accentSoft || '#ECFDF5';
+      badgeText = t('orders.offer_used_badge', 'Completed (Ordered)');
+      badgeIcon = 'bag-check-outline';
+    }
+
+    const discountPercent = offer.listed_price > 0 && offer.current_price < offer.listed_price
+      ? Math.round(((offer.listed_price - offer.current_price) / offer.listed_price) * 100)
+      : null;
+
+    return (
+      <View key={`offer-${offer.id}`} style={styles.offerCard}>
+        <View style={styles.offerHeaderRow}>
+          <View style={styles.offerStallInfo}>
+            <Ionicons name="storefront-outline" size={14} color={COLORS.text.tertiary} />
+            <Text style={styles.offerStallName} numberOfLines={1}>
+              {offer.stall?.stall_name || `Stall #${offer.stall?.stall_number || ''}`}
+            </Text>
+          </View>
+          <View style={[styles.offerStatusBadge, { backgroundColor: badgeBg }]}>
+            <Ionicons name={badgeIcon} size={13} color={badgeColor} style={{ marginRight: 4 }} />
+            <Text style={[styles.offerStatusBadgeText, { color: badgeColor }]}>{badgeText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.offerBodyRow}>
+          {offer.product?.image_url ? (
+            <Image source={{ uri: offer.product.image_url }} style={styles.offerProductImage} />
+          ) : (
+            <View style={[styles.offerProductImage, styles.offerProductPlaceholder]}>
+              <Ionicons name="pricetag-outline" size={24} color={COLORS.text.quaternary} />
+            </View>
+          )}
+
+          <View style={styles.offerDetailsCol}>
+            <Text style={styles.offerProductName} numberOfLines={2}>
+              {offer.product?.name || 'Product'}
+            </Text>
+            <Text style={styles.offerUnitText}>
+              Unit: {offer.unit || 'kg'}
+            </Text>
+            
+            <View style={styles.offerPriceRow}>
+              <Text style={styles.offerListedPrice}>
+                ₱{offer.listed_price.toFixed(2)}
+              </Text>
+              <Ionicons name="arrow-forward" size={12} color={COLORS.text.tertiary} style={{ marginHorizontal: 4 }} />
+              <Text style={styles.offerCurrentPrice}>
+                ₱{offer.current_price.toFixed(2)}
+              </Text>
+              {discountPercent !== null && (
+                <View style={styles.offerDiscountBadge}>
+                  <Text style={styles.offerDiscountBadgeText}>-{discountPercent}%</Text>
+                </View>
+              )}
+            </View>
+            {isAccepted && (
+              <Text style={styles.offerExclusiveNote}>
+                ✨ {t('orders.haggle_exclusive_note', 'Special negotiated price for you')}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.offerActionsRow}>
+          {isAccepted && (
+            <TouchableOpacity
+              style={[styles.offerPrimaryButton, isBusy && styles.offerButtonDisabled]}
+              onPress={() => handleOrderNow(offer)}
+              disabled={isBusy}
+              activeOpacity={0.8}
+            >
+              {isBusy ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="cart-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.offerPrimaryButtonText}>
+                    {t('orders.order_now', 'Order Now')} • ₱{offer.current_price.toFixed(2)}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {isVendorCounter && (
+            <View style={styles.offerCounterActionsGroup}>
+              <TouchableOpacity
+                style={[styles.offerAcceptButton, isBusy && styles.offerButtonDisabled]}
+                onPress={() => handleAcceptCounter(offer)}
+                disabled={isBusy}
+                activeOpacity={0.8}
+              >
+                {isBusy ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.offerAcceptButtonText}>{t('orders.accept_counter', 'Accept')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.offerDeclineButton, isBusy && styles.offerButtonDisabled]}
+                onPress={() => handleDeclineCounter(offer)}
+                disabled={isBusy}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.offerDeclineButtonText}>{t('orders.decline_counter', 'Decline')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.offerOutlineButton}
+                onPress={() => navigation.navigate('ProductDetails', { productId: offer.product_id })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.offerOutlineButtonText}>{t('orders.view_product', 'View')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {isCustomerTurn && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <Text style={styles.offerWaitingHelpText}>
+                {t('orders.waiting_vendor', 'Waiting for vendor...')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.offerWithdrawButton, isBusy && styles.offerButtonDisabled]}
+                onPress={() => handleWithdrawOffer(offer)}
+                disabled={isBusy}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.offerWithdrawButtonText}>
+                  {isBusy ? '...' : t('orders.withdraw_offer', 'Withdraw')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {(isRejected || isCancelled || isUsed) && (
+            <TouchableOpacity
+              style={styles.offerOutlineButton}
+              onPress={() => navigation.navigate('ProductDetails', { productId: offer.product_id })}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="eye-outline" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />
+              <Text style={styles.offerOutlineButtonText}>{t('orders.view_product', 'View Product')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {newOrderAlert && activeTab === 'active' && (
@@ -1597,7 +1934,7 @@ export default function OrdersScreen({ navigation }) {
       )}
 
       <View style={styles.tabContainer}>
-        <View style={styles.tabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
           <TouchableOpacity 
             style={[styles.tab, activeTab === 'active' && styles.activeTab]}
             onPress={() => setActiveTab('active')}
@@ -1615,7 +1952,16 @@ export default function OrdersScreen({ navigation }) {
               {t('orders.history')} ({completedOrders.length})
             </Text>
           </TouchableOpacity>
-        </View>
+
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'offers' && styles.activeTab]}
+            onPress={() => setActiveTab('offers')}
+          >
+            <Text style={[styles.tabText, activeTab === 'offers' && styles.activeTabText]}>
+              {t('orders.offers', 'Offers')} ({haggleOffers.length})
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
         
         {activeTab === 'completed' && completedOrders.length > 0 && (
           <TouchableOpacity onPress={clearAllHistory} style={styles.clearAllButton}>
@@ -1631,7 +1977,28 @@ export default function OrdersScreen({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
         }
       >
-        {displayOrders.length === 0 ? (
+        {activeTab === 'offers' ? (
+          loadingOffers ? (
+            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+          ) : haggleOffers.length === 0 ? (
+            <EmptyState
+              icon="pricetag-outline"
+              title={t('orders.no_offers', 'No Haggle Offers')}
+              subtitle={t('orders.no_offers_prompt', 'When you haggle prices on products, track vendor responses here.')}
+              actionLabel={t('home.start_shopping')}
+              onAction={() => navigation.navigate('Home')}
+              colors={{
+                icon: COLORS.text.tertiary || '#9CA3AF',
+                title: COLORS.text.secondary || '#6B7280',
+                subtitle: COLORS.text.tertiary || '#9CA3AF',
+                background: COLORS.background || '#FFFFFF',
+                iconBg: COLORS.surfaceSecondary || '#F3F4F6',
+              }}
+            />
+          ) : (
+            haggleOffers.map(renderOfferCard)
+          )
+        ) : displayOrders.length === 0 ? (
           <EmptyState
             icon="receipt-outline"
             title={activeTab === 'active' ? t('orders.no_active') : t('orders.no_history')}
@@ -2127,13 +2494,216 @@ const createStyles = (COLORS) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  tabsRow: { flexDirection: 'row', gap: 16 },
-  tab: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
+  tabsRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12 },
   activeTab: { backgroundColor: COLORS.accentSoft },
-  tabText: { fontSize: 14, color: COLORS.text.medium, fontWeight: '600' },
+  tabText: { fontSize: 13, color: COLORS.text.medium, fontWeight: '600' },
   activeTabText: { color: COLORS.primary, fontWeight: '700' },
   clearAllButton: { backgroundColor: COLORS.accentLight, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   clearAllButtonText: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
+
+  // Haggle Offer Card Styles
+  offerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    marginBottom: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  offerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  offerStallInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  offerStallName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text.secondary,
+  },
+  offerStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  offerStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  offerBodyRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+  },
+  offerProductImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: COLORS.inputBg,
+  },
+  offerProductPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  offerDetailsCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  offerProductName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text.dark,
+    marginBottom: 2,
+  },
+  offerUnitText: {
+    fontSize: 12,
+    color: COLORS.text.light,
+    marginBottom: 4,
+  },
+  offerPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  offerListedPrice: {
+    fontSize: 13,
+    color: COLORS.text.light,
+    textDecorationLine: 'line-through',
+  },
+  offerCurrentPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  offerDiscountBadge: {
+    backgroundColor: COLORS.successLight || '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  offerDiscountBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.success || '#059669',
+  },
+  offerExclusiveNote: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginTop: 4,
+  },
+  offerActionsRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  offerPrimaryButton: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  offerPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  offerCounterActionsGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  offerAcceptButton: {
+    flex: 2,
+    backgroundColor: COLORS.success || '#10B981',
+    paddingVertical: 10,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerAcceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  offerDeclineButton: {
+    flex: 1,
+    backgroundColor: COLORS.errorLight || '#FEE2E2',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerDeclineButtonText: {
+    color: COLORS.error || '#EF4444',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  offerOutlineButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.inputBg || '#F9FAFB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerOutlineButtonText: {
+    color: COLORS.text.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  offerWithdrawButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.errorLight || '#FEE2E2',
+    backgroundColor: COLORS.surface,
+  },
+  offerWithdrawButtonText: {
+    color: COLORS.error || '#EF4444',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  offerWaitingHelpText: {
+    fontSize: 12,
+    color: COLORS.text.tertiary,
+    fontStyle: 'italic',
+  },
+  offerButtonDisabled: {
+    opacity: 0.6,
+  },
 
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 30 },

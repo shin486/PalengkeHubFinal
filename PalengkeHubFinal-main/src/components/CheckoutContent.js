@@ -833,9 +833,27 @@ export default function CheckoutContent({ cart, cartTotal, navigation, onBack })
       }
 
       // An accepted haggle price is verified independently server-side against haggle_offers
+      // and scoped strictly to this specific customer.
       if (item.haggle_offer_id) {
-        verifiedCart.push({ ...item, price: Number(item.price), quantity });
-        continue;
+        if (user?.id) {
+          try {
+            const { data: validHaggle } = await supabase
+              .from('haggle_offers')
+              .select('id, current_price, status')
+              .eq('id', item.haggle_offer_id)
+              .eq('customer_id', user.id)
+              .eq('status', 'accepted')
+              .maybeSingle();
+
+            if (validHaggle) {
+              verifiedCart.push({ ...item, price: Number(validHaggle.current_price), quantity });
+              continue;
+            }
+          } catch (hErr) {
+            console.warn('Checkout haggle verify failed:', hErr.message);
+          }
+        }
+        // If not a valid accepted haggle for this user, fall through to normal price verification below
       }
 
       const baseAtAddTime = Number(item.original_price ?? item.price);

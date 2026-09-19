@@ -728,7 +728,7 @@ export default function ProductDetailsScreen({ route, navigation }) {
       setOfferPrice('');
       setOfferNote('');
       await fetchActiveHaggle(selectedUnit);
-      Alert.alert('Offer Sent! 🤝', "The vendor will accept, reject, or counter it — you'll see their answer here.");
+      navigation.navigate('Orders', { initialTab: 'offers' });
     } catch (err) {
       console.error('Failed to send offer:', err);
       Alert.alert('Error', 'Could not send your offer. Please try again.');
